@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
 import { GradingClient } from './grading-client'
 
@@ -10,6 +10,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   if (!Number.isInteger(assignmentId)) notFound()
 
   const user = await requireStaff()
+  const prisma = await getDb()
   const me = await prisma.user.findUnique({ where: { id: user.userId } })
   if (!me?.schoolId) redirect('/dashboard')
 

@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { NewAssignmentForm } from './new-assignment-form'
 
 export default async function NewAssignmentPage() {
   const user = await requireStaff()
+  const prisma = await getDb()
   const me = await prisma.user.findUnique({ where: { id: user.userId } })
   if (!me?.schoolId) redirect('/dashboard')
 

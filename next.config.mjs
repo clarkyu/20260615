@@ -1,3 +1,8 @@
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
+
+// Makes Cloudflare bindings (D1, R2, …) available during `next dev`.
+initOpenNextCloudflareForDev()
+
 /** @type {import("next").NextConfig} */
 
 const securityHeaders = [
@@ -16,6 +21,7 @@ const securityHeaders = [
       "img-src 'self' data: blob:",
       "font-src 'self'",
       "connect-src 'self'",
+      "media-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -24,8 +30,8 @@ const securityHeaders = [
 ]
 
 const config = {
-  output: 'standalone',
-  serverExternalPackages: ['better-sqlite3', '@prisma/adapter-better-sqlite3', 'exceljs'],
+  // Prisma client must not be bundled by Next; it's resolved at runtime.
+  serverExternalPackages: ['@prisma/client', '.prisma/client'],
   async headers() {
     return [
       {

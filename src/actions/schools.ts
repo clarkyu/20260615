@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getSession } from '@/lib/session'
 
@@ -14,6 +14,7 @@ function normalizeCode(raw: string): string {
 // A staff member creates the school they belong to (sets their schoolId).
 export async function createSchool(prevState: unknown, formData: FormData): Promise<ActionState> {
   const user = await requireStaff()
+  const prisma = await getDb()
   const name = (formData.get('name') as string)?.trim()
   const code = normalizeCode((formData.get('code') as string) ?? '')
 

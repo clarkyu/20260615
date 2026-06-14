@@ -1,0 +1,59 @@
+// Password hashing for the Cloudflare Workers runtime.
+//
+// bcrypt/argon2 don't run on Workers, so we use WebCrypto PBKDF2-SHA-256.
+// Cloudflare caps PBKDF2 at 100k iterations; that's our cost. Stored format:
+//   pbkdf2$<iterations>$<saltB64>$<hashB64>
+
+const ITERATIONS = 100_000
+const SALT_BYTES = 16
+const KEY_BITS = 256
+
+function toB64(bytes: Uint8Array): string {
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin)
+}
+
+function fromB64(b64: string): Uint8Array {
+  const bin = atob(b64)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+async function deriveBits(password: string, salt: Uint8Array, iterations = ITERATIONS): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt as BufferSource, iterations, hash: 'SHA-256' }, key, KEY_BITS)
+  return new Uint8Array(bits)
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES))
+  const hash = await deriveBits(password, salt)
+  return `pbkdf2$${ITERATIONS}$${toB64(salt)}$${toB64(hash)}`
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const parts = stored.split('$')
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
+  const iterations = Number(parts[1])
+  if (!Number.isFinite(iterations)) return false
+  const salt = fromB64(parts[2])
+  const hash = await deriveBits(password, salt, iterations)
+  return timingSafeEqual(toB64(hash), parts[3])
+}
+
+// Fixed salt only to spend equivalent PBKDF2 time on the "user not found" path,
+// so login response timing does not reveal whether an account exists.
+const DUMMY_SALT = new Uint8Array(SALT_BYTES)
+
+export async function fakeVerifyPassword(password: string): Promise<void> {
+  await deriveBits(password, DUMMY_SALT)
+}

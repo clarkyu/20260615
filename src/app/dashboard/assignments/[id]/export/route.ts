@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { buildScoreWorkbook, type ScoreExportRow } from '@/lib/roster'
 
 const STATUS: Record<string, string> = {
@@ -25,6 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new NextResponse('Bad request', { status: 400 })
   }
 
+  const prisma = await getDb()
   const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, schoolId: user.schoolId } })
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId } })
   if (!assignment || !cls) return new NextResponse('Not found', { status: 404 })

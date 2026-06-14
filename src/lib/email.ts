@@ -1,45 +1,36 @@
-import nodemailer from 'nodemailer'
+// Email via the Resend HTTP API (SMTP/nodemailer can't run on Workers).
+// Configure RESEND_API_KEY and EMAIL_FROM.
 
-function getRequiredEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) throw new Error(`${name} is not configured`)
-  return value
-}
+const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 function appName(): string {
-  return process.env.APP_NAME || 'App'
+  return process.env.APP_NAME || '英语背诵作业'
 }
 
-function createTransporter() {
-  const host = getRequiredEnv('SMTP_HOST')
-  const port = Number(process.env.SMTP_PORT ?? '465')
-  const user = getRequiredEnv('SMTP_USER')
-  const pass = getRequiredEnv('SMTP_PASSWORD')
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user, pass },
-  })
-}
-
-function getFromAddress(): string {
-  return process.env.SMTP_FROM ?? getRequiredEnv('SMTP_USER')
+function fromAddress(): string {
+  return process.env.EMAIL_FROM || 'onboarding@resend.dev'
 }
 
 function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+async function send(to: string, subject: string, html: string, text: string): Promise<void> {
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw new Error('RESEND_API_KEY is not configured')
+  const res = await fetch(RESEND_ENDPOINT, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: fromAddress(), to, subject, html, text }),
+  })
+  if (!res.ok) {
+    throw new Error(`Resend failed: ${res.status} ${await res.text()}`)
+  }
 }
 
 function layout(title: string, bodyHtml: string): string {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${escapeHtml(title)}</title></head>
 <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f5f7;">
@@ -50,53 +41,38 @@ function layout(title: string, bodyHtml: string): string {
         ${bodyHtml}
       </td></tr>
     </table>
-    <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">${escapeHtml(appName())}</p>
   </td></tr>
 </table>
 </body>
 </html>`
 }
 
-function button(url: string, text: string): string {
+function button(url: string, label: string): string {
   return `<table cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;"><tr><td>
-    <a href="${escapeHtml(url)}" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:8px;">${escapeHtml(text)}</a>
+    <a href="${escapeHtml(url)}" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 24px;border-radius:8px;">${escapeHtml(label)}</a>
   </td></tr></table>`
 }
 
-export async function sendVerificationEmail(to: string, verifyUrl: string) {
-  const transporter = createTransporter()
+export async function sendVerificationEmail(to: string, verifyUrl: string): Promise<void> {
   const html = layout(
-    `Verify your ${appName()} email`,
-    `<p style="margin:0 0 8px;font-size:15px;color:#374151;">Confirm this email address to activate your account.</p>
-     ${button(verifyUrl, 'Verify email')}
-     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Or paste this link into your browser:</p>
+    `验证你的${appName()}邮箱`,
+    `<p style="margin:0 0 8px;font-size:15px;color:#374151;">确认此邮箱以激活账号。</p>
+     ${button(verifyUrl, '验证邮箱')}
+     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">或复制链接到浏览器打开：</p>
      <p style="margin:0 0 16px;font-size:13px;word-break:break-all;"><a href="${escapeHtml(verifyUrl)}" style="color:#2563eb;">${escapeHtml(verifyUrl)}</a></p>
-     <p style="margin:0;font-size:12px;color:#9ca3af;">This link expires in 24 hours. If you did not create an account, you can ignore this email.</p>`,
+     <p style="margin:0;font-size:12px;color:#9ca3af;">链接 24 小时内有效。若非你本人操作，请忽略。</p>`,
   )
-  await transporter.sendMail({
-    from: getFromAddress(),
-    to,
-    subject: `Verify your ${appName()} email`,
-    text: `Confirm your email address to activate your ${appName()} account:\n\n${verifyUrl}\n\nThis link expires in 24 hours. If you did not create an account, you can ignore this email.`,
-    html,
-  })
+  await send(to, `验证你的${appName()}邮箱`, html, `验证你的${appName()}邮箱：\n\n${verifyUrl}\n\n链接 24 小时内有效。`)
 }
 
-export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  const transporter = createTransporter()
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   const html = layout(
-    `Reset your ${appName()} password`,
-    `<p style="margin:0 0 8px;font-size:15px;color:#374151;">Use the button below to choose a new password.</p>
-     ${button(resetUrl, 'Reset password')}
-     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Or paste this link into your browser:</p>
+    `重置你的${appName()}密码`,
+    `<p style="margin:0 0 8px;font-size:15px;color:#374151;">点击下面按钮设置新密码。</p>
+     ${button(resetUrl, '重置密码')}
+     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">或复制链接到浏览器打开：</p>
      <p style="margin:0 0 16px;font-size:13px;word-break:break-all;"><a href="${escapeHtml(resetUrl)}" style="color:#2563eb;">${escapeHtml(resetUrl)}</a></p>
-     <p style="margin:0;font-size:12px;color:#9ca3af;">This link expires in 1 hour. If you did not request it, you can ignore this email.</p>`,
+     <p style="margin:0;font-size:12px;color:#9ca3af;">链接 1 小时内有效。若非你本人操作，请忽略。</p>`,
   )
-  await transporter.sendMail({
-    from: getFromAddress(),
-    to,
-    subject: `Reset your ${appName()} password`,
-    text: `Use this link to reset your ${appName()} password:\n\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request it, you can ignore this email.`,
-    html,
-  })
+  await send(to, `重置你的${appName()}密码`, html, `重置你的${appName()}密码：\n\n${resetUrl}\n\n链接 1 小时内有效。`)
 }

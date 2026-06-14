@@ -2,8 +2,9 @@
 
 import { redirect } from 'next/navigation'
 import type { User } from '@prisma/client'
-import { prisma } from '@/lib/db'
-import { hashPassword, verifyPassword, fakeVerifyPassword, requireAuth } from '@/lib/auth'
+import { getDb } from '@/lib/db'
+import { requireAuth } from '@/lib/auth'
+import { hashPassword, verifyPassword, fakeVerifyPassword } from '@/lib/password'
 import { getSession } from '@/lib/session'
 import { sendVerificationEmail, sendPasswordResetEmail } from '@/lib/email'
 import { getAppUrl } from '@/lib/app-url'
@@ -37,10 +38,11 @@ async function establishSession(user: User) {
 }
 
 async function issueVerificationEmail(userId: number, email: string) {
+  const prisma = await getDb()
   await prisma.emailVerificationToken.deleteMany({ where: { userId, usedAt: null } })
   const token = generateToken()
   await prisma.emailVerificationToken.create({
-    data: { userId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + VERIFICATION_TTL_MS) },
+    data: { userId, tokenHash: await hashToken(token), expiresAt: new Date(Date.now() + VERIFICATION_TTL_MS) },
   })
   const verifyUrl = `${await getAppUrl()}/verify-email?token=${encodeURIComponent(token)}`
   await sendVerificationEmail(email, verifyUrl)
@@ -49,6 +51,7 @@ async function issueVerificationEmail(userId: number, email: string) {
 // Teacher / admin self sign-up (email + verification).
 export async function register(prevState: unknown, formData: FormData): Promise<ActionState> {
   if (!(await rateLimitRegister())) return { error: 'Too many attempts. Please try again later.' }
+  const prisma = await getDb()
 
   const email = normalizeEmail((formData.get('email') as string) ?? '')
   if (!email) return { error: 'Enter a valid email address' }
@@ -84,6 +87,7 @@ export async function register(prevState: unknown, formData: FormData): Promise<
 
 export async function resendVerification(prevState: unknown, formData: FormData): Promise<ActionState> {
   if (!(await rateLimitResend())) return { success: true }
+  const prisma = await getDb()
   const email = normalizeEmail((formData.get('email') as string) ?? '')
   if (!email) return { success: true }
   const user = await prisma.user.findUnique({ where: { email } })
@@ -99,24 +103,26 @@ export async function resendVerification(prevState: unknown, formData: FormData)
 
 export async function verifyEmail(prevState: unknown, formData: FormData): Promise<ActionState> {
   if (!(await rateLimitVerify())) return { error: 'Too many attempts. Please try again later.' }
+  const prisma = await getDb()
   const token = (formData.get('token') as string)?.trim()
   if (!token) return { error: 'This verification link is invalid.' }
 
-  const tokenHash = hashToken(token)
+  const tokenHash = await hashToken(token)
   const now = new Date()
-  const userId = await prisma.$transaction(async (tx) => {
-    const record = await tx.emailVerificationToken.findUnique({ where: { tokenHash } })
-    if (!record || record.usedAt || record.expiresAt <= now) return null
-    await Promise.all([
-      tx.user.update({ where: { id: record.userId }, data: { emailVerified: now } }),
-      tx.emailVerificationToken.update({ where: { id: record.id }, data: { usedAt: now } }),
-      tx.emailVerificationToken.deleteMany({ where: { userId: record.userId, id: { not: record.id }, usedAt: null } }),
-    ])
-    return record.userId
-  })
-  if (!userId) return { error: 'This verification link is invalid or has expired.' }
 
-  const user = await prisma.user.findUnique({ where: { id: userId } })
+  // D1 has no interactive transactions: read+validate first, then a batched
+  // ($transaction array) write.
+  const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } })
+  if (!record || record.usedAt || record.expiresAt <= now) {
+    return { error: 'This verification link is invalid or has expired.' }
+  }
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { emailVerified: now } }),
+    prisma.emailVerificationToken.update({ where: { id: record.id }, data: { usedAt: now } }),
+    prisma.emailVerificationToken.deleteMany({ where: { userId: record.userId, id: { not: record.id }, usedAt: null } }),
+  ])
+
+  const user = await prisma.user.findUnique({ where: { id: record.userId } })
   if (!user) return { error: 'Account not found.' }
   await establishSession(user)
   redirect('/dashboard')
@@ -125,6 +131,7 @@ export async function verifyEmail(prevState: unknown, formData: FormData): Promi
 // Teacher / admin login (email).
 export async function login(prevState: unknown, formData: FormData): Promise<ActionState> {
   if (!(await rateLimitLogin())) return { error: 'Too many login attempts. Try again in 5 minutes.' }
+  const prisma = await getDb()
 
   const email = normalizeEmail((formData.get('email') as string) ?? '')
   const password = (formData.get('password') as string) ?? ''
@@ -145,11 +152,11 @@ export async function login(prevState: unknown, formData: FormData): Promise<Act
 // Student login (school code + 学号 + password). No email required.
 export async function studentLogin(prevState: unknown, formData: FormData): Promise<ActionState> {
   if (!(await rateLimitLogin())) return { error: '尝试过于频繁，请 5 分钟后再试。' }
+  const prisma = await getDb()
 
   const schoolCode = (formData.get('schoolCode') as string)?.trim()
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const password = (formData.get('password') as string) ?? ''
-
   if (!schoolCode || !studentNo) return { error: '请输入学校代码和学号' }
 
   const school = await prisma.school.findUnique({ where: { code: schoolCode } })
@@ -177,6 +184,7 @@ export async function logout() {
 
 export async function requestPasswordReset(prevState: unknown, formData: FormData): Promise<ActionState> {
   if (!(await rateLimitResetRequest())) return { success: true }
+  const prisma = await getDb()
   const email = normalizeEmail((formData.get('email') as string) ?? '')
   if (!email) return { error: 'Enter a valid email address' }
 
@@ -185,7 +193,7 @@ export async function requestPasswordReset(prevState: unknown, formData: FormDat
     await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } })
     const token = generateToken()
     await prisma.passwordResetToken.create({
-      data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TTL_MS) },
+      data: { userId: user.id, tokenHash: await hashToken(token), expiresAt: new Date(Date.now() + RESET_TTL_MS) },
     })
     const resetUrl = `${await getAppUrl()}/reset-password?token=${encodeURIComponent(token)}`
     try {
@@ -208,25 +216,27 @@ export async function resetPassword(prevState: unknown, formData: FormData): Pro
   if (password !== confirmPassword) return { error: 'Passwords do not match' }
   if (!(await rateLimitResetExecute())) return { error: 'Too many attempts. Try again later.' }
 
-  const tokenHash = hashToken(token)
+  const prisma = await getDb()
+  const tokenHash = await hashToken(token)
   const now = new Date()
-  const userId = await prisma.$transaction(async (tx) => {
-    const record = await tx.passwordResetToken.findUnique({ where: { tokenHash } })
-    if (!record || record.usedAt || record.expiresAt <= now) return null
-    await Promise.all([
-      tx.user.update({ where: { id: record.userId }, data: { passwordHash: await hashPassword(password), emailVerified: now } }),
-      tx.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: now } }),
-      tx.passwordResetToken.deleteMany({ where: { userId: record.userId, id: { not: record.id }, usedAt: null } }),
-    ])
-    return record.userId
-  })
-  if (!userId) return { error: 'Password reset link has expired' }
+
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } })
+  if (!record || record.usedAt || record.expiresAt <= now) {
+    return { error: 'Password reset link has expired' }
+  }
+  const newHash = await hashPassword(password)
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { passwordHash: newHash, emailVerified: now } }),
+    prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: now } }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: record.userId, id: { not: record.id }, usedAt: null } }),
+  ])
   return { success: true }
 }
 
 // Works for any signed-in user; clears the forced-change flag (student first login).
 export async function changePassword(prevState: unknown, formData: FormData): Promise<ActionState> {
   const current = await requireAuth()
+  const prisma = await getDb()
   const currentPassword = (formData.get('currentPassword') as string) ?? ''
   const newPassword = (formData.get('newPassword') as string) ?? ''
   const confirmPassword = (formData.get('confirmPassword') as string) ?? ''

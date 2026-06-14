@@ -1,17 +1,17 @@
 'use server'
 
+import type { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { presignUpload, storageConfigured, submissionVideoKey } from '@/lib/storage'
 
 // Confirms the student may submit to this assignment (their class is targeted &
 // the window is open) and returns the active attempt number, or an error.
-async function resolveAttempt(studentId: number, classId: number | null, assignmentId: number) {
+async function resolveAttempt(prisma: PrismaClient, studentId: number, classId: number | null, assignmentId: number) {
   if (!classId) return { error: '你的账号还未分配班级，请联系老师。' as const }
   const assignment = await prisma.assignment.findFirst({
     where: { id: assignmentId, classes: { some: { classId } } },
-    include: { _count: { select: { sentences: true } } },
   })
   if (!assignment) return { error: '作业不存在或未分配给你的班级。' as const }
 
@@ -23,14 +23,15 @@ async function resolveAttempt(studentId: number, classId: number | null, assignm
     where: { assignmentId, studentId, status: { in: ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED'] } },
   })
   if (used >= assignment.maxAttempts) return { error: '提交次数已用完。' as const }
-  return { attempt: used + 1, assignment }
+  return { attempt: used + 1 }
 }
 
 export async function getUploadUrl(assignmentId: number, contentType: string, ext: string) {
   const user = await requireRole('STUDENT')
   if (!storageConfigured()) return { error: '视频存储尚未配置（R2）。请联系管理员。' }
+  const prisma = await getDb()
 
-  const resolved = await resolveAttempt(user.userId, user.classId ?? null, assignmentId)
+  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
   if ('error' in resolved) return { error: resolved.error }
 
   const key = submissionVideoKey(assignmentId, user.userId, resolved.attempt, ext || 'webm')
@@ -56,13 +57,15 @@ export async function finalizeSubmission(
   violations: string,
 ) {
   const user = await requireRole('STUDENT')
+  const prisma = await getDb()
   const submission = await prisma.submission.findFirst({ where: { id: submissionId, studentId: user.userId } })
   if (!submission) return { error: '提交记录不存在。' }
   if (!submission.videoKey) return { error: '尚未上传视频。' }
 
   const hasViolation = (() => {
     try {
-      return Array.isArray(JSON.parse(violations)) && JSON.parse(violations).length > 0
+      const parsed = JSON.parse(violations)
+      return Array.isArray(parsed) && parsed.length > 0
     } catch {
       return false
     }

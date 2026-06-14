@@ -1,27 +1,18 @@
-import Database from 'better-sqlite3'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { PrismaClient } from '@prisma/client'
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaD1 } from '@prisma/adapter-d1'
 
-function createPrismaClient() {
-  const url = (process.env.DATABASE_URL ?? 'file:./dev.db').replace(/^file:/, '')
-  // Set file-level pragmas using a temporary connection — journal_mode and
-  // synchronous persist to the SQLite file itself.
-  const setup = new Database(url)
-  setup.pragma('journal_mode = WAL')
-  setup.pragma('synchronous = NORMAL')
-  // Wait instead of failing immediately if another writer (e.g. a grading
-  // worker) holds the lock.
-  setup.pragma('busy_timeout = 5000')
-  setup.close()
-  const adapter = new PrismaBetterSqlite3({ url })
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
-  })
+// On Cloudflare the database is the D1 binding, only available inside the
+// request context — so the client is created per request (and memoised per
+// isolate keyed by the binding) rather than as a module-level singleton.
+const clients = new WeakMap<object, PrismaClient>()
+
+export async function getDb(): Promise<PrismaClient> {
+  const { env } = await getCloudflareContext({ async: true })
+  const binding = env.DB as unknown as object
+  const existing = clients.get(binding)
+  if (existing) return existing
+  const client = new PrismaClient({ adapter: new PrismaD1(env.DB) })
+  clients.set(binding, client)
+  return client
 }
-
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
-
-export const prisma = globalForPrisma.prisma ?? createPrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

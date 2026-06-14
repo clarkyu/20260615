@@ -1,12 +1,8 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { AwsClient } from 'aws4fetch'
 
-// Cloudflare R2 is S3-compatible. Configure via env:
-//   R2_ENDPOINT          e.g. https://<accountid>.r2.cloudflarestorage.com
-//   R2_ACCESS_KEY_ID
-//   R2_SECRET_ACCESS_KEY
-//   R2_BUCKET
-// When unset, the app still runs; upload/playback simply report "not configured".
+// Cloudflare R2 (S3-compatible). Phones upload directly via presigned URLs.
+// Configure: R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET.
+// aws4fetch is used instead of the AWS SDK because it's tiny and runs on Workers.
 
 export function storageConfigured(): boolean {
   return Boolean(
@@ -17,41 +13,38 @@ export function storageConfigured(): boolean {
   )
 }
 
-let cached: S3Client | null = null
-
-function client(): S3Client {
-  if (cached) return cached
-  cached = new S3Client({
+function client(): AwsClient {
+  return new AwsClient({
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    service: 's3',
     region: 'auto',
-    endpoint: process.env.R2_ENDPOINT,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-    },
   })
-  return cached
 }
 
-function bucket(): string {
-  const b = process.env.R2_BUCKET
-  if (!b) throw new Error('R2_BUCKET is not configured')
-  return b
+function objectUrl(key: string): string {
+  const base = process.env.R2_ENDPOINT!.replace(/\/$/, '')
+  const bucket = process.env.R2_BUCKET!
+  const encodedKey = key.split('/').map(encodeURIComponent).join('/')
+  return `${base}/${bucket}/${encodedKey}`
 }
 
-// A single presigned PUT handles files up to 5 GB, so 200 MB videos upload in
-// one request. (Multipart/resumable upload can be layered on later for very
-// flaky mobile networks.)
-export async function presignUpload(key: string, contentType: string, expiresIn = 3600): Promise<string> {
-  const cmd = new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType })
-  return getSignedUrl(client(), cmd, { expiresIn })
+// SigV4 query-signed URL (signed query, not headers) so the browser can PUT/GET
+// directly with any content-type. A single PUT handles files up to 5 GB.
+async function presign(key: string, method: 'PUT' | 'GET', expiresIn: number): Promise<string> {
+  const url = `${objectUrl(key)}?X-Amz-Expires=${expiresIn}`
+  const signed = await client().sign(new Request(url, { method }), { aws: { signQuery: true } })
+  return signed.url
+}
+
+export async function presignUpload(key: string, _contentType: string, expiresIn = 3600): Promise<string> {
+  return presign(key, 'PUT', expiresIn)
 }
 
 export async function presignDownload(key: string, expiresIn = 3600): Promise<string> {
-  const cmd = new GetObjectCommand({ Bucket: bucket(), Key: key })
-  return getSignedUrl(client(), cmd, { expiresIn })
+  return presign(key, 'GET', expiresIn)
 }
 
-// Deterministic, collision-resistant object keys.
 export function submissionVideoKey(assignmentId: number, studentId: number, attempt: number, ext: string): string {
   return `submissions/${assignmentId}/${studentId}/attempt-${attempt}.${ext}`
 }

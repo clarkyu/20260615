@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import { requireStaff } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CreateSchoolForm } from './create-school-form'
 
 export default async function DashboardPage() {
   const user = await requireStaff()
+  const prisma = await getDb()
   const me = await prisma.user.findUnique({ where: { id: user.userId }, include: { school: true } })
 
   if (!me?.school) {

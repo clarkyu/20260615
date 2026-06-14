@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { Recorder } from './recorder'
 
 export default async function StudentAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -9,6 +9,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   if (!Number.isInteger(assignmentId)) notFound()
 
   const user = await requireRole('STUDENT')
+  const prisma = await getDb()
   const me = await prisma.user.findUnique({ where: { id: user.userId } })
   if (me?.mustChangePassword) redirect('/student/change-password')
   if (!me?.classId) notFound()

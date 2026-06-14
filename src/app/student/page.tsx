@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -16,6 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function StudentHome() {
   const user = await requireRole('STUDENT')
+  const prisma = await getDb()
   const me = await prisma.user.findUnique({ where: { id: user.userId } })
   if (me?.mustChangePassword) redirect('/student/change-password')
   if (!me?.classId) {

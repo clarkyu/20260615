@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ImportClient } from './import-client'
 
 export default async function StudentsPage() {
   const user = await requireStaff()
+  const prisma = await getDb()
   const me = await prisma.user.findUnique({ where: { id: user.userId }, include: { school: true } })
   if (!me?.school) redirect('/dashboard')
 

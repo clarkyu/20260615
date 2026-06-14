@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 
 type ActionState = { error?: string; success?: boolean }
@@ -24,6 +24,7 @@ function parseDate(value: FormDataEntryValue | null): Date | null {
 export async function createAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
   const user = await requireStaff()
   if (!user.schoolId) return { error: '请先创建学校。' }
+  const prisma = await getDb()
 
   const title = (formData.get('title') as string)?.trim()
   if (!title) return { error: '请输入作业标题' }

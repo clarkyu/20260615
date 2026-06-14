@@ -1,10 +1,11 @@
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProfileClient } from './profile-client'
 
 export default async function ProfilePage() {
   const session = await requireAuth()
+  const prisma = await getDb()
   const user = await prisma.user.findUnique({ where: { id: session.userId! } })
   if (!user) {
     // Session points at a deleted user — treat as signed out.

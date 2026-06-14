@@ -12,15 +12,15 @@ describe('generateToken', () => {
 })
 
 describe('hashToken', () => {
-  it('is deterministic for the same input', () => {
-    expect(hashToken('abc')).toBe(hashToken('abc'))
+  it('is deterministic for the same input', async () => {
+    expect(await hashToken('abc')).toBe(await hashToken('abc'))
   })
 
-  it('differs for different inputs and never returns the raw token', () => {
+  it('differs for different inputs and never returns the raw token', async () => {
     const token = generateToken()
-    const hash = hashToken(token)
+    const hash = await hashToken(token)
     expect(hash).not.toBe(token)
     expect(hash).toMatch(/^[a-f0-9]{64}$/)
-    expect(hashToken('abc')).not.toBe(hashToken('abd'))
+    expect(await hashToken('abc')).not.toBe(await hashToken('abd'))
   })
 })

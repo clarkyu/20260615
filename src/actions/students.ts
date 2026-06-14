@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
-import { hashPassword } from '@/lib/auth'
+import { hashPassword } from '@/lib/password'
 import { parseRoster, type RosterRow } from '@/lib/roster'
 
 type PreviewState = {
@@ -41,6 +41,7 @@ export async function previewRoster(prevState: unknown, formData: FormData): Pro
 export async function commitRoster(prevState: unknown, formData: FormData): Promise<CommitState> {
   const user = await requireStaff()
   if (!user.schoolId) return { error: '请先创建学校，再导入名单。' }
+  const prisma = await getDb()
   const buf = await readFile(formData)
   if (!buf) return { error: '请选择 Excel 文件（.xlsx）' }
 
