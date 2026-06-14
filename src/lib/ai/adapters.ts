@@ -7,6 +7,7 @@ import type {
   JudgeProvider,
   Provider,
 } from './types'
+import { geminiPerception, geminiJudge } from './providers/gemini'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STUB adapters. These return deterministic mock results so the full grading
@@ -57,7 +58,9 @@ class StubJudge implements JudgeProvider {
 }
 
 const perceptionProviders: Partial<Record<Provider, PerceptionProvider>> = {
-  gemini: new StubPerception('gemini'),
+  // Real adapter:
+  gemini: geminiPerception,
+  // Stubs (to be implemented per provider):
   qwen: new StubPerception('qwen'),
   minimax: new StubPerception('minimax'),
   openai: new StubPerception('openai'),
@@ -65,7 +68,9 @@ const perceptionProviders: Partial<Record<Provider, PerceptionProvider>> = {
 }
 
 const judgeProviders: Partial<Record<Provider, JudgeProvider>> = {
-  gemini: new StubJudge('gemini'),
+  // Real adapter:
+  gemini: geminiJudge,
+  // Stubs (to be implemented per provider):
   qwen: new StubJudge('qwen'),
   minimax: new StubJudge('minimax'),
   openai: new StubJudge('openai'),
