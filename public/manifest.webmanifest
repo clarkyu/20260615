@@ -1,0 +1,13 @@
+{
+  "name": "英语背诵作业",
+  "short_name": "背诵作业",
+  "description": "手机端英语背诵作业：录制提交、AI 评阅、按班级统计导出",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

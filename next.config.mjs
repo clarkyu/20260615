@@ -25,7 +25,7 @@ const securityHeaders = [
 
 const config = {
   output: 'standalone',
-  serverExternalPackages: ['better-sqlite3', '@prisma/adapter-better-sqlite3'],
+  serverExternalPackages: ['better-sqlite3', '@prisma/adapter-better-sqlite3', 'exceljs'],
   async headers() {
     return [
       {

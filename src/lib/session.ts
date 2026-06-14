@@ -1,11 +1,17 @@
 import { getIronSession, type IronSession } from 'iron-session'
 import { cookies } from 'next/headers'
+import type { Role } from '@prisma/client'
 
 export interface SessionData {
   userId?: number
-  email?: string
+  role?: Role
   name?: string | null
-  isAdmin?: boolean
+  // Teacher/admin
+  email?: string
+  // Student
+  studentNo?: string | null
+  schoolId?: number | null
+  classId?: number | null
 }
 
 export async function getSession(): Promise<IronSession<SessionData>> {

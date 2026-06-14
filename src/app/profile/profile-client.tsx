@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react'
 import Link from 'next/link'
-import { changePassword, deleteAccount } from '@/actions/auth'
+import { changePassword } from '@/actions/auth'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 
 export function ProfileClient() {
   const [pwState, pwAction, pwPending] = useActionState(changePassword, null)
-  const [delState, delAction, delPending] = useActionState(deleteAccount, null)
 
   return (
     <>
@@ -48,29 +47,6 @@ export function ProfileClient() {
               </Button>
             </form>
           )}
-        </CardContent>
-      </Card>
-
-      <Card className="border-destructive/40">
-        <CardHeader>
-          <CardTitle>Delete account</CardTitle>
-          <CardDescription>This permanently deletes your account. This cannot be undone.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={delAction} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" autoComplete="current-password" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmation">Type DELETE to confirm</Label>
-              <Input id="confirmation" name="confirmation" type="text" autoComplete="off" placeholder="DELETE" required />
-            </div>
-            {delState?.error ? <FormMessage>{delState.error}</FormMessage> : null}
-            <Button type="submit" variant="destructive" disabled={delPending}>
-              {delPending ? 'Deleting…' : 'Delete my account'}
-            </Button>
-          </form>
         </CardContent>
       </Card>
     </>

@@ -9,6 +9,9 @@ function createPrismaClient() {
   const setup = new Database(url)
   setup.pragma('journal_mode = WAL')
   setup.pragma('synchronous = NORMAL')
+  // Wait instead of failing immediately if another writer (e.g. a grading
+  // worker) holds the lock.
+  setup.pragma('busy_timeout = 5000')
   setup.close()
   const adapter = new PrismaBetterSqlite3({ url })
   return new PrismaClient({
