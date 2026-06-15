@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 export interface AssignmentInitial {
   id: number
   title: string
+  category: string
   monthLabel: string
   instructions: string
   sentences: string
@@ -23,7 +24,10 @@ export interface AssignmentInitial {
   requireText: boolean
   requireAudio: boolean
   requireVideo: boolean
+  requireHandwriting: boolean
 }
+
+const CATEGORY_PRESETS = ['背诵作业', '口语作业', '书面作业', '试卷作业', '听写作业', '默写作业']
 
 export interface PublishTarget {
   offeringId: number
@@ -121,6 +125,13 @@ export function AssignmentForm({
               <Input id="title" name="title" required defaultValue={initial?.title} />
             </div>
             <div className="space-y-1.5">
+              <Label htmlFor="category">{t('asg.fCategory')}</Label>
+              <Input id="category" name="category" list="category-presets" defaultValue={initial?.category} placeholder={t('asg.fCategoryPh')} />
+              <datalist id="category-presets">
+                {CATEGORY_PRESETS.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>
               <select id="monthLabel" name="monthLabel" defaultValue={defaultMonth} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
                 <option value="">{t('asg.monthNone')}</option>
@@ -156,6 +167,10 @@ export function AssignmentForm({
                 <label className="flex items-center gap-2.5">
                   <input type="checkbox" name="requireAudio" defaultChecked={initial?.requireAudio ?? false} className="h-4 w-4 accent-primary" />
                   {t('asg.kindAudio')}
+                </label>
+                <label className="flex items-center gap-2.5">
+                  <input type="checkbox" name="requireHandwriting" defaultChecked={initial?.requireHandwriting ?? false} className="h-4 w-4 accent-primary" />
+                  {t('asg.kindHandwriting')}
                 </label>
               </div>
             </div>

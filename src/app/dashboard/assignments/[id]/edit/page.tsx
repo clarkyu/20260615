@@ -21,6 +21,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
   const initial: AssignmentInitial = {
     id: a.id,
     title: a.title,
+    category: a.category ?? '',
     monthLabel: a.monthLabel ?? '',
     instructions: a.instructions ?? '',
     sentences: a.sentences.map((s) => s.text).join('\n'),
@@ -31,6 +32,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
     requireText: a.requireText,
     requireAudio: a.requireAudio,
     requireVideo: a.requireVideo,
+    requireHandwriting: a.requireHandwriting,
   }
 
   return (

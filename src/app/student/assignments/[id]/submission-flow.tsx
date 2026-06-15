@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { PenLine, Video, Mic, Check, CheckCircle2 } from 'lucide-react'
+import { PenLine, Video, Mic, Camera, Check, CheckCircle2 } from 'lucide-react'
 import { submitRecitedText, finishSubmission } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -10,18 +10,20 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Recorder } from './recorder'
+import { PhotoStep } from './photo-step'
 
 interface Sentence {
   order: number
   text: string
 }
-type Kind = 'text' | 'video' | 'audio'
+type Kind = 'text' | 'video' | 'audio' | 'handwriting'
 
 const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
 const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
   text: { key: 'sub.step1', icon: PenLine },
   video: { key: 'sub.step2', icon: Video },
   audio: { key: 'sub.stepAudio', icon: Mic },
+  handwriting: { key: 'sub.stepImage', icon: Camera },
 }
 
 function Steps({ steps, idx }: { steps: Kind[]; idx: number }) {
@@ -89,6 +91,7 @@ export function SubmissionFlow(props: {
   requireText: boolean
   requireVideo: boolean
   requireAudio: boolean
+  requireHandwriting: boolean
   attemptsLeft: number
   windowState: 'open' | 'not-open' | 'closed'
   initialHasText: boolean
@@ -104,8 +107,9 @@ export function SubmissionFlow(props: {
     if (props.requireText) s.push('text')
     if (props.requireVideo) s.push('video')
     if (props.requireAudio) s.push('audio')
+    if (props.requireHandwriting) s.push('handwriting')
     return s
-  }, [props.requireText, props.requireVideo, props.requireAudio])
+  }, [props.requireText, props.requireVideo, props.requireAudio, props.requireHandwriting])
 
   const [idx, setIdx] = useState(steps[0] === 'text' && props.initialHasText ? 1 : 0)
   const [phase, setPhase] = useState<'doing' | 'finishing' | 'done' | 'error'>('doing')
@@ -197,6 +201,8 @@ export function SubmissionFlow(props: {
         </Card>
       ) : current === 'text' ? (
         <TextStep assignmentId={props.assignmentId} initial={props.initialRecitedText} onDone={advance} />
+      ) : current === 'handwriting' ? (
+        <PhotoStep assignmentId={props.assignmentId} onDone={advance} />
       ) : (
         <Recorder
           assignmentId={props.assignmentId}

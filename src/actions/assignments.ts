@@ -22,6 +22,7 @@ function parseDate(value: FormDataEntryValue | null): Date | null {
 function readFields(formData: FormData) {
   return {
     title: (formData.get('title') as string)?.trim(),
+    category: (formData.get('category') as string)?.trim() || null,
     sentences: parseSentences((formData.get('sentences') as string) ?? ''),
     monthLabel: (formData.get('monthLabel') as string)?.trim() || null,
     instructions: (formData.get('instructions') as string)?.trim() || null,
@@ -31,6 +32,7 @@ function readFields(formData: FormData) {
     requireText: formData.get('requireText') !== null,
     requireAudio: formData.get('requireAudio') !== null,
     requireVideo: formData.get('requireVideo') !== null,
+    requireHandwriting: formData.get('requireHandwriting') !== null,
     maxAttempts: Math.max(1, Number(formData.get('maxAttempts') ?? '1') || 1),
   }
 }
@@ -51,7 +53,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
 
   const f = readFields(formData)
   if (!f.title) return { error: t('err.needTitle') }
-  if (!f.requireText && !f.requireAudio && !f.requireVideo) return { error: t('err.needSubmitKind') }
+  if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
 
   const sentences = f.sentences.map((text, i) => ({ order: i + 1, text }))
   // One standalone create per offering. Don't wrap in $transaction: D1 has no
@@ -62,6 +64,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
       data: {
         offeringId: o.id,
         title: f.title,
+        category: f.category,
         monthLabel: f.monthLabel,
         instructions: f.instructions,
         openAt: f.openAt,
@@ -70,6 +73,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
         requireText: f.requireText,
         requireAudio: f.requireAudio,
         requireVideo: f.requireVideo,
+        requireHandwriting: f.requireHandwriting,
         maxAttempts: f.maxAttempts,
         sentences: { create: sentences },
       },
@@ -95,7 +99,7 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
 
   const f = readFields(formData)
   if (!f.title) return { error: t('err.needTitle') }
-  if (!f.requireText && !f.requireAudio && !f.requireVideo) return { error: t('err.needSubmitKind') }
+  if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
 
   await prisma.$transaction([
     prisma.sentence.deleteMany({ where: { assignmentId } }),
@@ -103,6 +107,7 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
       where: { id: assignmentId },
       data: {
         title: f.title,
+        category: f.category,
         monthLabel: f.monthLabel,
         instructions: f.instructions,
         openAt: f.openAt,
@@ -111,6 +116,7 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
         requireText: f.requireText,
         requireAudio: f.requireAudio,
         requireVideo: f.requireVideo,
+        requireHandwriting: f.requireHandwriting,
         maxAttempts: f.maxAttempts,
         sentences: { create: f.sentences.map((text, i) => ({ order: i + 1, text })) },
       },

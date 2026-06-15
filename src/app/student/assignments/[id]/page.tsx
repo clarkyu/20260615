@@ -46,6 +46,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
       requireText={assignment.requireText}
       requireVideo={assignment.requireVideo}
       requireAudio={assignment.requireAudio}
+      requireHandwriting={assignment.requireHandwriting}
       attemptsLeft={Math.max(0, assignment.maxAttempts - usedAttempts)}
       windowState={notOpen ? 'not-open' : closed ? 'closed' : 'open'}
       initialHasText={Boolean(latest?.recitedText)}
