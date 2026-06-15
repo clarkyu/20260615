@@ -8,6 +8,7 @@ import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Recorder } from './recorder'
 import { PhotoStep } from './photo-step'
@@ -85,6 +86,7 @@ function TextStep({ assignmentId, initial, onDone }: { assignmentId: number; ini
 export function SubmissionFlow(props: {
   assignmentId: number
   title: string
+  category: string | null
   instructions: string | null
   sentences: Sentence[]
   requireEyesClosed: boolean
@@ -185,6 +187,7 @@ export function SubmissionFlow(props: {
   return (
     <div className="space-y-4">
       <div>
+        {props.category ? <Badge tone="primary" className="mb-1">{props.category}</Badge> : null}
         <h1 className="text-xl font-bold tracking-tight">{props.title}</h1>
         {props.instructions ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{props.instructions}</p> : null}
       </div>

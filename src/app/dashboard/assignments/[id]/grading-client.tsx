@@ -38,6 +38,7 @@ const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 te
 export function GradingClient(props: {
   assignmentId: number
   title: string
+  category?: string | null
   sentenceCount: number
   classes: { id: number; name: string }[]
   rows: Row[]
@@ -120,6 +121,7 @@ export function GradingClient(props: {
     <div className="space-y-4 py-2">
       <div className="flex items-start justify-between gap-3">
         <div>
+          {props.category ? <Badge tone="primary" className="mb-1">{props.category}</Badge> : null}
           <h1 className="text-2xl font-bold tracking-tight">{props.title}</h1>
           <p className="text-sm text-muted-foreground">{props.sentenceCount} {t('asg.sentences')} · {props.rows.length} {t('grade.students')}</p>
         </div>

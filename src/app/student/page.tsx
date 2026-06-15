@@ -58,6 +58,7 @@ export default async function StudentHome() {
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
                     <p className="font-semibold leading-snug">{a.title}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {a.offering.course.name} · {a._count.sentences} {t('asg.sentences')}
