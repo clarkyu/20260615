@@ -51,23 +51,24 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   if (f.sentences.length === 0) return { error: t('err.needSentences') }
 
   const sentences = f.sentences.map((text, i) => ({ order: i + 1, text }))
-  await prisma.$transaction(
-    valid.map((o) =>
-      prisma.assignment.create({
-        data: {
-          offeringId: o.id,
-          title: f.title,
-          monthLabel: f.monthLabel,
-          instructions: f.instructions,
-          openAt: f.openAt,
-          dueAt: f.dueAt,
-          requireEyesClosed: f.requireEyesClosed,
-          maxAttempts: f.maxAttempts,
-          sentences: { create: sentences },
-        },
-      }),
-    ),
-  )
+  // One standalone create per offering. Don't wrap in $transaction: D1 has no
+  // interactive transactions, so a batched create can't resolve the new
+  // assignment's auto-increment id for its nested sentence inserts.
+  for (const o of valid) {
+    await prisma.assignment.create({
+      data: {
+        offeringId: o.id,
+        title: f.title,
+        monthLabel: f.monthLabel,
+        instructions: f.instructions,
+        openAt: f.openAt,
+        dueAt: f.dueAt,
+        requireEyesClosed: f.requireEyesClosed,
+        maxAttempts: f.maxAttempts,
+        sentences: { create: sentences },
+      },
+    })
+  }
   revalidatePath('/dashboard/teaching')
 
   // Return to the offering the teacher started from, if it was among the targets.
