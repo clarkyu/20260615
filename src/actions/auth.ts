@@ -1,9 +1,10 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import type { User } from '@prisma/client'
+import { revalidatePath } from 'next/cache'
+import type { PrismaClient, User } from '@prisma/client'
 import { getDb } from '@/lib/db'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireStaff } from '@/lib/auth'
 import { hashPassword, verifyPassword, fakeVerifyPassword } from '@/lib/password'
 import { getSession } from '@/lib/session'
 import { sendVerificationEmail, sendPasswordResetEmail } from '@/lib/email'
@@ -25,6 +26,15 @@ const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000
 const RESET_TTL_MS = 60 * 60 * 1000
 
 type ActionState = { error?: string; success?: boolean; needsVerification?: boolean }
+
+// Resolve the school from either a dropdown pick (schoolId) or a typed code.
+async function resolveSchool(prisma: PrismaClient, formData: FormData) {
+  const schoolId = Number(formData.get('schoolId'))
+  if (Number.isInteger(schoolId) && schoolId > 0) return prisma.school.findUnique({ where: { id: schoolId } })
+  const code = (formData.get('schoolCode') as string)?.trim()
+  if (code) return prisma.school.findUnique({ where: { code: code.toUpperCase() } })
+  return null
+}
 
 async function establishSession(user: User) {
   const session = await getSession()
@@ -128,15 +138,28 @@ export async function login(prevState: unknown, formData: FormData): Promise<Act
   const prisma = await getDb()
 
   const email = normalizeEmail((formData.get('email') as string) ?? '')
+  const staffNo = (formData.get('staffNo') as string)?.trim()
   const password = (formData.get('password') as string) ?? ''
-  const user = email ? await prisma.user.findUnique({ where: { email } }) : null
+
+  // Teachers can sign in by email, or by school + 工号.
+  let user: User | null = null
+  if (email) {
+    user = await prisma.user.findUnique({ where: { email } })
+  } else if (staffNo) {
+    const school = await resolveSchool(prisma, formData)
+    user = school
+      ? await prisma.user.findFirst({ where: { schoolId: school.id, staffNo, role: { not: 'STUDENT' } } })
+      : null
+  }
+
   if (!user || user.role === 'STUDENT') {
     await fakeVerifyPassword(password)
     return { error: t('err.invalidCreds') }
   }
   const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) return { error: t('err.invalidCreds') }
-  if (!user.emailVerified) return { error: t('err.needVerify'), needsVerification: true }
+  // Email accounts must be verified; 工号-provisioned accounts without email may pass.
+  if (user.email && !user.emailVerified) return { error: t('err.needVerify'), needsVerification: true }
 
   await establishSession(user)
   redirect('/dashboard')
@@ -147,15 +170,12 @@ export async function studentLogin(prevState: unknown, formData: FormData): Prom
   if (!(await rateLimitLogin())) return { error: t('err.tooManyLogin') }
   const prisma = await getDb()
 
-  const schoolCode = (formData.get('schoolCode') as string)?.trim()
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const password = (formData.get('password') as string) ?? ''
-  if (!schoolCode || !studentNo) return { error: t('err.needSchoolAndId') }
+  const school = await resolveSchool(prisma, formData)
+  if (!school || !studentNo) return { error: t('err.needSchoolAndId') }
 
-  const school = await prisma.school.findUnique({ where: { code: schoolCode.toUpperCase() } })
-  const user = school
-    ? await prisma.user.findFirst({ where: { schoolId: school.id, studentNo, role: 'STUDENT' } })
-    : null
+  const user = await prisma.user.findFirst({ where: { schoolId: school.id, studentNo, role: 'STUDENT' } })
   if (!user) {
     await fakeVerifyPassword(password)
     return { error: t('err.studentBadCreds') }
@@ -248,5 +268,23 @@ export async function changePassword(prevState: unknown, formData: FormData): Pr
   })
   const session = await getSession()
   session.destroy()
+  return { success: true }
+}
+
+// A teacher sets their own 工号 (used for school + 工号 login).
+export async function updateStaffNo(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const current = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  const staffNo = (formData.get('staffNo') as string)?.trim() || null
+
+  if (staffNo && current.schoolId) {
+    const dup = await prisma.user.findFirst({
+      where: { schoolId: current.schoolId, staffNo, NOT: { id: current.userId } },
+    })
+    if (dup) return { error: t('err.staffNoExists') }
+  }
+  await prisma.user.update({ where: { id: current.userId }, data: { staffNo } })
+  revalidatePath('/profile')
   return { success: true }
 }

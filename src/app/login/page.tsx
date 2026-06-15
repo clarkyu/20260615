@@ -1,5 +1,8 @@
 import { getSafeRedirectPath } from '@/lib/app-url'
+import { getDb } from '@/lib/db'
 import { LoginForm } from './login-form'
+
+export const dynamic = 'force-dynamic'
 
 export default async function LoginPage({
   searchParams,
@@ -7,5 +10,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>
 }) {
   const { next } = await searchParams
-  return <LoginForm next={getSafeRedirectPath(next ?? '/')} />
+  const prisma = await getDb()
+  const schools = await prisma.school.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+  return <LoginForm next={getSafeRedirectPath(next ?? '/')} schools={schools} />
 }

@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { Card, CardContent } from '@/components/ui/card'
 import { ProfileClient } from './profile-client'
+import { StaffSettings } from './staff-settings'
 
 export default async function ProfilePage() {
   const session = await requireAuth()
@@ -18,9 +19,11 @@ export default async function ProfilePage() {
     return null
   }
 
+  const isStaff = user.role !== 'STUDENT'
   const rows = [
     user.email ? { k: t('email'), v: user.email } : null,
     user.studentNo ? { k: locale === 'zh' ? '学号' : 'Student ID', v: user.studentNo } : null,
+    user.staffNo ? { k: t('login.staffNo'), v: user.staffNo } : null,
     { k: t('name'), v: user.name || '—' },
     user.school ? { k: locale === 'zh' ? '学校' : 'School', v: user.school.name } : null,
     user.class ? { k: locale === 'zh' ? '班级' : 'Class', v: user.class.name } : null,
@@ -39,6 +42,9 @@ export default async function ProfilePage() {
           ))}
         </CardContent>
       </Card>
+      {isStaff ? (
+        <StaffSettings staffNo={user.staffNo ?? ''} schoolName={user.school?.name ?? ''} hasSchool={Boolean(user.school)} />
+      ) : null}
       <ProfileClient />
     </div>
   )
