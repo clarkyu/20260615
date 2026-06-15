@@ -9,8 +9,18 @@
 import type { PrismaClient } from '@prisma/client'
 import { gradeSubmission } from '@/lib/ai/grade'
 import { presignDownload, storageConfigured } from '@/lib/storage'
+import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 
 export const DEFAULT_MAX_SCORE = 100
+
+export const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综合评分。'
+
+// True when a grading failure is "the model isn't wired up" (no API key, provider
+// not implemented) rather than a genuine fault — so callers can keep the work in
+// the teacher queue and the UI can show a friendly "AI 点评准备中" instead of an error.
+export function isUnavailable(message: string): boolean {
+  return /未配置|not configured|api[_\s-]?key|未实现|provider/i.test(message)
+}
 
 // Above this AI self-confidence — and with no anti-cheat flags — a submission can
 // skip the teacher queue. This is the dial behind "AI-first grading, teacher by
@@ -49,6 +59,7 @@ export function hasAntiCheatViolation(violations: string | null | undefined): bo
 // `submission` loaded with its assignment + sentences.
 export interface GradableSubmission {
   id: number
+  status: string
   videoKey: string | null
   audioKey: string | null
   recitedText: string | null
@@ -137,8 +148,36 @@ export async function autoGradeSubmission(
     })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'grade failed'
+    if (isUnavailable(message)) {
+      // Model not configured — revert to the pre-grade state and leave it for the
+      // teacher rather than marking it failed.
+      await prisma.submission.update({
+        where: { id: submission.id },
+        data: { status: submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED', needsReview: true },
+      })
+      return { ok: false, error: message }
+    }
     console.error('[autoGradeSubmission] grading failed:', err)
-    await prisma.submission.update({ where: { id: submission.id }, data: { status: 'FAILED' } })
-    return { ok: false, error: err instanceof Error ? err.message : 'grade failed' }
+    await prisma.submission.update({ where: { id: submission.id }, data: { status: 'FAILED', needsReview: true } })
+    return { ok: false, error: message }
   }
+}
+
+// Loads a submission and auto-grades it with the assignment's configured (or
+// default) models. Used by the auto-grade-on-submit hook. No-op when there's no
+// gradable media or no reference sentences (those stay in the teacher queue).
+export async function autoGradeById(prisma: PrismaClient, submissionId: number): Promise<void> {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
+  })
+  if (!submission) return
+  if (!submission.videoKey && !submission.audioKey) return
+  if (submission.assignment.sentences.length === 0) return
+  await autoGradeSubmission(prisma, submission, {
+    perceptionModel: submission.assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
+    judgeModel: submission.assignment.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
+    rubric: submission.assignment.rubric || DEFAULT_RUBRIC,
+  })
 }

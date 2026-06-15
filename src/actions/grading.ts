@@ -97,3 +97,35 @@ export async function overrideScore(prevState: unknown, formData: FormData): Pro
   revalidatePath(`/dashboard/assignments/${submission.assignmentId}`)
   return { success: true }
 }
+
+// Bulk "trust the AI on the rest": accept the AI score as final for every
+// still-pending-review submission in an assignment that already has an AI score.
+// Rows without an AI score still need a human, so they're left untouched.
+export async function acceptAiForAssignment(prevState: unknown, formData: FormData): Promise<ActionState & { count?: number }> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  const assignmentId = Number(formData.get('assignmentId'))
+  if (!assignmentId) return { error: t('err.needSubmission') }
+
+  const assignment = await prisma.assignment.findFirst({
+    where: { id: assignmentId, offering: { schoolId: user.schoolId ?? -1 } },
+    select: { id: true },
+  })
+  if (!assignment) return { error: t('err.subNoAccess') }
+
+  // updateMany can't copy aiScore→finalScore, so a scoped raw UPDATE does it.
+  const count = await prisma.$executeRaw`
+    UPDATE "Submission"
+       SET "finalScore" = "aiScore",
+           "needsReview" = 0,
+           "status" = 'GRADED',
+           "gradedById" = ${user.userId},
+           "gradedAt" = CURRENT_TIMESTAMP
+     WHERE "assignmentId" = ${assignmentId}
+       AND "needsReview" = 1
+       AND "aiScore" IS NOT NULL`
+
+  revalidatePath(`/dashboard/assignments/${assignmentId}`)
+  return { success: true, count }
+}

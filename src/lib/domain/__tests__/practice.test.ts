@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { gradePractice, isUnavailable } from '@/lib/domain/practice'
+import { gradePractice } from '@/lib/domain/practice'
+import { isUnavailable } from '@/lib/domain/grading'
 
 describe('isUnavailable', () => {
   it('classifies missing-key / unconfigured failures as unavailable', () => {
