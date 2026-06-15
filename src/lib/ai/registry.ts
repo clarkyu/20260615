@@ -1,8 +1,8 @@
 import type { ModelDescriptor } from './types'
 
-// The catalogue of models teachers can pick from. Capability + modality tags
-// drive which stage each model is eligible for and the validation in the
-// grading orchestrator. Adapters are wired per provider in ./adapters.
+// The catalogue of models teachers can pick from. `id` is the actual API model
+// name sent to the provider. Capability + modality tags drive which stage each
+// model is eligible for; adapters are wired per provider in ./adapters.
 export const MODELS: ModelDescriptor[] = [
   {
     id: 'gemini-2.5-flash',
@@ -20,19 +20,20 @@ export const MODELS: ModelDescriptor[] = [
     modalities: ['video', 'audio', 'image', 'text'],
   },
   {
-    id: 'qwen-omni',
-    label: '通义千问 Qwen-Omni（音频/多模态）',
+    id: 'qwen-omni-turbo',
+    label: '通义千问 Qwen-Omni（音频/视频+文本）',
     provider: 'qwen',
     capabilities: ['perception', 'judge'],
-    modalities: ['audio', 'image', 'text'],
+    modalities: ['video', 'audio', 'image', 'text'],
     note: '国内账号好申请。',
   },
   {
-    id: 'minimax-audio',
-    label: 'MiniMax（语音/多模态）',
+    id: 'MiniMax-Text-01',
+    label: 'MiniMax（文本评分）',
     provider: 'minimax',
-    capabilities: ['perception', 'judge'],
-    modalities: ['audio', 'text'],
+    capabilities: ['judge'],
+    modalities: ['text'],
+    note: '纯文本评分，配合感知模型用。',
   },
   {
     id: 'gpt-4o',
@@ -77,7 +78,8 @@ export interface Preset {
 // the two stages independently in "advanced" mode.
 export const PRESETS: Preset[] = [
   { id: 'gemini-allinone', label: 'Gemini 一把梭', perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash' },
-  { id: 'qwen-allinone', label: 'Qwen 一把梭', perceptionModel: 'qwen-omni', judgeModel: 'qwen-omni' },
+  { id: 'qwen-allinone', label: 'Qwen 一把梭', perceptionModel: 'qwen-omni-turbo', judgeModel: 'qwen-omni-turbo' },
+  { id: 'qwen-minimax', label: 'Qwen 感知 + MiniMax 评分', perceptionModel: 'qwen-omni-turbo', judgeModel: 'MiniMax-Text-01' },
   { id: 'whisper-deepseek', label: 'Whisper 感知 + DeepSeek 评分', perceptionModel: 'whisper-1', judgeModel: 'deepseek-chat' },
   { id: 'gemini-claude', label: 'Gemini 感知 + Claude 评分', perceptionModel: 'gemini-2.5-flash', judgeModel: 'claude-opus-4-8' },
 ]
