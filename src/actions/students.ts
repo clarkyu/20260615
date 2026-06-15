@@ -56,32 +56,55 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
   const valid = parsed.rows.filter((r) => !r.error)
   const skipped = parsed.rows.length - valid.length
 
-  // 1) Ensure every class exists (bulk fetch + create only the missing ones).
+  // 1) Departments (院系) — create the missing ones.
+  const deptNames = [...new Set(valid.map((r) => r.department).filter((v): v is string => Boolean(v)))]
+  const existingDepts = await prisma.department.findMany({ where: { schoolId, name: { in: deptNames } } })
+  const deptIdByName = new Map(existingDepts.map((d) => [d.name, d.id]))
+  for (const name of deptNames) {
+    if (deptIdByName.has(name)) continue
+    const d = await prisma.department.create({ data: { schoolId, name } })
+    deptIdByName.set(name, d.id)
+  }
+
+  // 2) Majors (专业) — each belongs to a department.
+  const majorNames = [...new Set(valid.map((r) => r.major).filter((v): v is string => Boolean(v)))]
+  const existingMajors = await prisma.major.findMany({ where: { schoolId, name: { in: majorNames } } })
+  const majorIdByName = new Map(existingMajors.map((m) => [m.name, m.id]))
+  for (const name of majorNames) {
+    if (majorIdByName.has(name)) continue
+    const rep = valid.find((r) => r.major === name && r.department)
+    const departmentId = rep?.department ? deptIdByName.get(rep.department) : undefined
+    if (!departmentId) continue // a major with no department — skip linking
+    const m = await prisma.major.create({ data: { schoolId, departmentId, name } })
+    majorIdByName.set(name, m.id)
+  }
+
+  // 3) Classes — link to a major; create the missing ones.
   const classNames = [...new Set(valid.map((r) => r.className))]
   const existingClasses = await prisma.classGroup.findMany({ where: { schoolId, name: { in: classNames } } })
   const classIdByName = new Map(existingClasses.map((c) => [c.name, c.id]))
   for (const name of classNames) {
     if (classIdByName.has(name)) continue
     const rep = valid.find((r) => r.className === name)
-    const c = await prisma.classGroup.create({ data: { schoolId, name, department: rep?.department, major: rep?.major, grade: rep?.grade } })
+    const majorId = rep?.major ? majorIdByName.get(rep.major) ?? null : null
+    const c = await prisma.classGroup.create({ data: { schoolId, name, majorId, grade: rep?.grade } })
     classIdByName.set(name, c.id)
   }
 
-  // Backfill department / major / grade on classes that exist but are missing them
-  // (e.g. imported before these were captured) — only fills blanks, never overwrites.
+  // Backfill major / grade on classes missing them — only fills blanks.
   const backfills = existingClasses
     .map((c) => {
       const rep = valid.find((r) => r.className === c.name)
-      const data: { department?: string; major?: string; grade?: string } = {}
-      if (!c.department && rep?.department) data.department = rep.department
-      if (!c.major && rep?.major) data.major = rep.major
+      const data: { majorId?: number; grade?: string } = {}
+      const mId = rep?.major ? majorIdByName.get(rep.major) : undefined
+      if (!c.majorId && mId) data.majorId = mId
       if (!c.grade && rep?.grade) data.grade = rep.grade
       return Object.keys(data).length ? prisma.classGroup.update({ where: { id: c.id }, data }) : null
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
   if (backfills.length > 0) await prisma.$transaction(backfills)
 
-  // 2) Which students already exist (one query).
+  // 4) Which students already exist (one query).
   const existing = await prisma.user.findMany({
     where: { schoolId, role: 'STUDENT', studentNo: { in: valid.map((r) => r.studentNo) } },
     select: { id: true, studentNo: true },
@@ -90,7 +113,7 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
   const toCreate = valid.filter((r) => !idByNo.has(r.studentNo))
   const toUpdate = valid.filter((r) => idByNo.has(r.studentNo))
 
-  // 3) Create new students in a single batch (lighter initial-password hash).
+  // 5) Create new students in a single batch (lighter initial-password hash).
   let created = 0
   if (toCreate.length > 0) {
     const data = await Promise.all(
@@ -100,8 +123,7 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
         classId: classIdByName.get(r.className)!,
         studentNo: r.studentNo,
         name: r.name,
-        department: r.department,
-        major: r.major,
+        phone: r.phone ?? null,
         passwordHash: await hashPassword(r.studentNo, BULK_HASH_ITERATIONS),
         mustChangePassword: true,
       })),
@@ -109,13 +131,13 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
     created = (await prisma.user.createMany({ data })).count
   }
 
-  // 4) Update existing students in one batched transaction.
+  // 6) Update existing students (name / class / phone-if-provided) in one batch.
   if (toUpdate.length > 0) {
     await prisma.$transaction(
       toUpdate.map((r) =>
         prisma.user.update({
           where: { id: idByNo.get(r.studentNo)! },
-          data: { name: r.name, classId: classIdByName.get(r.className)!, department: r.department, major: r.major },
+          data: { name: r.name, classId: classIdByName.get(r.className)!, ...(r.phone ? { phone: r.phone } : {}) },
         }),
       ),
     )
@@ -135,17 +157,20 @@ export async function updateClass(prevState: unknown, formData: FormData): Promi
   const prisma = await getDb()
   const classId = Number(formData.get('classId'))
   const name = (formData.get('name') as string)?.trim()
-  const major = (formData.get('major') as string)?.trim() || null
-  const department = (formData.get('department') as string)?.trim() || null
   const grade = (formData.get('grade') as string)?.trim() || null
+  const majorIdRaw = Number(formData.get('majorId'))
+  const majorId = Number.isInteger(majorIdRaw) && majorIdRaw > 0 ? majorIdRaw : null
   if (!name) return { error: t('err.needClassName') }
 
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
   if (!cls) return { error: t('err.classNotFound') }
   const dup = await prisma.classGroup.findFirst({ where: { schoolId: cls.schoolId, name, NOT: { id: classId } } })
   if (dup) return { error: t('err.classNameExists') }
+  if (majorId && !(await prisma.major.findFirst({ where: { id: majorId, schoolId: cls.schoolId } }))) {
+    return { error: t('err.classNotFound') }
+  }
 
-  await prisma.classGroup.update({ where: { id: classId }, data: { name, major, department, grade } })
+  await prisma.classGroup.update({ where: { id: classId }, data: { name, grade, majorId } })
   revalidatePath(`/dashboard/students/${classId}`)
   revalidatePath('/dashboard/students')
   return { success: true }
@@ -171,7 +196,7 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
   const classId = Number(formData.get('classId'))
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const name = (formData.get('name') as string)?.trim()
-  const major = (formData.get('major') as string)?.trim() || null
+  const phone = (formData.get('phone') as string)?.trim() || null
   if (!studentNo || !name) return { error: t('err.needNoAndName') }
 
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
@@ -186,7 +211,7 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
       classId,
       studentNo,
       name,
-      major: major ?? cls.major,
+      phone,
       passwordHash: await hashPassword(studentNo),
       mustChangePassword: true,
     },
@@ -203,7 +228,7 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
   const name = (formData.get('name') as string)?.trim()
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const newClassId = Number(formData.get('classId'))
-  const major = (formData.get('major') as string)?.trim() || null
+  const phone = (formData.get('phone') as string)?.trim() || null
   if (!studentNo || !name) return { error: t('err.needNoAndName') }
 
   const stu = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT', schoolId: user.schoolId ?? -1 } })
@@ -213,7 +238,7 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
   const dup = await prisma.user.findFirst({ where: { schoolId: stu.schoolId, studentNo, role: 'STUDENT', NOT: { id: studentId } } })
   if (dup) return { error: t('err.studentNoExists') }
 
-  await prisma.user.update({ where: { id: studentId }, data: { name, studentNo, classId: newClassId, major } })
+  await prisma.user.update({ where: { id: studentId }, data: { name, studentNo, classId: newClassId, phone } })
   if (stu.classId) revalidatePath(`/dashboard/students/${stu.classId}`)
   revalidatePath(`/dashboard/students/${newClassId}`)
   return { success: true }

@@ -271,12 +271,14 @@ export async function changePassword(prevState: unknown, formData: FormData): Pr
   return { success: true }
 }
 
-// A teacher sets their own 工号 (used for school + 工号 login).
-export async function updateStaffNo(prevState: unknown, formData: FormData): Promise<ActionState> {
+// A teacher sets their own 工号 (used for school + 工号 login) and department.
+export async function updateStaffProfile(prevState: unknown, formData: FormData): Promise<ActionState> {
   const current = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
   const staffNo = (formData.get('staffNo') as string)?.trim() || null
+  const deptRaw = Number(formData.get('departmentId'))
+  const departmentId = Number.isInteger(deptRaw) && deptRaw > 0 ? deptRaw : null
 
   if (staffNo && current.schoolId) {
     const dup = await prisma.user.findFirst({
@@ -284,7 +286,20 @@ export async function updateStaffNo(prevState: unknown, formData: FormData): Pro
     })
     if (dup) return { error: t('err.staffNoExists') }
   }
-  await prisma.user.update({ where: { id: current.userId }, data: { staffNo } })
+  if (departmentId && current.schoolId && !(await prisma.department.findFirst({ where: { id: departmentId, schoolId: current.schoolId } }))) {
+    return { error: t('err.invalidCreds') }
+  }
+  await prisma.user.update({ where: { id: current.userId }, data: { staffNo, departmentId } })
+  revalidatePath('/profile')
+  return { success: true }
+}
+
+// Any signed-in user can set their phone number.
+export async function updatePhone(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const current = await requireAuth()
+  const prisma = await getDb()
+  const phone = (formData.get('phone') as string)?.trim() || null
+  await prisma.user.update({ where: { id: current.userId }, data: { phone } })
   revalidatePath('/profile')
   return { success: true }
 }
