@@ -6,7 +6,7 @@ export const LOCALE_COOKIE = 'locale'
 type Dict = Record<string, string>
 
 const zh: Dict = {
-  appName: '英语背诵',
+  appName: '你好！作业',
   langName: '中文',
   // common
   signIn: '登录',
@@ -394,7 +394,7 @@ const zh: Dict = {
 }
 
 const en: Dict = {
-  appName: 'Recite',
+  appName: 'Hi, Homework',
   langName: 'English',
   signIn: 'Sign in',
   signOut: 'Sign out',

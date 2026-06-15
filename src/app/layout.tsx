@@ -9,11 +9,11 @@ import { BottomNav } from '@/components/bottom-nav'
 
 const inter = Inter({ subsets: ['latin'] })
 
-const APP_NAME = process.env.APP_NAME || '英语背诵作业'
+const APP_NAME = process.env.APP_NAME || '你好！作业 Hi, Homework'
 
 export const metadata: Metadata = {
   title: APP_NAME,
-  description: '手机端英语背诵作业：录制提交、AI 评阅、按班级统计导出',
+  description: '你好！作业 — 手机端背诵作业：录制提交、AI 评阅、按班级统计导出',
   manifest: '/manifest.webmanifest',
   appleWebApp: { capable: true, statusBarStyle: 'default', title: APP_NAME },
 }

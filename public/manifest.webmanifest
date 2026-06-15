@@ -1,7 +1,7 @@
 {
-  "name": "英语背诵作业 Recitation",
-  "short_name": "背诵 Recite",
-  "description": "手机端英语背诵作业：默写、闭眼录制、AI 评阅、按班级统计导出",
+  "name": "你好！作业 Hi, Homework",
+  "short_name": "你好！作业",
+  "description": "你好！作业 — 手机端背诵作业：默写、闭眼录制、AI 评阅、按班级统计导出",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
