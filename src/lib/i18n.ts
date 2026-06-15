@@ -342,6 +342,12 @@ const zh: Dict = {
   'filter.none': '没有匹配的结果',
   'filter.selected': '已选 {n} 个班',
   'filter.clear': '清空',
+  'filter.grade': '年级',
+  'filter.allDepts': '全部系部',
+  'filter.allMajors': '全部专业',
+  'filter.allGrades': '全部年级',
+  'cls.grade': '年级',
+  'cls.gradeSuffix': '级',
 }
 
 const en: Dict = {
@@ -663,6 +669,12 @@ const en: Dict = {
   'filter.none': 'No matching results',
   'filter.selected': '{n} classes selected',
   'filter.clear': 'Clear',
+  'filter.grade': 'Grade',
+  'filter.allDepts': 'All departments',
+  'filter.allMajors': 'All majors',
+  'filter.allGrades': 'All grades',
+  'cls.grade': 'Grade',
+  'cls.gradeSuffix': '',
 }
 
 export const dictionaries: Record<Locale, Dict> = { zh, en }

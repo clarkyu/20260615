@@ -27,7 +27,7 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
   return (
     <div className="py-2">
       <ClassManager
-        cls={{ id: cls.id, name: cls.name, major: cls.major ?? '', department: cls.department ?? '' }}
+        cls={{ id: cls.id, name: cls.name, major: cls.major ?? '', department: cls.department ?? '', grade: cls.grade ?? '' }}
         students={students.map((s) => ({ id: s.id, studentNo: s.studentNo ?? '', name: s.name ?? '', major: s.major ?? '' }))}
         allClasses={allClasses}
       />

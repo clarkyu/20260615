@@ -30,6 +30,7 @@ interface Cls {
   name: string
   major: string
   department: string
+  grade: string
 }
 
 type Action = (fd: FormData) => Promise<{ error?: string; success?: boolean }>
@@ -86,7 +87,11 @@ export function ClassManager({
               <Label htmlFor="cn">{t('cls.className')}</Label>
               <Input id="cn" name="name" required defaultValue={cls.name} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="grd">{t('cls.grade')}</Label>
+                <Input id="grd" name="grade" defaultValue={cls.grade} placeholder="2025" inputMode="numeric" />
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maj">{t('cls.major')}</Label>
                 <Input id="maj" name="major" defaultValue={cls.major} />

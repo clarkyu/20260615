@@ -7,18 +7,20 @@ export interface RosterRow {
   className: string
   department?: string
   major?: string
+  grade?: string
   error?: string
 }
 
-type Field = 'studentNo' | 'name' | 'className' | 'department' | 'major'
+type Field = 'studentNo' | 'name' | 'className' | 'department' | 'major' | 'grade'
 
 // Accept either Chinese or English headers, case/space-insensitive.
 const HEADER_ALIASES: Record<Field, string[]> = {
   studentNo: ['学号', 'studentno', 'student no', 'student id', 'id', '学籍号', '考号'],
   name: ['姓名', 'name', '学生姓名'],
   className: ['班级', 'class', 'classname', '行政班', '班级名称', '教学班'],
-  department: ['院系', 'department', 'dept', '系', '学院'],
+  department: ['院系', 'department', 'dept', '系', '学院', '系部'],
   major: ['专业', 'major', 'majorname'],
+  grade: ['年级', 'grade', '级', '入学年份', 'year', '届'],
 }
 
 function norm(s: unknown): string {
@@ -63,6 +65,16 @@ export function shortClassName(raw: string): string {
 export function extractMajor(raw: string): string | undefined {
   const m = raw.match(/(?:专科|本科|高职|中职|高级|中级)?\s*\d{4}\s*([一-龥]+?)\s*\d{6,}/)
   return m && m[1] ? m[1] : undefined
+}
+
+// "专科2025无人机应用技术..." -> "2025" (cohort year / 年级). A bare 2-digit
+// "23级" is normalised to "2023".
+export function extractGrade(raw: string): string | undefined {
+  const full = raw.match(/(19|20)\d{2}/)
+  if (full) return full[0]
+  const two = raw.match(/(\d{2})\s*级/)
+  if (two) return `20${two[1]}`
+  return undefined
 }
 
 export function parseRoster(buffer: ArrayBuffer | Buffer): ParsedRoster {
@@ -118,6 +130,7 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
     const className = shortClassName(rawClass)
     const department = get(row, 'department') || undefined
     const major = get(row, 'major') || extractMajor(rawClass)
+    const grade = get(row, 'grade') || extractGrade(rawClass)
     if (!studentNo && !name && !rawClass) continue
 
     let error: string | undefined
@@ -129,7 +142,7 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
 
     if (error) errorCount++
     else validCount++
-    rows.push({ rowNumber: r + 1, studentNo, name, className, department, major, error })
+    rows.push({ rowNumber: r + 1, studentNo, name, className, department, major, grade, error })
   }
 
   return { rows, validCount, errorCount }

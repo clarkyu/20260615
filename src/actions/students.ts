@@ -63,9 +63,23 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
   for (const name of classNames) {
     if (classIdByName.has(name)) continue
     const rep = valid.find((r) => r.className === name)
-    const c = await prisma.classGroup.create({ data: { schoolId, name, department: rep?.department, major: rep?.major } })
+    const c = await prisma.classGroup.create({ data: { schoolId, name, department: rep?.department, major: rep?.major, grade: rep?.grade } })
     classIdByName.set(name, c.id)
   }
+
+  // Backfill department / major / grade on classes that exist but are missing them
+  // (e.g. imported before these were captured) — only fills blanks, never overwrites.
+  const backfills = existingClasses
+    .map((c) => {
+      const rep = valid.find((r) => r.className === c.name)
+      const data: { department?: string; major?: string; grade?: string } = {}
+      if (!c.department && rep?.department) data.department = rep.department
+      if (!c.major && rep?.major) data.major = rep.major
+      if (!c.grade && rep?.grade) data.grade = rep.grade
+      return Object.keys(data).length ? prisma.classGroup.update({ where: { id: c.id }, data }) : null
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+  if (backfills.length > 0) await prisma.$transaction(backfills)
 
   // 2) Which students already exist (one query).
   const existing = await prisma.user.findMany({
@@ -123,6 +137,7 @@ export async function updateClass(prevState: unknown, formData: FormData): Promi
   const name = (formData.get('name') as string)?.trim()
   const major = (formData.get('major') as string)?.trim() || null
   const department = (formData.get('department') as string)?.trim() || null
+  const grade = (formData.get('grade') as string)?.trim() || null
   if (!name) return { error: t('err.needClassName') }
 
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
@@ -130,7 +145,7 @@ export async function updateClass(prevState: unknown, formData: FormData): Promi
   const dup = await prisma.classGroup.findFirst({ where: { schoolId: cls.schoolId, name, NOT: { id: classId } } })
   if (dup) return { error: t('err.classNameExists') }
 
-  await prisma.classGroup.update({ where: { id: classId }, data: { name, major, department } })
+  await prisma.classGroup.update({ where: { id: classId }, data: { name, major, department, grade } })
   revalidatePath(`/dashboard/students/${classId}`)
   revalidatePath('/dashboard/students')
   return { success: true }
