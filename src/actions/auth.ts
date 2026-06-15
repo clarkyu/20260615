@@ -132,60 +132,43 @@ export async function verifyEmail(prevState: unknown, formData: FormData): Promi
   redirect('/dashboard')
 }
 
+// Unified sign-in: school + 学号/工号, or email (teachers). One form for everyone.
 export async function login(prevState: unknown, formData: FormData): Promise<ActionState> {
   const { t } = await getT()
   if (!(await rateLimitLogin())) return { error: t('err.tooManyLogin') }
   const prisma = await getDb()
 
-  const email = normalizeEmail((formData.get('email') as string) ?? '')
-  const staffNo = (formData.get('staffNo') as string)?.trim()
   const password = (formData.get('password') as string) ?? ''
+  const email = normalizeEmail((formData.get('email') as string) ?? '')
 
-  // Teachers can sign in by email, or by school + 工号.
   let user: User | null = null
   if (email) {
     user = await prisma.user.findUnique({ where: { email } })
-  } else if (staffNo) {
+    if (!user || user.role === 'STUDENT') {
+      await fakeVerifyPassword(password)
+      return { error: t('err.invalidCreds') }
+    }
+  } else {
+    const identifier = (formData.get('identifier') as string)?.trim()
     const school = await resolveSchool(prisma, formData)
-    user = school
-      ? await prisma.user.findFirst({ where: { schoolId: school.id, staffNo, role: { not: 'STUDENT' } } })
-      : null
+    if (!school || !identifier) return { error: t('err.needSchoolAndId') }
+    user = await prisma.user.findFirst({
+      where: { schoolId: school.id, OR: [{ studentNo: identifier }, { staffNo: identifier }] },
+    })
   }
 
-  if (!user || user.role === 'STUDENT') {
+  if (!user) {
     await fakeVerifyPassword(password)
     return { error: t('err.invalidCreds') }
   }
   const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) return { error: t('err.invalidCreds') }
-  // Email accounts must be verified; 工号-provisioned accounts without email may pass.
+  if (!user.isActive) return { error: t('err.accountDisabled') }
   if (user.email && !user.emailVerified) return { error: t('err.needVerify'), needsVerification: true }
 
   await establishSession(user)
+  if (user.role === 'STUDENT') redirect(user.mustChangePassword ? '/student/change-password' : '/student')
   redirect('/dashboard')
-}
-
-export async function studentLogin(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const { t } = await getT()
-  if (!(await rateLimitLogin())) return { error: t('err.tooManyLogin') }
-  const prisma = await getDb()
-
-  const studentNo = (formData.get('studentNo') as string)?.trim()
-  const password = (formData.get('password') as string) ?? ''
-  const school = await resolveSchool(prisma, formData)
-  if (!school || !studentNo) return { error: t('err.needSchoolAndId') }
-
-  const user = await prisma.user.findFirst({ where: { schoolId: school.id, studentNo, role: 'STUDENT' } })
-  if (!user) {
-    await fakeVerifyPassword(password)
-    return { error: t('err.studentBadCreds') }
-  }
-  const valid = await verifyPassword(password, user.passwordHash)
-  if (!valid) return { error: t('err.studentBadCreds') }
-  if (!user.isActive) return { error: t('err.accountDisabled') }
-
-  await establishSession(user)
-  redirect(user.mustChangePassword ? '/student/change-password' : '/student')
 }
 
 export async function logout() {

@@ -18,7 +18,7 @@ export default function StudentChangePasswordPage() {
   if (state?.success) {
     return (
       <AuthShell icon={<KeyRound className="h-7 w-7" />} title={t('prof.updated')} description={t('change.changed')}>
-        <Link href="/student-login">
+        <Link href="/login">
           <Button className="w-full" size="lg">{t('change.toSignIn')}</Button>
         </Link>
       </AuthShell>

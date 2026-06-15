@@ -1,11 +1,6 @@
-import { getSafeRedirectPath } from '@/lib/app-url'
-import { RegisterForm } from './register-form'
+import { redirect } from 'next/navigation'
 
-export default async function RegisterPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>
-}) {
-  const { next } = await searchParams
-  return <RegisterForm next={getSafeRedirectPath(next ?? '/')} />
+// Public registration is disabled — accounts are provisioned by an admin.
+export default function RegisterPage() {
+  redirect('/login')
 }
