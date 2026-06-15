@@ -12,8 +12,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "cf:build": "opennextjs-cloudflare build",
-    "cf:preview": "opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare deploy",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "d1:migrate:local": "wrangler d1 migrations apply recitation-db --local",
     "d1:migrate": "wrangler d1 migrations apply recitation-db --remote",
     "cf:typegen": "wrangler types"
