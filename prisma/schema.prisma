@@ -57,6 +57,7 @@ model User {
   emailVerified DateTime?
 
   studentNo  String?
+  staffNo    String?
   schoolId   Int?
   classId    Int?
   department String?
@@ -79,6 +80,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
 
   @@unique([schoolId, studentNo])
+  @@unique([schoolId, staffNo])
   @@index([schoolId])
   @@index([classId])
 }

@@ -1,49 +1,10 @@
-'use client'
+import { getDb } from '@/lib/db'
+import { StudentLoginForm } from './student-login-form'
 
-import { useActionState } from 'react'
-import Link from 'next/link'
-import { GraduationCap } from 'lucide-react'
-import { studentLogin } from '@/actions/auth'
-import { useT } from '@/components/i18n-provider'
-import { AuthShell } from '@/components/auth-shell'
-import { FormMessage } from '@/components/form-message'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+export const dynamic = 'force-dynamic'
 
-export default function StudentLoginPage() {
-  const t = useT()
-  const [state, action, isPending] = useActionState(studentLogin, null)
-
-  return (
-    <AuthShell
-      icon={<GraduationCap className="h-7 w-7" />}
-      title={t('slogin.title')}
-      description={t('slogin.desc')}
-      footer={
-        <Link href="/login" className="font-semibold text-primary">
-          {t('slogin.imTeacher')}
-        </Link>
-      }
-    >
-      <form action={action} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="schoolCode">{t('slogin.schoolCode')}</Label>
-          <Input id="schoolCode" name="schoolCode" autoCapitalize="characters" required placeholder="WHPA" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="studentNo">{t('slogin.studentId')}</Label>
-          <Input id="studentNo" name="studentNo" required inputMode="numeric" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="password">{t('password')}</Label>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required placeholder={t('slogin.initialPw')} />
-        </div>
-        {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-        <Button type="submit" disabled={isPending} size="lg" className="w-full">
-          {isPending ? t('loading') : t('signIn')}
-        </Button>
-      </form>
-    </AuthShell>
-  )
+export default async function StudentLoginPage() {
+  const prisma = await getDb()
+  const schools = await prisma.school.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+  return <StudentLoginForm schools={schools} />
 }

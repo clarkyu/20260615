@@ -35,3 +35,21 @@ export async function createSchool(prevState: unknown, formData: FormData): Prom
   revalidatePath('/dashboard')
   return { success: true }
 }
+
+// Rename the staff member's school (the code is kept).
+export async function renameSchool(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
+  const name = (formData.get('name') as string)?.trim()
+  if (!name) return { error: t('err.needSchoolName') }
+
+  const dup = await prisma.school.findFirst({ where: { name, NOT: { id: user.schoolId } } })
+  if (dup) return { error: t('err.schoolNameExists') }
+
+  await prisma.school.update({ where: { id: user.schoolId }, data: { name } })
+  revalidatePath('/profile')
+  revalidatePath('/dashboard')
+  return { success: true }
+}
