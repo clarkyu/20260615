@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -11,9 +12,9 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "cf:build": "opennextjs-cloudflare build",
-    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:build": "prisma generate && opennextjs-cloudflare build",
+    "cf:preview": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "d1:migrate:local": "wrangler d1 migrations apply recitation-db --local",
     "d1:migrate": "wrangler d1 migrations apply recitation-db --remote",
     "cf:typegen": "wrangler types"
