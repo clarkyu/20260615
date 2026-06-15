@@ -22,7 +22,7 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
     prisma.user.findMany({
       where: { classId, role: 'STUDENT' },
       orderBy: { studentNo: 'asc' },
-      select: { id: true, studentNo: true, name: true, phone: true },
+      select: { id: true, studentNo: true, name: true, phone: true, email: true },
     }),
     prisma.classGroup.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.major.findMany({
@@ -43,7 +43,7 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
           major: cls.major?.name ?? '',
           department: cls.major?.department.name ?? '',
         }}
-        students={students.map((s) => ({ id: s.id, studentNo: s.studentNo ?? '', name: s.name ?? '', phone: s.phone ?? '' }))}
+        students={students.map((s) => ({ id: s.id, studentNo: s.studentNo ?? '', name: s.name ?? '', phone: s.phone ?? '', email: s.email ?? '' }))}
         allClasses={allClasses}
         majors={majors.map((m) => ({ id: m.id, name: m.name, department: m.department.name }))}
       />

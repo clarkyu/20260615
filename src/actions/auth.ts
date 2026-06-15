@@ -277,12 +277,18 @@ export async function updateStaffProfile(prevState: unknown, formData: FormData)
   return { success: true }
 }
 
-// Any signed-in user can set their phone number.
-export async function updatePhone(prevState: unknown, formData: FormData): Promise<ActionState> {
+// Any signed-in user sets their own contact details (email + phone).
+export async function updateContact(prevState: unknown, formData: FormData): Promise<ActionState> {
   const current = await requireAuth()
+  const { t } = await getT()
   const prisma = await getDb()
   const phone = (formData.get('phone') as string)?.trim() || null
-  await prisma.user.update({ where: { id: current.userId }, data: { phone } })
+  const email = normalizeEmail((formData.get('email') as string) ?? '') || null
+  if (email) {
+    const dup = await prisma.user.findFirst({ where: { email, NOT: { id: current.userId } } })
+    if (dup) return { error: t('err.emailTaken') }
+  }
+  await prisma.user.update({ where: { id: current.userId }, data: { phone, email } })
   revalidatePath('/profile')
   return { success: true }
 }
