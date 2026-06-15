@@ -213,14 +213,16 @@ export function Recorder(props: {
               <Video className="mt-0.5 h-4 w-4 shrink-0" />
               {t('rec.requirement', { eyes: props.requireEyesClosed ? t('rec.eyesClosed') : t('rec.recite') })}
             </p>
-            <details className="rounded-xl bg-secondary/60 p-3">
-              <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
-                <ListChecks className="h-4 w-4" />{t('rec.review', { n: props.sentences.length })}
-              </summary>
-              <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
-                {props.sentences.map((s) => <li key={s.order}>{s.text}</li>)}
-              </ol>
-            </details>
+            {props.sentences.length > 0 ? (
+              <details className="rounded-xl bg-secondary/60 p-3">
+                <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
+                  <ListChecks className="h-4 w-4" />{t('rec.review', { n: props.sentences.length })}
+                </summary>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+                  {props.sentences.map((s) => <li key={s.order}>{s.text}</li>)}
+                </ol>
+              </details>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
