@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users, ClipboardList, ChevronRight } from 'lucide-react'
+import { Users, GraduationCap, ChevronRight } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -29,7 +29,7 @@ export default async function DashboardPage() {
   const [students, classes, assignments] = await Promise.all([
     prisma.user.count({ where: { schoolId: me.school.id, role: 'STUDENT' } }),
     prisma.classGroup.count({ where: { schoolId: me.school.id } }),
-    prisma.assignment.count({ where: { schoolId: me.school.id } }),
+    prisma.assignment.count({ where: { offering: { schoolId: me.school.id } } }),
   ])
 
   const stats = [
@@ -39,7 +39,7 @@ export default async function DashboardPage() {
   ]
   const actions = [
     { href: '/dashboard/students', icon: Users, title: t('dash.rosterTitle'), desc: t('dash.rosterDesc') },
-    { href: '/dashboard/assignments', icon: ClipboardList, title: t('dash.assignTitle'), desc: t('dash.assignDesc') },
+    { href: '/dashboard/teaching', icon: GraduationCap, title: t('teach.title'), desc: t('dash.assignDesc') },
   ]
 
   return (

@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const prisma = await getDb()
-  const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, schoolId: user.schoolId } })
+  const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, offering: { schoolId: user.schoolId } } })
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId } })
   if (!assignment || !cls) return new NextResponse('Not found', { status: 404 })
 

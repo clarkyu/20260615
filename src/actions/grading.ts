@@ -15,7 +15,7 @@ const MAX_SCORE = 100
 // Ensures the submission belongs to a school the staff member manages.
 async function loadSubmissionForStaff(prisma: PrismaClient, submissionId: number, schoolId: number | null | undefined) {
   return prisma.submission.findFirst({
-    where: { id: submissionId, assignment: { schoolId: schoolId ?? -1 } },
+    where: { id: submissionId, assignment: { offering: { schoolId: schoolId ?? -1 } } },
     include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
   })
 }

@@ -17,7 +17,7 @@ async function resolveAttempt(
 ): Promise<{ error: string } | { attempt: number }> {
   if (!classId) return { error: 'err.noClassAssigned' as const }
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, classes: { some: { classId } } },
+    where: { id: assignmentId, offering: { classId } },
   })
   if (!assignment) return { error: 'err.assignNotFound' as const }
 

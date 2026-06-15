@@ -23,10 +23,11 @@ export default async function StudentHome() {
   }
 
   const assignments = await prisma.assignment.findMany({
-    where: { classes: { some: { classId: me.classId } } },
+    where: { offering: { classId: me.classId } },
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { sentences: true } },
+      offering: { include: { course: { select: { name: true } } } },
       submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1 },
     },
   })
@@ -59,7 +60,7 @@ export default async function StudentHome() {
                   <div className="min-w-0">
                     <p className="font-semibold leading-snug">{a.title}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {a._count.sentences} {t('asg.sentences')}
+                      {a.offering.course.name} · {a._count.sentences} {t('asg.sentences')}
                       {a.dueAt ? ` · ${t('asg.due')} ${a.dueAt.toISOString().slice(0, 10)}` : ''}
                     </p>
                   </div>

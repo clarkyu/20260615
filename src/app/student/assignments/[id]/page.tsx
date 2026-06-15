@@ -15,7 +15,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   if (!me?.classId) notFound()
 
   const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, classes: { some: { classId: me.classId } } },
+    where: { id: assignmentId, offering: { classId: me.classId } },
     include: {
       sentences: { orderBy: { order: 'asc' } },
       submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1 },

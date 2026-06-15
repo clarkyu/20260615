@@ -2,17 +2,16 @@ import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
-import { AssignmentForm } from '../assignment-form'
+import { OfferingForm } from '../offering-form'
 
-export default async function NewAssignmentPage() {
+export default async function NewOfferingPage() {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
-  const me = await prisma.user.findUnique({ where: { id: user.userId } })
-  if (!me?.schoolId) redirect('/dashboard')
+  if (!user.schoolId) redirect('/dashboard')
 
   const classes = await prisma.classGroup.findMany({
-    where: { schoolId: me.schoolId },
+    where: { schoolId: user.schoolId },
     orderBy: { name: 'asc' },
     select: { id: true, name: true },
   })
@@ -20,7 +19,7 @@ export default async function NewAssignmentPage() {
   if (classes.length === 0) {
     return (
       <div className="space-y-3 py-2">
-        <h1 className="text-2xl font-bold tracking-tight">{t('asg.newTitle')}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t('teach.newTitle')}</h1>
         <p className="text-sm text-muted-foreground">{t('asg.needClassFirst')}</p>
       </div>
     )
@@ -28,7 +27,7 @@ export default async function NewAssignmentPage() {
 
   return (
     <div className="py-2">
-      <AssignmentForm classes={classes} />
+      <OfferingForm classes={classes} />
     </div>
   )
 }

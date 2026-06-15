@@ -14,35 +14,35 @@ enum Role {
 }
 
 enum SubmissionStatus {
-  DRAFT // created, no video yet
-  UPLOADED // video uploaded, awaiting grading
-  PROCESSING // AI grading in progress
-  GRADED // has a score
-  FLAGGED // anti-cheat violation needs review
-  FAILED // grading failed
+  DRAFT
+  UPLOADED
+  PROCESSING
+  GRADED
+  FLAGGED
+  FAILED
 }
 
 model School {
   id        Int          @id @default(autoincrement())
   name      String       @unique
-  // Short code students type at login to disambiguate across schools.
   code      String       @unique
   createdAt DateTime     @default(now())
   classes   ClassGroup[]
   users     User[]
-  assignments Assignment[]
+  courses   Course[]
+  offerings CourseOffering[]
 }
 
 model ClassGroup {
   id         Int      @id @default(autoincrement())
   schoolId   Int
-  name       String // 班级
-  department String? // 院系
-  major      String? // 专业
+  name       String
+  department String?
+  major      String?
   createdAt  DateTime @default(now())
   school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   members    User[]
-  assignments AssignmentClass[]
+  offerings  CourseOffering[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -52,21 +52,18 @@ model User {
   id           Int      @id @default(autoincrement())
   role         Role     @default(TEACHER)
 
-  // Teacher / admin credentials (email-based, self sign-up + verification).
   email         String?   @unique
   emailVerified DateTime?
 
-  // Student identity (provisioned via Excel import; logs in with school code + studentNo).
-  studentNo  String? // 学号
+  studentNo  String?
   schoolId   Int?
   classId    Int?
-  department String? // 院系 (denormalized snapshot for students)
-  major      String? // 专业
+  department String?
+  major      String?
 
   name         String?
   passwordHash String
   isActive     Boolean  @default(true)
-  // Force a password change on first student login (initial password = studentNo).
   mustChangePassword Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -74,8 +71,8 @@ model User {
   school      School?      @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   class       ClassGroup?  @relation(fields: [classId], references: [id], onDelete: SetNull)
   submissions Submission[]
-  createdAssignments Assignment[] @relation("AssignmentCreatedBy")
-  gradedSubmissions  Submission[] @relation("SubmissionGradedBy")
+  taughtOfferings   CourseOffering[] @relation("OfferingTeacher")
+  gradedSubmissions Submission[]     @relation("SubmissionGradedBy")
 
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
@@ -85,35 +82,64 @@ model User {
   @@index([classId])
 }
 
+// 课程：课程名称 + 课程代码
+model Course {
+  id        Int      @id @default(autoincrement())
+  schoolId  Int
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  offerings CourseOffering[]
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
+// 授课（课头）：老师在某学年·某学期·某班 教 某课程
+model CourseOffering {
+  id        Int      @id @default(autoincrement())
+  schoolId  Int
+  courseId  Int
+  teacherId Int
+  classId   Int
+  year      String // 学年, e.g. "2025-2026"
+  semester  String // 学期, e.g. "1" / "2"
+  createdAt DateTime @default(now())
+  school    School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  course    Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher   User        @relation("OfferingTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  class     ClassGroup  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+
+  @@unique([courseId, classId, year, semester])
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([classId])
+}
+
 model Assignment {
   id           Int       @id @default(autoincrement())
-  schoolId     Int
-  createdById  Int
+  offeringId   Int
   title        String
-  monthLabel   String? // e.g. "2026-05"
+  monthLabel   String?
   instructions String?
-  // Provided at grading time, so nullable.
   rubric       String?
-  // Original reference recording for the whole set (optional; per-sentence below).
   referenceAudioKey String?
   openAt       DateTime?
   dueAt        DateTime?
   requireEyesClosed Boolean @default(true)
   maxAttempts  Int      @default(1)
-  // Default model preset ids (teacher can override per grading run).
   defaultPerceptionModel String?
   defaultJudgeModel      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  school      School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  createdBy   User             @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
   sentences   Sentence[]
-  classes     AssignmentClass[]
   submissions Submission[]
 
-  @@index([schoolId])
-  @@index([createdById])
+  @@index([offeringId])
 }
 
 model Sentence {
@@ -127,16 +153,6 @@ model Sentence {
   @@index([assignmentId])
 }
 
-model AssignmentClass {
-  assignmentId Int
-  classId      Int
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  class        ClassGroup @relation(fields: [classId], references: [id], onDelete: Cascade)
-
-  @@id([assignmentId, classId])
-  @@index([classId])
-}
-
 model Submission {
   id           Int              @id @default(autoincrement())
   assignmentId Int
@@ -144,23 +160,18 @@ model Submission {
   attempt      Int              @default(1)
   status       SubmissionStatus @default(DRAFT)
 
-  // Step 1: the text the student recited from memory.
   recitedText String?
   textSubmittedAt DateTime?
 
-  // Object-storage keys (Cloudflare R2).
   videoKey   String?
   audioKey   String?
   durationSec Int?
   sizeBytes  Int?
-  // JSON array of anti-cheat events (e.g. tab blur, fullscreen exit).
   violations String?
 
-  // AI grading.
   perceptionModel String?
   judgeModel      String?
   transcript      String?
-  // JSON: per-sentence completeness/accuracy, pronunciation impression, observations.
   aiResult        String?
   aiScore         Float?
   teacherScore    Float?

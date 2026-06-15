@@ -15,20 +15,13 @@ export interface AssignmentInitial {
   title: string
   monthLabel: string
   sentences: string
-  classIds: number[]
   openAt: string
   dueAt: string
   maxAttempts: number
   requireEyesClosed: boolean
 }
 
-export function AssignmentForm({
-  classes,
-  initial,
-}: {
-  classes: { id: number; name: string }[]
-  initial?: AssignmentInitial
-}) {
+export function AssignmentForm({ offeringId, initial }: { offeringId?: number; initial?: AssignmentInitial }) {
   const t = useT()
   const editing = Boolean(initial)
   const [state, action, isPending] = useActionState(editing ? updateAssignment : createAssignment, null)
@@ -41,7 +34,7 @@ export function AssignmentForm({
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
-            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : null}
+            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : <input type="hidden" name="offeringId" value={offeringId} />}
             <div className="space-y-1.5">
               <Label htmlFor="title">{t('asg.fTitle')}</Label>
               <Input id="title" name="title" required defaultValue={initial?.title} />
@@ -53,23 +46,6 @@ export function AssignmentForm({
             <div className="space-y-1.5">
               <Label htmlFor="sentences">{t('asg.fSentences')}</Label>
               <Textarea id="sentences" name="sentences" required rows={8} defaultValue={initial?.sentences} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('asg.fClasses')}</Label>
-              <div className="space-y-1 rounded-xl border border-border p-3">
-                {classes.map((c) => (
-                  <label key={c.id} className="flex items-center gap-2.5 py-1 text-sm">
-                    <input
-                      type="checkbox"
-                      name="classIds"
-                      value={c.id}
-                      defaultChecked={initial?.classIds.includes(c.id) ?? false}
-                      className="h-4 w-4 accent-[hsl(var(--primary))]"
-                    />
-                    {c.name}
-                  </label>
-                ))}
-              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -104,9 +80,7 @@ export function AssignmentForm({
           <CardContent className="p-4">
             <form action={deleteAssignment} onSubmit={(e) => { if (!confirm(t('asg.deleteConfirm'))) e.preventDefault() }}>
               <input type="hidden" name="assignmentId" value={initial!.id} />
-              <Button type="submit" variant="destructive" className="w-full">
-                {t('asg.delete')}
-              </Button>
+              <Button type="submit" variant="destructive" className="w-full">{t('asg.delete')}</Button>
             </form>
           </CardContent>
         </Card>
