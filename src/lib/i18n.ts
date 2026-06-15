@@ -108,6 +108,8 @@ const zh: Dict = {
   'asg.due': '截止',
   'asg.view': '查看与评阅',
   'asg.newTitle': '新建背诵作业',
+  'asg.publishTo': '发布到这些班级（可多选）',
+  'asg.publishToHint': '同一门课、同学期你教的其他班，勾上即同时发布',
   'asg.fTitle': '标题',
   'asg.fMonth': '月份（可选）',
   'asg.fSentences': '背诵句子（每行一句）',
@@ -330,6 +332,7 @@ const zh: Dict = {
   'err.needCourse': '请输入课程名称和代码',
   'err.needTerm': '请选择学年和学期',
   'err.offeringNotFound': '授课不存在',
+  'err.needPublishTarget': '请至少选择一个班级发布',
   // filters
   'filter.allClasses': '全部班级',
   'filter.allTerms': '全部学期',
@@ -435,6 +438,8 @@ const en: Dict = {
   'asg.due': 'Due',
   'asg.view': 'View & grade',
   'asg.newTitle': 'New recitation assignment',
+  'asg.publishTo': 'Publish to these classes (multi-select)',
+  'asg.publishToHint': 'Other classes you teach this course to this term — tick to publish at once',
   'asg.fTitle': 'Title',
   'asg.fMonth': 'Month (optional)',
   'asg.fSentences': 'Sentences (one per line)',
@@ -648,6 +653,7 @@ const en: Dict = {
   'err.needCourse': 'Enter course name and code',
   'err.needTerm': 'Choose year and semester',
   'err.offeringNotFound': 'Offering not found',
+  'err.needPublishTarget': 'Select at least one class to publish to',
   // filters
   'filter.allClasses': 'All classes',
   'filter.allTerms': 'All terms',

@@ -36,31 +36,44 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   const user = await requireStaff()
   const { t } = await getT()
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
+  const schoolId = user.schoolId
   const prisma = await getDb()
 
-  const offeringId = Number(formData.get('offeringId'))
-  const offering = await prisma.courseOffering.findFirst({ where: { id: offeringId, schoolId: user.schoolId } })
-  if (!offering) return { error: t('err.offeringNotFound') }
+  // One assignment per selected offering — the teacher may publish to several
+  // classes (offerings) of the same course at once.
+  const offeringIds = [...new Set(formData.getAll('offeringId').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))]
+  if (offeringIds.length === 0) return { error: t('err.needPublishTarget') }
+  const valid = await prisma.courseOffering.findMany({ where: { id: { in: offeringIds }, schoolId }, select: { id: true } })
+  if (valid.length === 0) return { error: t('err.offeringNotFound') }
 
   const f = readFields(formData)
   if (!f.title) return { error: t('err.needTitle') }
   if (f.sentences.length === 0) return { error: t('err.needSentences') }
 
-  await prisma.assignment.create({
-    data: {
-      offeringId,
-      title: f.title,
-      monthLabel: f.monthLabel,
-      instructions: f.instructions,
-      openAt: f.openAt,
-      dueAt: f.dueAt,
-      requireEyesClosed: f.requireEyesClosed,
-      maxAttempts: f.maxAttempts,
-      sentences: { create: f.sentences.map((text, i) => ({ order: i + 1, text })) },
-    },
-  })
-  revalidatePath(`/dashboard/teaching/${offeringId}`)
-  redirect(`/dashboard/teaching/${offeringId}`)
+  const sentences = f.sentences.map((text, i) => ({ order: i + 1, text }))
+  await prisma.$transaction(
+    valid.map((o) =>
+      prisma.assignment.create({
+        data: {
+          offeringId: o.id,
+          title: f.title,
+          monthLabel: f.monthLabel,
+          instructions: f.instructions,
+          openAt: f.openAt,
+          dueAt: f.dueAt,
+          requireEyesClosed: f.requireEyesClosed,
+          maxAttempts: f.maxAttempts,
+          sentences: { create: sentences },
+        },
+      }),
+    ),
+  )
+  revalidatePath('/dashboard/teaching')
+
+  // Return to the offering the teacher started from, if it was among the targets.
+  const primary = Number(formData.get('primaryOfferingId'))
+  const target = valid.some((o) => o.id === primary) ? primary : valid[0].id
+  redirect(`/dashboard/teaching/${target}`)
 }
 
 export async function updateAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
