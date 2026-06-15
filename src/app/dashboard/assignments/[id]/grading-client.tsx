@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl } from '@/actions/grading'
+import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck } from 'lucide-react'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ interface Row {
   studentNo: string
   className: string
   status: string
+  needsReview: boolean
   aiScore: number | null
   finalScore: number | null
   feedback: string
@@ -62,7 +63,14 @@ export function GradingClient(props: {
   const [editing, setEditing] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [reviewOnly, setReviewOnly] = useState(false)
   const [focusIdx, setFocusIdx] = useState<number | null>(null)
+
+  // AI-first triage: rows the AI has handed to the teacher vs. ones it finished.
+  const submitted = useMemo(() => props.rows.filter((r) => r.status !== 'DRAFT'), [props.rows])
+  const reviewQueue = useMemo(() => submitted.filter((r) => r.needsReview), [submitted])
+  const aiAcceptable = useMemo(() => reviewQueue.filter((r) => r.aiScore != null).length, [reviewQueue])
+  const doneCount = submitted.length - reviewQueue.length
 
   const effPerception = advanced ? perceptionModel : preset?.perceptionModel ?? perceptionModel
   const effJudge = advanced ? judgeModel : preset?.judgeModel ?? judgeModel
@@ -75,10 +83,22 @@ export function GradingClient(props: {
     const needle = search.trim().toLowerCase()
     return props.rows.filter(
       (r) =>
+        (!reviewOnly || (r.needsReview && r.status !== 'DRAFT')) &&
         (!statusFilter || r.status === statusFilter) &&
         (!needle || r.studentName.toLowerCase().includes(needle) || r.studentNo.toLowerCase().includes(needle)),
     )
-  }, [props.rows, statusFilter, search])
+  }, [props.rows, statusFilter, search, reviewOnly])
+
+  function acceptAi() {
+    setError(null)
+    startTransition(async () => {
+      const fd = new FormData()
+      fd.set('assignmentId', String(props.assignmentId))
+      const res = await acceptAiForAssignment(null, fd)
+      if (res.error) setError(res.error)
+      else router.refresh()
+    })
+  }
 
   function grade(submissionId: number) {
     setError(null)
@@ -129,6 +149,37 @@ export function GradingClient(props: {
           <Button variant="outline" size="sm"><Pencil className="h-4 w-4" />{t('asg.edit')}</Button>
         </Link>
       </div>
+
+      {submitted.length > 0 ? (
+        <Card className={reviewQueue.length > 0 ? 'border-primary/30 bg-primary/5' : ''}>
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">{t('grade.reviewTitle')}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{t('grade.reviewSummary', { done: doneCount, total: submitted.length })}</div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-3xl font-extrabold leading-none tabular-nums">{reviewQueue.length}</div>
+                <div className="text-[11px] text-muted-foreground">{t('grade.toReview')}</div>
+              </div>
+            </div>
+            {reviewQueue.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant={reviewOnly ? 'default' : 'outline'} onClick={() => setReviewOnly((v) => !v)}>
+                  <ClipboardCheck className="h-3.5 w-3.5" />{t('grade.reviewOnly')}
+                </Button>
+                {aiAcceptable > 0 ? (
+                  <Button size="sm" variant="secondary" disabled={pending} onClick={acceptAi}>
+                    <CheckCheck className="h-3.5 w-3.5" />{t('grade.acceptAll')}（{aiAcceptable}）
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="flex items-center gap-1.5 text-xs text-success"><CheckCheck className="h-4 w-4" />{t('grade.allReviewed')}</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -200,7 +251,7 @@ export function GradingClient(props: {
             <Button
               size="sm"
               onClick={() => {
-                const first = visibleRows.findIndex((r) => r.status === 'UPLOADED' || r.status === 'FLAGGED')
+                const first = visibleRows.findIndex((r) => r.needsReview && r.status !== 'DRAFT')
                 setFocusIdx(first >= 0 ? first : 0)
               }}
             >
@@ -233,6 +284,7 @@ export function GradingClient(props: {
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{r.className}</span>
                       <Badge tone={statusTone(r.status)}>{t('st.' + r.status)}</Badge>
+                      {r.needsReview && r.status !== 'DRAFT' ? <Badge tone="warning">{t('grade.needsReview')}</Badge> : null}
                       {r.violations > 0 ? <span className="text-[hsl(var(--warning))]">⚠️ {r.violations} {t('grade.leftCount')}</span> : null}
                     </div>
                   </div>

@@ -8,7 +8,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
 
-const PENDING: SubmissionStatus[] = ['UPLOADED', 'FLAGGED']
+// Submitted work the teacher still needs to look at — AI either hasn't handled it
+// or wasn't confident enough to auto-approve (needsReview).
+const NEEDS_TEACHER_STATUS: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
 export default async function DashboardPage() {
   const user = await requireStaff()
@@ -40,11 +42,11 @@ export default async function DashboardPage() {
     prisma.user.count({ where: { schoolId, role: 'STUDENT' } }),
     prisma.classGroup.count({ where: { schoolId } }),
     prisma.assignment.count({ where: { offering: offeringWhere } }),
-    prisma.submission.count({ where: { status: { in: PENDING }, assignment: { offering: offeringWhere } } }),
+    prisma.submission.count({ where: { needsReview: true, status: { in: NEEDS_TEACHER_STATUS }, assignment: { offering: offeringWhere } } }),
     prisma.assignment.count({ where: { offering: offeringWhere, dueAt: { gte: todayStart, lt: todayEnd } } }),
     prisma.submission.groupBy({
       by: ['assignmentId'],
-      where: { status: { in: PENDING }, assignment: { offering: offeringWhere } },
+      where: { needsReview: true, status: { in: NEEDS_TEACHER_STATUS }, assignment: { offering: offeringWhere } },
       _count: { _all: true },
     }),
   ])

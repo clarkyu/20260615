@@ -6,6 +6,8 @@ import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, storageConfigured, submissionMediaKey } from '@/lib/storage'
+import { autoGradeById } from '@/lib/domain/grading'
+import { runAfterResponse } from '@/lib/cf'
 
 type MediaKind = 'video' | 'audio' | 'image'
 
@@ -118,8 +120,18 @@ export async function finishSubmission(assignmentId: number) {
 
   await prisma.submission.update({
     where: { id: submission.id },
-    data: { status: hasViolation ? 'FLAGGED' : 'UPLOADED' },
+    data: { status: hasViolation ? 'FLAGGED' : 'UPLOADED', needsReview: true },
   })
+
+  // AI-first: try to grade right away in the background so the teacher only sees
+  // exceptions. Degrades safely — if the model isn't configured, it stays in the
+  // queue exactly as before. The student isn't blocked on the AI.
+  const sid = submission.id
+  await runAfterResponse(async () => {
+    const bg = await getDb()
+    await autoGradeById(bg, sid)
+  })
+
   revalidatePath('/student')
   return { success: true }
 }

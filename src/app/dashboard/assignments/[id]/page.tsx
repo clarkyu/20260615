@@ -41,6 +41,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
     studentNo: s.student.studentNo ?? '',
     className: assignment.offering.class.name,
     status: s.status,
+    needsReview: s.needsReview,
     aiScore: s.aiScore,
     finalScore: s.finalScore,
     feedback: s.feedback ?? '',

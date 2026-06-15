@@ -6,7 +6,7 @@
 // real submission. Degrades gracefully when no model key is configured.
 
 import { gradeSubmission, type GradeResult } from '@/lib/ai/grade'
-import { DEFAULT_MAX_SCORE } from './grading'
+import { DEFAULT_MAX_SCORE, isUnavailable } from './grading'
 
 export interface PracticeGradeInput {
   perceptionModel: string
@@ -22,12 +22,6 @@ export type PracticeOutcome =
   // No model API key configured yet — caller shows a friendly placeholder.
   | { status: 'unavailable' }
   | { status: 'error'; message: string }
-
-// True when the failure is "the model isn't wired up" rather than a real fault, so
-// the UI can show "AI 点评准备中" instead of a scary error.
-export function isUnavailable(message: string): boolean {
-  return /未配置|not configured|api[_\s-]?key|未实现|provider/i.test(message)
-}
 
 export async function gradePractice(input: PracticeGradeInput): Promise<PracticeOutcome> {
   try {
