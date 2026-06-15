@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, X, Sparkles } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionVideoUrl } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ export interface FocusRow {
   finalScore: number | null
   feedback: string
   hasVideo: boolean
+  hasAudio: boolean
   recitedText: string
   violations: number
 }
@@ -48,23 +49,24 @@ export function GradeFocus({
   const cur = rows[index]
   const curId = cur?.id
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [score, setScore] = useState('')
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Seed the editable fields and load the video whenever the focused row changes.
+  // Seed the editable fields and load the media whenever the focused row changes.
   // (Intentionally keyed on the id only, so a background refresh doesn't wipe edits.)
   useEffect(() => {
     if (!cur) return
     setScore(cur.finalScore != null ? String(cur.finalScore) : cur.aiScore != null ? String(cur.aiScore) : '')
     setFeedback(cur.feedback)
     setVideoUrl(null)
+    setAudioUrl(null)
     setError(null)
     let active = true
-    if (cur.hasVideo) {
-      getSubmissionVideoUrl(cur.id).then((r) => { if (active && r.url) setVideoUrl(r.url) })
-    }
+    if (cur.hasVideo) getSubmissionMediaUrl(cur.id, 'video').then((r) => { if (active && r.url) setVideoUrl(r.url) })
+    if (cur.hasAudio) getSubmissionMediaUrl(cur.id, 'audio').then((r) => { if (active && r.url) setAudioUrl(r.url) })
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId])
@@ -117,13 +119,19 @@ export function GradeFocus({
           {cur.finalScore != null ? <div className="text-3xl font-extrabold leading-none">{cur.finalScore}</div> : null}
         </div>
 
-        {videoUrl ? (
-          <video src={videoUrl} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
-        ) : cur.hasVideo ? (
-          <div className="grid aspect-[3/4] w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
-        ) : (
+        {cur.hasVideo ? (
+          videoUrl ? (
+            <video src={videoUrl} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
+          ) : (
+            <div className="grid aspect-[3/4] w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+          )
+        ) : null}
+        {cur.hasAudio ? (
+          audioUrl ? <audio src={audioUrl} controls className="w-full" /> : <div className="grid h-16 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+        ) : null}
+        {!cur.hasVideo && !cur.hasAudio ? (
           <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('grade.noSub')}</div>
-        )}
+        ) : null}
 
         {cur.recitedText ? (
           <details className="text-xs">

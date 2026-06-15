@@ -45,8 +45,8 @@ export async function presignDownload(key: string, expiresIn = 3600): Promise<st
   return presign(key, 'GET', expiresIn)
 }
 
-export function submissionVideoKey(assignmentId: number, studentId: number, attempt: number, ext: string): string {
-  return `submissions/${assignmentId}/${studentId}/attempt-${attempt}.${ext}`
+export function submissionMediaKey(assignmentId: number, studentId: number, attempt: number, kind: 'video' | 'audio', ext: string): string {
+  return `submissions/${assignmentId}/${studentId}/attempt-${attempt}-${kind}.${ext}`
 }
 
 export function referenceAudioKey(assignmentId: number, name: string): string {

@@ -84,16 +84,17 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   return { success: true }
 }
 
-// Presigned playback URL so the teacher can watch before overriding.
-export async function getSubmissionVideoUrl(submissionId: number): Promise<{ url?: string; error?: string }> {
+// Presigned playback URL (video or audio) so the teacher can review before grading.
+export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' | 'audio' = 'video'): Promise<{ url?: string; error?: string }> {
   const user = await requireStaff()
   const { t } = await getT()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const prisma = await getDb()
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
-  if (!submission?.videoKey) return { error: t('err.noVideo') }
+  const key = kind === 'audio' ? submission?.audioKey : submission?.videoKey
+  if (!key) return { error: t('err.noVideo') }
   try {
-    return { url: await presignDownload(submission.videoKey) }
+    return { url: await presignDownload(key) }
   } catch {
     return { error: t('err.videoUrlFail') }
   }

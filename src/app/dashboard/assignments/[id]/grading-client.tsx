@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionVideoUrl } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,7 @@ interface Row {
   finalScore: number | null
   feedback: string
   hasVideo: boolean
+  hasAudio: boolean
   recitedText: string
   violations: number
 }
@@ -93,9 +94,9 @@ export function GradingClient(props: {
     })
   }
 
-  async function watch(submissionId: number) {
+  async function watch(submissionId: number, kind: 'video' | 'audio') {
     setError(null)
-    const res = await getSubmissionVideoUrl(submissionId)
+    const res = await getSubmissionMediaUrl(submissionId, kind)
     if (res.error) setError(res.error)
     else if (res.url) window.open(res.url, '_blank')
   }
@@ -248,7 +249,8 @@ export function GradingClient(props: {
                   <Button size="sm" disabled={pending && busyId === r.id} onClick={() => grade(r.id)}>
                     <Sparkles className="h-3.5 w-3.5" />{busyId === r.id && pending ? t('grade.running') : t('grade.run')}
                   </Button>
-                  {r.hasVideo ? <Button size="sm" variant="outline" onClick={() => watch(r.id)}><Play className="h-3.5 w-3.5" />{t('grade.watch')}</Button> : null}
+                  {r.hasVideo ? <Button size="sm" variant="outline" onClick={() => watch(r.id, 'video')}><Play className="h-3.5 w-3.5" />{t('grade.watch')}</Button> : null}
+                  {r.hasAudio ? <Button size="sm" variant="outline" onClick={() => watch(r.id, 'audio')}><Play className="h-3.5 w-3.5" />{t('grade.listen')}</Button> : null}
                   <Button size="sm" variant="ghost" onClick={() => setEditing(editing === r.id ? null : r.id)}>{t('grade.override')}</Button>
                 </div>
                 {editing === r.id ? <OverrideForm row={r} disabled={pending} t={t} onSave={(s, fb) => saveOverride(r.id, s, fb)} /> : null}
