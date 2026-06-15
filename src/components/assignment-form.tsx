@@ -23,7 +23,7 @@ export interface AssignmentInitial {
 
 export interface PublishTarget {
   offeringId: number
-  className: string
+  label: string
 }
 
 export function AssignmentForm({
@@ -39,6 +39,8 @@ export function AssignmentForm({
   const editing = Boolean(initial)
   const [state, action, isPending] = useActionState(editing ? updateAssignment : createAssignment, null)
   const multi = !editing && (targets?.length ?? 0) > 1
+  // When not multi, publish to the pre-selected offering, or the only candidate.
+  const singleOfferingId = offeringId ?? targets?.[0]?.offeringId
 
   return (
     <div className="space-y-4">
@@ -48,14 +50,14 @@ export function AssignmentForm({
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
-            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : <input type="hidden" name="primaryOfferingId" value={offeringId} />}
-            {!editing && !multi ? <input type="hidden" name="offeringId" value={offeringId} /> : null}
+            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : <input type="hidden" name="primaryOfferingId" value={singleOfferingId ?? ''} />}
+            {!editing && !multi ? <input type="hidden" name="offeringId" value={singleOfferingId ?? ''} /> : null}
 
             {multi ? (
               <div className="space-y-1.5">
                 <Label>{t('asg.publishTo')}</Label>
                 <p className="text-xs text-muted-foreground">{t('asg.publishToHint')}</p>
-                <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto">
+                <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto">
                   {targets!.map((tg) => (
                     <label
                       key={tg.offeringId}
@@ -68,7 +70,7 @@ export function AssignmentForm({
                         defaultChecked={tg.offeringId === offeringId}
                         className="h-4 w-4 shrink-0 accent-primary"
                       />
-                      <span className="truncate">{tg.className}</span>
+                      <span className="truncate">{tg.label}</span>
                     </label>
                   ))}
                 </div>

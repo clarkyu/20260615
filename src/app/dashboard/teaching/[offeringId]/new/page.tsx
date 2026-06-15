@@ -28,8 +28,8 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
     include: { class: { select: { name: true } } },
   })
   const targets = siblings
-    .map((o) => ({ offeringId: o.id, className: o.class.name }))
-    .sort((a, b) => a.className.localeCompare(b.className))
+    .map((o) => ({ offeringId: o.id, label: o.class.name }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 
   return (
     <div className="py-2">

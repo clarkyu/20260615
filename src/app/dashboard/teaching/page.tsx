@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Plus, GraduationCap } from 'lucide-react'
+import { Plus, GraduationCap, ClipboardPen } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -22,11 +22,16 @@ export default async function TeachingPage() {
 
   return (
     <div className="space-y-4 py-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight">{t('teach.title')}</h1>
-        <Link href="/dashboard/teaching/new">
-          <Button size="sm"><Plus className="h-4 w-4" />{t('teach.new')}</Button>
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link href="/dashboard/teaching/new">
+            <Button size="sm" variant="outline"><Plus className="h-4 w-4" />{t('teach.new')}</Button>
+          </Link>
+          <Link href="/dashboard/teaching/new-assignment">
+            <Button size="sm"><ClipboardPen className="h-4 w-4" />{t('teach.newAssignment')}</Button>
+          </Link>
+        </div>
       </div>
 
       {offerings.length === 0 ? (
