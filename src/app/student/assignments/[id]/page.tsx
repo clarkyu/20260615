@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { SubmissionFlow } from './submission-flow'
+import { PracticePanel } from './practice-panel'
 
 export default async function StudentAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -35,6 +36,8 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   const now = new Date()
   const notOpen = assignment.openAt ? now < assignment.openAt : false
   const closed = assignment.dueAt ? now > assignment.dueAt : false
+  const sentences = assignment.sentences.map((s) => ({ order: s.order, text: s.text }))
+  const windowOpen = !notOpen && !closed
 
   return (
     <SubmissionFlow
@@ -42,7 +45,8 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
       title={assignment.title}
       category={assignment.category}
       instructions={assignment.instructions}
-      sentences={assignment.sentences.map((s) => ({ order: s.order, text: s.text }))}
+      practice={windowOpen && sentences.length > 0 ? <PracticePanel assignmentId={assignment.id} sentences={sentences} /> : null}
+      sentences={sentences}
       requireEyesClosed={assignment.requireEyesClosed}
       requireText={assignment.requireText}
       requireVideo={assignment.requireVideo}
