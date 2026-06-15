@@ -20,6 +20,7 @@ export interface FocusRow {
   feedback: string
   hasVideo: boolean
   hasAudio: boolean
+  hasImage: boolean
   recitedText: string
   violations: number
 }
@@ -50,6 +51,7 @@ export function GradeFocus({
   const curId = cur?.id
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [score, setScore] = useState('')
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,10 +65,12 @@ export function GradeFocus({
     setFeedback(cur.feedback)
     setVideoUrl(null)
     setAudioUrl(null)
+    setImageUrl(null)
     setError(null)
     let active = true
     if (cur.hasVideo) getSubmissionMediaUrl(cur.id, 'video').then((r) => { if (active && r.url) setVideoUrl(r.url) })
     if (cur.hasAudio) getSubmissionMediaUrl(cur.id, 'audio').then((r) => { if (active && r.url) setAudioUrl(r.url) })
+    if (cur.hasImage) getSubmissionMediaUrl(cur.id, 'image').then((r) => { if (active && r.url) setImageUrl(r.url) })
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId])
@@ -129,7 +133,13 @@ export function GradeFocus({
         {cur.hasAudio ? (
           audioUrl ? <audio src={audioUrl} controls className="w-full" /> : <div className="grid h-16 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
         ) : null}
-        {!cur.hasVideo && !cur.hasAudio ? (
+        {cur.hasImage ? (
+          imageUrl
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={imageUrl} alt="" className="w-full rounded-2xl bg-secondary object-contain" />
+            : <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+        ) : null}
+        {!cur.hasVideo && !cur.hasAudio && !cur.hasImage ? (
           <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('grade.noSub')}</div>
         ) : null}
 

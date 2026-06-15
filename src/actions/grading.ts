@@ -85,13 +85,13 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
 }
 
 // Presigned playback URL (video or audio) so the teacher can review before grading.
-export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' | 'audio' = 'video'): Promise<{ url?: string; error?: string }> {
+export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' | 'audio' | 'image' = 'video'): Promise<{ url?: string; error?: string }> {
   const user = await requireStaff()
   const { t } = await getT()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const prisma = await getDb()
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
-  const key = kind === 'audio' ? submission?.audioKey : submission?.videoKey
+  const key = kind === 'audio' ? submission?.audioKey : kind === 'image' ? submission?.imageKey : submission?.videoKey
   if (!key) return { error: t('err.noVideo') }
   try {
     return { url: await presignDownload(key) }

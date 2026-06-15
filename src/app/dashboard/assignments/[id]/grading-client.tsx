@@ -26,6 +26,7 @@ interface Row {
   feedback: string
   hasVideo: boolean
   hasAudio: boolean
+  hasImage: boolean
   recitedText: string
   violations: number
 }
@@ -94,7 +95,7 @@ export function GradingClient(props: {
     })
   }
 
-  async function watch(submissionId: number, kind: 'video' | 'audio') {
+  async function watch(submissionId: number, kind: 'video' | 'audio' | 'image') {
     setError(null)
     const res = await getSubmissionMediaUrl(submissionId, kind)
     if (res.error) setError(res.error)
@@ -251,6 +252,7 @@ export function GradingClient(props: {
                   </Button>
                   {r.hasVideo ? <Button size="sm" variant="outline" onClick={() => watch(r.id, 'video')}><Play className="h-3.5 w-3.5" />{t('grade.watch')}</Button> : null}
                   {r.hasAudio ? <Button size="sm" variant="outline" onClick={() => watch(r.id, 'audio')}><Play className="h-3.5 w-3.5" />{t('grade.listen')}</Button> : null}
+                  {r.hasImage ? <Button size="sm" variant="outline" onClick={() => watch(r.id, 'image')}><Play className="h-3.5 w-3.5" />{t('grade.viewImage')}</Button> : null}
                   <Button size="sm" variant="ghost" onClick={() => setEditing(editing === r.id ? null : r.id)}>{t('grade.override')}</Button>
                 </div>
                 {editing === r.id ? <OverrideForm row={r} disabled={pending} t={t} onSave={(s, fb) => saveOverride(r.id, s, fb)} /> : null}

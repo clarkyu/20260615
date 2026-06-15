@@ -7,7 +7,13 @@ import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, storageConfigured, submissionMediaKey } from '@/lib/storage'
 
-type MediaKind = 'video' | 'audio'
+type MediaKind = 'video' | 'audio' | 'image'
+
+function keyFieldFor(kind: MediaKind, key: string) {
+  if (kind === 'audio') return { audioKey: key }
+  if (kind === 'image') return { imageKey: key }
+  return { videoKey: key }
+}
 
 // Confirms the student may submit (class targeted & window open); returns the
 // active attempt number, or an i18n error key.
@@ -45,7 +51,7 @@ export async function getUploadUrl(assignmentId: number, kind: MediaKind, conten
   if ('error' in resolved) return { error: t(resolved.error) }
 
   const key = submissionMediaKey(assignmentId, user.userId, resolved.attempt, kind, ext || 'webm')
-  const keyField = kind === 'audio' ? { audioKey: key } : { videoKey: key }
+  const keyField = keyFieldFor(kind, key)
   const submission = await prisma.submission.upsert({
     where: { assignmentId_studentId_attempt: { assignmentId, studentId: user.userId, attempt: resolved.attempt } },
     update: { ...keyField, status: 'DRAFT' },
@@ -99,6 +105,7 @@ export async function finishSubmission(assignmentId: number) {
   if (assignment.requireText && !submission.recitedText) return { error: t('err.needRecite') }
   if (assignment.requireVideo && !submission.videoKey) return { error: t('err.noVideoYet') }
   if (assignment.requireAudio && !submission.audioKey) return { error: t('err.noAudioYet') }
+  if (assignment.requireHandwriting && !submission.imageKey) return { error: t('err.noImageYet') }
 
   const hasViolation = (() => {
     try {
