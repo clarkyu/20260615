@@ -59,6 +59,8 @@ export interface JudgeInput {
   referenceSentences: ReferenceSentence[]
   rubric: string
   maxScore: number
+  // Step 1: the text the student wrote from memory (optional).
+  recitedText?: string
 }
 
 export interface JudgeResult {

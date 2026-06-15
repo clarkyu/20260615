@@ -83,3 +83,31 @@ export async function finalizeSubmission(
   revalidatePath('/student')
   return { success: true }
 }
+
+// Step 1: the student submits the text they recited from memory. Stored on the
+// current attempt's submission (created if needed); the video is step 2.
+export async function submitRecitedText(assignmentId: number, text: string) {
+  const user = await requireRole('STUDENT')
+  const prisma = await getDb()
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return { error: '请先默写背诵内容' }
+  if (trimmed.length > 20000) return { error: '文本过长' }
+
+  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  if ('error' in resolved) return { error: resolved.error }
+
+  await prisma.submission.upsert({
+    where: { assignmentId_studentId_attempt: { assignmentId, studentId: user.userId, attempt: resolved.attempt } },
+    update: { recitedText: trimmed, textSubmittedAt: new Date() },
+    create: {
+      assignmentId,
+      studentId: user.userId,
+      attempt: resolved.attempt,
+      recitedText: trimmed,
+      textSubmittedAt: new Date(),
+      status: 'DRAFT',
+    },
+  })
+  revalidatePath('/student')
+  return { success: true }
+}

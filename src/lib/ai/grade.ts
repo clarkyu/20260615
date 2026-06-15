@@ -11,6 +11,7 @@ export interface GradeRequest {
   requireEyesClosed: boolean
   videoUrl?: string
   audioUrl?: string
+  recitedText?: string
 }
 
 export interface GradeResult {
@@ -56,6 +57,7 @@ export async function gradeSubmission(req: GradeRequest): Promise<GradeResult> {
       referenceSentences: req.referenceSentences,
       rubric: req.rubric,
       maxScore: req.maxScore,
+      recitedText: req.recitedText,
     },
     judgeModel.id,
   )

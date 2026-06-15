@@ -54,6 +54,7 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
       referenceSentences: submission.assignment.sentences.map((s) => ({ order: s.order, text: s.text })),
       requireEyesClosed: submission.assignment.requireEyesClosed,
       videoUrl,
+      recitedText: submission.recitedText ?? undefined,
     })
 
     await prisma.submission.update({

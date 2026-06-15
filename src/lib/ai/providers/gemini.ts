@@ -128,10 +128,13 @@ export function buildJudgePrompt(input: JudgeInput): string {
     '参考句子：',
     referenceBlock(input.referenceSentences),
     '',
-    '感知结果（转写/逐句/发音/作弊观察）：',
+    ...(input.recitedText
+      ? ['第一步·学生默写的文本（书面背诵）：', input.recitedText, '']
+      : []),
+    '第二步·视频感知结果（转写/逐句/发音/作弊观察）：',
     JSON.stringify(input.perception, null, 2),
     '',
-    '评分标准：',
+    '请综合书面默写与口头背诵两步给分。评分标准：',
     input.rubric,
   ].join('\n')
 }

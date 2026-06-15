@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { Recorder } from './recorder'
+import { SubmissionFlow } from './submission-flow'
 
 export default async function StudentAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -37,16 +37,18 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   const closed = assignment.dueAt ? now > assignment.dueAt : false
 
   return (
-    <Recorder
+    <SubmissionFlow
       assignmentId={assignment.id}
       title={assignment.title}
       sentences={assignment.sentences.map((s) => ({ order: s.order, text: s.text }))}
       requireEyesClosed={assignment.requireEyesClosed}
       attemptsLeft={Math.max(0, assignment.maxAttempts - usedAttempts)}
+      windowState={notOpen ? 'not-open' : closed ? 'closed' : 'open'}
+      initialHasText={Boolean(latest?.recitedText)}
+      initialRecitedText={latest?.recitedText ?? ''}
       latestStatus={latest?.status ?? null}
       latestScore={latest?.finalScore ?? null}
       latestFeedback={latest?.feedback ?? null}
-      windowState={notOpen ? 'not-open' : closed ? 'closed' : 'open'}
     />
   )
 }

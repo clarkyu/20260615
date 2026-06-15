@@ -19,6 +19,7 @@ interface Row {
   finalScore: number | null
   feedback: string
   hasVideo: boolean
+  recitedText: string
   violations: number
 }
 interface ModelOpt {
@@ -223,6 +224,12 @@ export function GradingClient(props: {
                   </div>
                 </div>
                 {r.feedback ? <p className="mt-1 text-xs text-muted-foreground">{r.feedback}</p> : null}
+                {r.recitedText ? (
+                  <details className="mt-1 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">第一步 · 默写文本</summary>
+                    <pre className="mt-1 whitespace-pre-wrap rounded bg-secondary p-2 font-sans">{r.recitedText}</pre>
+                  </details>
+                ) : null}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button size="sm" disabled={pending && busyId === r.id} onClick={() => grade(r.id)}>
                     {busyId === r.id && pending ? '评阅中…' : 'AI 评阅'}

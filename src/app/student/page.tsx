@@ -45,13 +45,16 @@ export default async function StudentHome() {
         assignments.map((a) => {
           const sub = a.submissions[0]
           const status = sub?.status ?? 'DRAFT'
+          const partialText = Boolean(sub?.recitedText) && status === 'DRAFT'
+          const statusLabel = partialText ? '第一步已交 · 待录视频' : STATUS_LABEL[status]
+          const buttonText = status !== 'DRAFT' ? '查看 / 重录' : partialText ? '继续：录视频' : '开始作业'
           return (
             <Card key={a.id}>
               <CardHeader>
                 <CardTitle className="text-lg">{a.title}</CardTitle>
                 <CardDescription>
                   {a._count.sentences} 句{a.dueAt ? ` · 截止 ${a.dueAt.toISOString().slice(0, 10)}` : ''} ·{' '}
-                  {STATUS_LABEL[status]}
+                  {statusLabel}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -63,7 +66,7 @@ export default async function StudentHome() {
                 ) : null}
                 <Link href={`/student/assignments/${a.id}`}>
                   <Button className="w-full" variant={status === 'DRAFT' ? 'default' : 'outline'}>
-                    {status === 'DRAFT' ? '去背诵并录制' : '查看 / 重录'}
+                    {buttonText}
                   </Button>
                 </Link>
               </CardContent>

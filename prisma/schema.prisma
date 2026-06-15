@@ -144,6 +144,10 @@ model Submission {
   attempt      Int              @default(1)
   status       SubmissionStatus @default(DRAFT)
 
+  // Step 1: the text the student recited from memory.
+  recitedText String?
+  textSubmittedAt DateTime?
+
   // Object-storage keys (Cloudflare R2).
   videoKey   String?
   audioKey   String?
