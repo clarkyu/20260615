@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useMemo, useState } from 'react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -42,6 +42,31 @@ export function AssignmentForm({
   // When not multi, publish to the pre-selected offering, or the only candidate.
   const singleOfferingId = offeringId ?? targets?.[0]?.offeringId
 
+  // Controlled multi-select so "select all" works.
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(offeringId != null ? [offeringId] : []))
+  const allSelected = (targets?.length ?? 0) > 0 && selected.size === targets!.length
+  const toggleOne = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  // Month dropdown: previous month through next 11, plus the existing value.
+  const months = useMemo(() => {
+    const out: string[] = []
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1)
+    for (let i = 0; i < 13; i++) {
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+      d.setMonth(d.getMonth() + 1)
+    }
+    return out
+  }, [])
+  const monthOptions = initial?.monthLabel && !months.includes(initial.monthLabel) ? [initial.monthLabel, ...months] : months
+  const now = new Date()
+  const defaultMonth = initial?.monthLabel ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
   return (
     <div className="space-y-4">
       <Card>
@@ -55,7 +80,16 @@ export function AssignmentForm({
 
             {multi ? (
               <div className="space-y-1.5">
-                <Label>{t('asg.publishTo')}</Label>
+                <div className="flex items-center justify-between">
+                  <Label>{t('asg.publishTo')}</Label>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(allSelected ? new Set() : new Set(targets!.map((tg) => tg.offeringId)))}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    {allSelected ? t('asg.deselectAll') : t('asg.selectAll')}
+                  </button>
+                </div>
                 <p className="text-xs text-muted-foreground">{t('asg.publishToHint')}</p>
                 <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto">
                   {targets!.map((tg) => (
@@ -67,7 +101,8 @@ export function AssignmentForm({
                         type="checkbox"
                         name="offeringId"
                         value={tg.offeringId}
-                        defaultChecked={tg.offeringId === offeringId}
+                        checked={selected.has(tg.offeringId)}
+                        onChange={() => toggleOne(tg.offeringId)}
                         className="h-4 w-4 shrink-0 accent-primary"
                       />
                       <span className="truncate">{tg.label}</span>
@@ -83,11 +118,17 @@ export function AssignmentForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>
-              <Input id="monthLabel" name="monthLabel" placeholder="2026-05" defaultValue={initial?.monthLabel} />
+              <select id="monthLabel" name="monthLabel" defaultValue={defaultMonth} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
+                <option value="">{t('asg.monthNone')}</option>
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sentences">{t('asg.fSentences')}</Label>
-              <Textarea id="sentences" name="sentences" required rows={8} defaultValue={initial?.sentences} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
+              <p className="text-xs text-muted-foreground">{t('asg.fSentencesHint')}</p>
+              <Textarea id="sentences" name="sentences" rows={6} defaultValue={initial?.sentences} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

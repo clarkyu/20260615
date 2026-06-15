@@ -48,7 +48,6 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
 
   const f = readFields(formData)
   if (!f.title) return { error: t('err.needTitle') }
-  if (f.sentences.length === 0) return { error: t('err.needSentences') }
 
   const sentences = f.sentences.map((text, i) => ({ order: i + 1, text }))
   // One standalone create per offering. Don't wrap in $transaction: D1 has no
@@ -89,7 +88,6 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
 
   const f = readFields(formData)
   if (!f.title) return { error: t('err.needTitle') }
-  if (f.sentences.length === 0) return { error: t('err.needSentences') }
 
   await prisma.$transaction([
     prisma.sentence.deleteMany({ where: { assignmentId } }),
