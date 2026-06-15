@@ -21,10 +21,24 @@ export interface AssignmentInitial {
   requireEyesClosed: boolean
 }
 
-export function AssignmentForm({ offeringId, initial }: { offeringId?: number; initial?: AssignmentInitial }) {
+export interface PublishTarget {
+  offeringId: number
+  className: string
+}
+
+export function AssignmentForm({
+  offeringId,
+  targets,
+  initial,
+}: {
+  offeringId?: number
+  targets?: PublishTarget[]
+  initial?: AssignmentInitial
+}) {
   const t = useT()
   const editing = Boolean(initial)
   const [state, action, isPending] = useActionState(editing ? updateAssignment : createAssignment, null)
+  const multi = !editing && (targets?.length ?? 0) > 1
 
   return (
     <div className="space-y-4">
@@ -34,7 +48,33 @@ export function AssignmentForm({ offeringId, initial }: { offeringId?: number; i
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
-            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : <input type="hidden" name="offeringId" value={offeringId} />}
+            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : <input type="hidden" name="primaryOfferingId" value={offeringId} />}
+            {!editing && !multi ? <input type="hidden" name="offeringId" value={offeringId} /> : null}
+
+            {multi ? (
+              <div className="space-y-1.5">
+                <Label>{t('asg.publishTo')}</Label>
+                <p className="text-xs text-muted-foreground">{t('asg.publishToHint')}</p>
+                <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto">
+                  {targets!.map((tg) => (
+                    <label
+                      key={tg.offeringId}
+                      className="tap flex cursor-pointer items-center gap-2 rounded-xl border border-input bg-background px-3 py-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent has-[:checked]:text-accent-foreground"
+                    >
+                      <input
+                        type="checkbox"
+                        name="offeringId"
+                        value={tg.offeringId}
+                        defaultChecked={tg.offeringId === offeringId}
+                        className="h-4 w-4 shrink-0 accent-primary"
+                      />
+                      <span className="truncate">{tg.className}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="space-y-1.5">
               <Label htmlFor="title">{t('asg.fTitle')}</Label>
               <Input id="title" name="title" required defaultValue={initial?.title} />
