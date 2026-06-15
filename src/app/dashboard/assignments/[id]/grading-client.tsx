@@ -56,6 +56,8 @@ export function GradingClient(props: {
   const [judgeModel, setJudgeModel] = useState(preset?.judgeModel ?? props.judgeModels[0]?.id ?? '')
   const [rubric, setRubric] = useState(props.defaultRubric)
   const [editing, setEditing] = useState<number | null>(null)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [search, setSearch] = useState('')
 
   const effPerception = advanced ? perceptionModel : preset?.perceptionModel ?? perceptionModel
   const effJudge = advanced ? judgeModel : preset?.judgeModel ?? judgeModel
@@ -63,6 +65,15 @@ export function GradingClient(props: {
     () => props.rows.filter((r) => r.status === 'UPLOADED' || r.status === 'FLAGGED').length,
     [props.rows],
   )
+  const statuses = useMemo(() => [...new Set(props.rows.map((r) => r.status))], [props.rows])
+  const visibleRows = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return props.rows.filter(
+      (r) =>
+        (!statusFilter || r.status === statusFilter) &&
+        (!needle || r.studentName.toLowerCase().includes(needle) || r.studentNo.toLowerCase().includes(needle)),
+    )
+  }, [props.rows, statusFilter, search])
 
   function grade(submissionId: number) {
     setError(null)
@@ -184,7 +195,20 @@ export function GradingClient(props: {
           {props.rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('grade.noSub')}</p>
           ) : (
-            props.rows.map((r) => (
+            <>
+            <div className="grid grid-cols-2 gap-2">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={SELECT} aria-label={t('grade.subTitle')}>
+                <option value="">{t('filter.allStatus')}</option>
+                {statuses.map((s) => (
+                  <option key={s} value={s}>{t('st.' + s)}</option>
+                ))}
+              </select>
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.searchStudent')} className="h-11" />
+            </div>
+            {visibleRows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">{t('filter.none')}</p>
+            ) : null}
+            {visibleRows.map((r) => (
               <div key={r.id} className="rounded-xl border border-border/70 p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -216,7 +240,8 @@ export function GradingClient(props: {
                 </div>
                 {editing === r.id ? <OverrideForm row={r} disabled={pending} t={t} onSave={(s, fb) => saveOverride(r.id, s, fb)} /> : null}
               </div>
-            ))
+            ))}
+            </>
           )}
         </CardContent>
       </Card>

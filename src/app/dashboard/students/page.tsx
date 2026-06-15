@@ -1,11 +1,10 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ImportClient } from './import-client'
+import { ClassList } from './class-list'
 
 export default async function StudentsPage() {
   const user = await requireStaff()
@@ -33,23 +32,13 @@ export default async function StudentsPage() {
         <CardHeader>
           <CardTitle className="text-base">{t('stu.classes')}（{classes.length}）</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-0 text-sm">
+        <CardContent>
           {classes.length === 0 ? (
-            <p className="text-muted-foreground">{t('stu.noClasses')}</p>
+            <p className="text-sm text-muted-foreground">{t('stu.noClasses')}</p>
           ) : (
-            classes.map((c) => (
-              <Link
-                key={c.id}
-                href={`/dashboard/students/${c.id}`}
-                className="-mx-2 flex items-center justify-between gap-2 rounded-lg border-b border-border/60 px-2 py-2.5 last:border-0 hover:bg-secondary/60"
-              >
-                <span className="font-medium">{c.name}{c.major ? ` · ${c.major}` : ''}</span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  {c._count.members} {t('stu.people')}
-                  <ChevronRight className="h-4 w-4" />
-                </span>
-              </Link>
-            ))
+            <ClassList
+              classes={classes.map((c) => ({ id: c.id, name: c.name, major: c.major, count: c._count.members }))}
+            />
           )}
         </CardContent>
       </Card>

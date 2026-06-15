@@ -330,6 +330,15 @@ const zh: Dict = {
   'err.needCourse': '请输入课程名称和代码',
   'err.needTerm': '请选择学年和学期',
   'err.offeringNotFound': '授课不存在',
+  // filters
+  'filter.allClasses': '全部班级',
+  'filter.allTerms': '全部学期',
+  'filter.allStatus': '全部状态',
+  'filter.searchClass': '搜索班级…',
+  'filter.searchStudent': '搜索姓名或学号…',
+  'filter.none': '没有匹配的结果',
+  'filter.selected': '已选 {n} 个班',
+  'filter.clear': '清空',
 }
 
 const en: Dict = {
@@ -639,6 +648,15 @@ const en: Dict = {
   'err.needCourse': 'Enter course name and code',
   'err.needTerm': 'Choose year and semester',
   'err.offeringNotFound': 'Offering not found',
+  // filters
+  'filter.allClasses': 'All classes',
+  'filter.allTerms': 'All terms',
+  'filter.allStatus': 'All statuses',
+  'filter.searchClass': 'Search classes…',
+  'filter.searchStudent': 'Search name or ID…',
+  'filter.none': 'No matching results',
+  'filter.selected': '{n} classes selected',
+  'filter.clear': 'Clear',
 }
 
 export const dictionaries: Record<Locale, Dict> = { zh, en }
