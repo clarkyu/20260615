@@ -49,6 +49,12 @@ export function submissionMediaKey(assignmentId: number, studentId: number, atte
   return `submissions/${assignmentId}/${studentId}/attempt-${attempt}-${kind}.${ext}`
 }
 
+// Practice recordings live under their own prefix and are timestamped, since a
+// student may practice many times before a formal submission.
+export function practiceMediaKey(assignmentId: number, studentId: number, kind: 'audio' | 'video', ext: string): string {
+  return `practice/${assignmentId}/${studentId}/${Date.now()}-${kind}.${ext}`
+}
+
 export function referenceAudioKey(assignmentId: number, name: string): string {
   const safe = name.replace(/[^a-zA-Z0-9._-]/g, '_')
   return `reference/${assignmentId}/${Date.now()}-${safe}`

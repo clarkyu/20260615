@@ -84,6 +84,11 @@ export const PRESETS: Preset[] = [
   { id: 'gemini-claude', label: 'Gemini 感知 + Claude 评分', perceptionModel: 'gemini-2.5-flash', judgeModel: 'claude-opus-4-8' },
 ]
 
+// Sensible default pairing when an assignment hasn't pinned its own models —
+// Gemini Flash natively handles audio/video and can both perceive and judge.
+export const DEFAULT_PERCEPTION_MODEL = 'gemini-2.5-flash'
+export const DEFAULT_JUDGE_MODEL = 'gemini-2.5-flash'
+
 export function getModel(id: string): ModelDescriptor | undefined {
   return MODELS.find((m) => m.id === id)
 }

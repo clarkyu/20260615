@@ -107,6 +107,7 @@ model User {
   class       ClassGroup?  @relation(fields: [classId], references: [id], onDelete: SetNull)
   department  Department?  @relation("UserDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
   submissions Submission[]
+  practiceAttempts  PracticeAttempt[]
   taughtOfferings   CourseOffering[] @relation("OfferingTeacher")
   gradedSubmissions Submission[]     @relation("SubmissionGradedBy")
 
@@ -181,8 +182,31 @@ model Assignment {
   offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
   sentences   Sentence[]
   submissions Submission[]
+  practiceAttempts PracticeAttempt[]
 
   @@index([offeringId])
+}
+
+// 练习记录：学生正式提交前的"练一练"，AI即时点评，不计入提交次数。
+// 既驱动学生的学练闭环，也为后续学情分析积累每一次练习的数据。
+model PracticeAttempt {
+  id           Int      @id @default(autoincrement())
+  assignmentId Int
+  studentId    Int
+  kind         String   // 'audio'（朗读）| 'text'（默写）
+  mediaKey     String?
+  recitedText  String?
+  aiScore      Float?
+  confidence   Float?
+  feedback     String?
+  feedbackJson String?  // 结构化 GradeResult（逐句/分维度/转写）
+  createdAt    DateTime @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId, studentId])
+  @@index([studentId])
 }
 
 model Sentence {
