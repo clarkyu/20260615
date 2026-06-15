@@ -14,11 +14,15 @@ export interface AssignmentInitial {
   id: number
   title: string
   monthLabel: string
+  instructions: string
   sentences: string
   openAt: string
   dueAt: string
   maxAttempts: number
   requireEyesClosed: boolean
+  requireText: boolean
+  requireAudio: boolean
+  requireVideo: boolean
 }
 
 export interface PublishTarget {
@@ -126,9 +130,34 @@ export function AssignmentForm({
               </select>
             </div>
             <div className="space-y-1.5">
+              <Label htmlFor="instructions">{t('asg.fInstructions')}</Label>
+              <Textarea id="instructions" name="instructions" rows={3} defaultValue={initial?.instructions} placeholder={t('asg.fInstructionsPh')} />
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="sentences">{t('asg.fSentences')}</Label>
               <p className="text-xs text-muted-foreground">{t('asg.fSentencesHint')}</p>
               <Textarea id="sentences" name="sentences" rows={6} defaultValue={initial?.sentences} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('asg.submitKinds')}</Label>
+              <div className="space-y-2.5 rounded-xl border border-input p-3 text-sm">
+                <label className="flex items-center gap-2.5">
+                  <input type="checkbox" name="requireText" defaultChecked={initial?.requireText ?? true} className="h-4 w-4 accent-primary" />
+                  {t('asg.kindText')}
+                </label>
+                <label className="flex items-center gap-2.5">
+                  <input type="checkbox" name="requireVideo" defaultChecked={initial?.requireVideo ?? true} className="h-4 w-4 accent-primary" />
+                  {t('asg.kindVideo')}
+                </label>
+                <label className="flex items-center gap-2.5 pl-6 text-muted-foreground">
+                  <input type="checkbox" name="requireEyesClosed" defaultChecked={initial?.requireEyesClosed ?? true} className="h-4 w-4 accent-primary" />
+                  {t('asg.fEyes')}
+                </label>
+                <label className="flex items-center gap-2.5">
+                  <input type="checkbox" name="requireAudio" defaultChecked={initial?.requireAudio ?? false} className="h-4 w-4 accent-primary" />
+                  {t('asg.kindAudio')}
+                </label>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -140,15 +169,9 @@ export function AssignmentForm({
                 <Input id="dueAt" name="dueAt" type="datetime-local" defaultValue={initial?.dueAt} />
               </div>
             </div>
-            <div className="grid grid-cols-2 items-end gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="maxAttempts">{t('asg.fAttempts')}</Label>
-                <Input id="maxAttempts" name="maxAttempts" type="number" min={1} defaultValue={initial?.maxAttempts ?? 1} />
-              </div>
-              <label className="flex items-center gap-2.5 pb-3 text-sm">
-                <input type="checkbox" name="requireEyesClosed" defaultChecked={initial?.requireEyesClosed ?? true} className="h-4 w-4 accent-[hsl(var(--primary))]" />
-                {t('asg.fEyes')}
-              </label>
+            <div className="space-y-1.5">
+              <Label htmlFor="maxAttempts">{t('asg.fAttempts')}</Label>
+              <Input id="maxAttempts" name="maxAttempts" type="number" min={1} defaultValue={initial?.maxAttempts ?? 1} className="w-32" />
             </div>
             {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
             <Button type="submit" disabled={isPending} size="lg" className="w-full">

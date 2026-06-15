@@ -40,8 +40,12 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
     <SubmissionFlow
       assignmentId={assignment.id}
       title={assignment.title}
+      instructions={assignment.instructions}
       sentences={assignment.sentences.map((s) => ({ order: s.order, text: s.text }))}
       requireEyesClosed={assignment.requireEyesClosed}
+      requireText={assignment.requireText}
+      requireVideo={assignment.requireVideo}
+      requireAudio={assignment.requireAudio}
       attemptsLeft={Math.max(0, assignment.maxAttempts - usedAttempts)}
       windowState={notOpen ? 'not-open' : closed ? 'closed' : 'open'}
       initialHasText={Boolean(latest?.recitedText)}

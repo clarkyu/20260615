@@ -167,6 +167,9 @@ model Assignment {
   openAt       DateTime?
   dueAt        DateTime?
   requireEyesClosed Boolean @default(true)
+  requireText  Boolean @default(true)
+  requireAudio Boolean @default(false)
+  requireVideo Boolean @default(true)
   maxAttempts  Int      @default(1)
   defaultPerceptionModel String?
   defaultJudgeModel      String?

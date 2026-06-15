@@ -45,6 +45,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
     finalScore: s.finalScore,
     feedback: s.feedback ?? '',
     hasVideo: Boolean(s.videoKey),
+    hasAudio: Boolean(s.audioKey),
     recitedText: s.recitedText ?? '',
     violations: s.violations ? (JSON.parse(s.violations) as unknown[]).length : 0,
   }))

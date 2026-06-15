@@ -5,7 +5,9 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
-import { presignUpload, storageConfigured, submissionVideoKey } from '@/lib/storage'
+import { presignUpload, storageConfigured, submissionMediaKey } from '@/lib/storage'
+
+type MediaKind = 'video' | 'audio'
 
 // Confirms the student may submit (class targeted & window open); returns the
 // active attempt number, or an i18n error key.
@@ -32,7 +34,8 @@ async function resolveAttempt(
   return { attempt: used + 1 }
 }
 
-export async function getUploadUrl(assignmentId: number, contentType: string, ext: string) {
+// Presigned URL for a video or audio recording; saves the key on the (draft) submission.
+export async function getUploadUrl(assignmentId: number, kind: MediaKind, contentType: string, ext: string) {
   const user = await requireRole('STUDENT')
   const { t } = await getT()
   if (!storageConfigured()) return { error: t('err.storageNot') }
@@ -41,11 +44,12 @@ export async function getUploadUrl(assignmentId: number, contentType: string, ex
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
   if ('error' in resolved) return { error: t(resolved.error) }
 
-  const key = submissionVideoKey(assignmentId, user.userId, resolved.attempt, ext || 'webm')
+  const key = submissionMediaKey(assignmentId, user.userId, resolved.attempt, kind, ext || 'webm')
+  const keyField = kind === 'audio' ? { audioKey: key } : { videoKey: key }
   const submission = await prisma.submission.upsert({
     where: { assignmentId_studentId_attempt: { assignmentId, studentId: user.userId, attempt: resolved.attempt } },
-    update: { videoKey: key, status: 'DRAFT' },
-    create: { assignmentId, studentId: user.userId, attempt: resolved.attempt, videoKey: key, status: 'DRAFT' },
+    update: { ...keyField, status: 'DRAFT' },
+    create: { assignmentId, studentId: user.userId, attempt: resolved.attempt, ...keyField, status: 'DRAFT' },
   })
 
   try {
@@ -57,17 +61,48 @@ export async function getUploadUrl(assignmentId: number, contentType: string, ex
   }
 }
 
-export async function finalizeSubmission(submissionId: number, sizeBytes: number, durationSec: number, violations: string) {
+// Record a finished media upload's metadata (keeps the submission a draft).
+export async function recordMedia(submissionId: number, kind: MediaKind, sizeBytes: number, durationSec: number, violations: string) {
   const user = await requireRole('STUDENT')
   const { t } = await getT()
   const prisma = await getDb()
   const submission = await prisma.submission.findFirst({ where: { id: submissionId, studentId: user.userId } })
   if (!submission) return { error: t('err.subNotFound') }
-  if (!submission.videoKey) return { error: t('err.noVideoYet') }
+
+  await prisma.submission.update({
+    where: { id: submission.id },
+    data: {
+      sizeBytes: Math.round(sizeBytes) || submission.sizeBytes,
+      durationSec: Math.round(durationSec) || submission.durationSec,
+      // Anti-cheat violations only come from the (eyes-closed) video step.
+      ...(kind === 'video' ? { violations: violations || null } : {}),
+    },
+  })
+  return { success: true }
+}
+
+// Mark the whole submission done once every required part is present.
+export async function finishSubmission(assignmentId: number) {
+  const user = await requireRole('STUDENT')
+  const { t } = await getT()
+  const prisma = await getDb()
+
+  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  if ('error' in resolved) return { error: t(resolved.error) }
+  const submission = await prisma.submission.findFirst({
+    where: { assignmentId, studentId: user.userId, attempt: resolved.attempt },
+  })
+  if (!submission) return { error: t('err.subNotFound') }
+
+  const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId } })
+  if (!assignment) return { error: t('err.assignNotFound') }
+  if (assignment.requireText && !submission.recitedText) return { error: t('err.needRecite') }
+  if (assignment.requireVideo && !submission.videoKey) return { error: t('err.noVideoYet') }
+  if (assignment.requireAudio && !submission.audioKey) return { error: t('err.noAudioYet') }
 
   const hasViolation = (() => {
     try {
-      const parsed = JSON.parse(violations)
+      const parsed = JSON.parse(submission.violations ?? '[]')
       return Array.isArray(parsed) && parsed.length > 0
     } catch {
       return false
@@ -76,12 +111,7 @@ export async function finalizeSubmission(submissionId: number, sizeBytes: number
 
   await prisma.submission.update({
     where: { id: submission.id },
-    data: {
-      status: hasViolation ? 'FLAGGED' : 'UPLOADED',
-      sizeBytes: Math.round(sizeBytes) || null,
-      durationSec: Math.round(durationSec) || null,
-      violations: violations || null,
-    },
+    data: { status: hasViolation ? 'FLAGGED' : 'UPLOADED' },
   })
   revalidatePath('/student')
   return { success: true }
