@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { ChevronRight } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -36,10 +38,17 @@ export default async function StudentsPage() {
             <p className="text-muted-foreground">{t('stu.noClasses')}</p>
           ) : (
             classes.map((c) => (
-              <div key={c.id} className="flex justify-between border-b border-border/60 py-2 last:border-0">
+              <Link
+                key={c.id}
+                href={`/dashboard/students/${c.id}`}
+                className="-mx-2 flex items-center justify-between gap-2 rounded-lg border-b border-border/60 px-2 py-2.5 last:border-0 hover:bg-secondary/60"
+              >
                 <span className="font-medium">{c.name}{c.major ? ` · ${c.major}` : ''}</span>
-                <span className="text-muted-foreground">{c._count.members} {t('stu.people')}</span>
-              </div>
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  {c._count.members} {t('stu.people')}
+                  <ChevronRight className="h-4 w-4" />
+                </span>
+              </Link>
             ))
           )}
         </CardContent>

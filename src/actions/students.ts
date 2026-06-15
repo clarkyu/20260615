@@ -1,5 +1,6 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
@@ -108,4 +109,122 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
 
   revalidatePath('/dashboard/students')
   return { created, updated: toUpdate.length, skipped, classesTouched: classNames.length }
+}
+
+// ── Class & student management ────────────────────────────────────────────────
+
+type MutState = { error?: string; success?: boolean }
+
+export async function updateClass(prevState: unknown, formData: FormData): Promise<MutState> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  const classId = Number(formData.get('classId'))
+  const name = (formData.get('name') as string)?.trim()
+  const major = (formData.get('major') as string)?.trim() || null
+  const department = (formData.get('department') as string)?.trim() || null
+  if (!name) return { error: t('err.needClassName') }
+
+  const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
+  if (!cls) return { error: t('err.classNotFound') }
+  const dup = await prisma.classGroup.findFirst({ where: { schoolId: cls.schoolId, name, NOT: { id: classId } } })
+  if (dup) return { error: t('err.classNameExists') }
+
+  await prisma.classGroup.update({ where: { id: classId }, data: { name, major, department } })
+  revalidatePath(`/dashboard/students/${classId}`)
+  revalidatePath('/dashboard/students')
+  return { success: true }
+}
+
+export async function deleteClass(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  const prisma = await getDb()
+  const classId = Number(formData.get('classId'))
+  const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
+  if (cls) {
+    await prisma.user.deleteMany({ where: { classId, role: 'STUDENT' } })
+    await prisma.classGroup.delete({ where: { id: classId } })
+  }
+  revalidatePath('/dashboard/students')
+  redirect('/dashboard/students')
+}
+
+export async function addStudent(prevState: unknown, formData: FormData): Promise<MutState> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  const classId = Number(formData.get('classId'))
+  const studentNo = (formData.get('studentNo') as string)?.trim()
+  const name = (formData.get('name') as string)?.trim()
+  const major = (formData.get('major') as string)?.trim() || null
+  if (!studentNo || !name) return { error: t('err.needNoAndName') }
+
+  const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
+  if (!cls) return { error: t('err.classNotFound') }
+  const dup = await prisma.user.findFirst({ where: { schoolId: cls.schoolId, studentNo, role: 'STUDENT' } })
+  if (dup) return { error: t('err.studentNoExists') }
+
+  await prisma.user.create({
+    data: {
+      role: 'STUDENT',
+      schoolId: cls.schoolId,
+      classId,
+      studentNo,
+      name,
+      major: major ?? cls.major,
+      passwordHash: await hashPassword(studentNo),
+      mustChangePassword: true,
+    },
+  })
+  revalidatePath(`/dashboard/students/${classId}`)
+  return { success: true }
+}
+
+export async function updateStudent(formData: FormData): Promise<MutState> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  const studentId = Number(formData.get('studentId'))
+  const name = (formData.get('name') as string)?.trim()
+  const studentNo = (formData.get('studentNo') as string)?.trim()
+  const newClassId = Number(formData.get('classId'))
+  const major = (formData.get('major') as string)?.trim() || null
+  if (!studentNo || !name) return { error: t('err.needNoAndName') }
+
+  const stu = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT', schoolId: user.schoolId ?? -1 } })
+  if (!stu || stu.schoolId == null) return { error: t('err.studentNotFound') }
+  const cls = await prisma.classGroup.findFirst({ where: { id: newClassId, schoolId: stu.schoolId } })
+  if (!cls) return { error: t('err.classNotFound') }
+  const dup = await prisma.user.findFirst({ where: { schoolId: stu.schoolId, studentNo, role: 'STUDENT', NOT: { id: studentId } } })
+  if (dup) return { error: t('err.studentNoExists') }
+
+  await prisma.user.update({ where: { id: studentId }, data: { name, studentNo, classId: newClassId, major } })
+  if (stu.classId) revalidatePath(`/dashboard/students/${stu.classId}`)
+  revalidatePath(`/dashboard/students/${newClassId}`)
+  return { success: true }
+}
+
+export async function deleteStudent(formData: FormData): Promise<MutState> {
+  const user = await requireStaff()
+  const prisma = await getDb()
+  const studentId = Number(formData.get('studentId'))
+  const stu = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT', schoolId: user.schoolId ?? -1 } })
+  if (stu) {
+    await prisma.user.delete({ where: { id: studentId } })
+    if (stu.classId) revalidatePath(`/dashboard/students/${stu.classId}`)
+  }
+  return { success: true }
+}
+
+export async function resetStudentPassword(formData: FormData): Promise<MutState> {
+  const user = await requireStaff()
+  const prisma = await getDb()
+  const studentId = Number(formData.get('studentId'))
+  const stu = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT', schoolId: user.schoolId ?? -1 } })
+  if (!stu?.studentNo) return { error: 'not found' }
+  await prisma.user.update({
+    where: { id: studentId },
+    data: { passwordHash: await hashPassword(stu.studentNo, BULK_HASH_ITERATIONS), mustChangePassword: true },
+  })
+  return { success: true }
 }
