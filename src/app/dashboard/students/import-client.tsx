@@ -67,11 +67,11 @@ export function ImportClient() {
       <CardContent className="space-y-3">
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-secondary/40 px-4 py-3 text-sm">
           <UploadCloud className="h-5 w-5 text-muted-foreground" />
-          <span className="flex-1 truncate text-muted-foreground">{file ? file.name : 'Excel (.xlsx)'}</span>
+          <span className="flex-1 truncate text-muted-foreground">{file ? file.name : 'Excel (.xls / .xlsx)'}</span>
           <input
             ref={inputRef}
             type="file"
-            accept=".xlsx"
+            accept=".xls,.xlsx"
             className="hidden"
             onChange={(e) => { setFile(e.target.files?.[0] ?? null); reset() }}
           />

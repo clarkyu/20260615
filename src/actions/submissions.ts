@@ -4,35 +4,42 @@ import type { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
+import { getT } from '@/lib/i18n-server'
 import { presignUpload, storageConfigured, submissionVideoKey } from '@/lib/storage'
 
-// Confirms the student may submit to this assignment (their class is targeted &
-// the window is open) and returns the active attempt number, or an error.
-async function resolveAttempt(prisma: PrismaClient, studentId: number, classId: number | null, assignmentId: number) {
-  if (!classId) return { error: '你的账号还未分配班级，请联系老师。' as const }
+// Confirms the student may submit (class targeted & window open); returns the
+// active attempt number, or an i18n error key.
+async function resolveAttempt(
+  prisma: PrismaClient,
+  studentId: number,
+  classId: number | null,
+  assignmentId: number,
+): Promise<{ error: string } | { attempt: number }> {
+  if (!classId) return { error: 'err.noClassAssigned' as const }
   const assignment = await prisma.assignment.findFirst({
     where: { id: assignmentId, classes: { some: { classId } } },
   })
-  if (!assignment) return { error: '作业不存在或未分配给你的班级。' as const }
+  if (!assignment) return { error: 'err.assignNotFound' as const }
 
   const now = new Date()
-  if (assignment.openAt && now < assignment.openAt) return { error: '作业还未开放。' as const }
-  if (assignment.dueAt && now > assignment.dueAt) return { error: '作业已截止。' as const }
+  if (assignment.openAt && now < assignment.openAt) return { error: 'err.notOpen' as const }
+  if (assignment.dueAt && now > assignment.dueAt) return { error: 'err.closed' as const }
 
   const used = await prisma.submission.count({
     where: { assignmentId, studentId, status: { in: ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED'] } },
   })
-  if (used >= assignment.maxAttempts) return { error: '提交次数已用完。' as const }
+  if (used >= assignment.maxAttempts) return { error: 'err.attemptsUsed' as const }
   return { attempt: used + 1 }
 }
 
 export async function getUploadUrl(assignmentId: number, contentType: string, ext: string) {
   const user = await requireRole('STUDENT')
-  if (!storageConfigured()) return { error: '视频存储尚未配置（R2）。请联系管理员。' }
+  const { t } = await getT()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
   const prisma = await getDb()
 
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: resolved.error }
+  if ('error' in resolved) return { error: t(resolved.error) }
 
   const key = submissionVideoKey(assignmentId, user.userId, resolved.attempt, ext || 'webm')
   const submission = await prisma.submission.upsert({
@@ -46,21 +53,17 @@ export async function getUploadUrl(assignmentId: number, contentType: string, ex
     return { url, key, submissionId: submission.id }
   } catch (err) {
     console.error('[getUploadUrl] presign failed:', err)
-    return { error: '获取上传地址失败，请重试。' }
+    return { error: t('err.uploadUrlFail') }
   }
 }
 
-export async function finalizeSubmission(
-  submissionId: number,
-  sizeBytes: number,
-  durationSec: number,
-  violations: string,
-) {
+export async function finalizeSubmission(submissionId: number, sizeBytes: number, durationSec: number, violations: string) {
   const user = await requireRole('STUDENT')
+  const { t } = await getT()
   const prisma = await getDb()
   const submission = await prisma.submission.findFirst({ where: { id: submissionId, studentId: user.userId } })
-  if (!submission) return { error: '提交记录不存在。' }
-  if (!submission.videoKey) return { error: '尚未上传视频。' }
+  if (!submission) return { error: t('err.subNotFound') }
+  if (!submission.videoKey) return { error: t('err.noVideoYet') }
 
   const hasViolation = (() => {
     try {
@@ -84,17 +87,17 @@ export async function finalizeSubmission(
   return { success: true }
 }
 
-// Step 1: the student submits the text they recited from memory. Stored on the
-// current attempt's submission (created if needed); the video is step 2.
+// Step 1: the student's recited text (from memory).
 export async function submitRecitedText(assignmentId: number, text: string) {
   const user = await requireRole('STUDENT')
+  const { t } = await getT()
   const prisma = await getDb()
   const trimmed = (text ?? '').trim()
-  if (!trimmed) return { error: '请先默写背诵内容' }
-  if (trimmed.length > 20000) return { error: '文本过长' }
+  if (!trimmed) return { error: t('err.needRecite') }
+  if (trimmed.length > 20000) return { error: t('err.textTooLong') }
 
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: resolved.error }
+  if ('error' in resolved) return { error: t(resolved.error) }
 
   await prisma.submission.upsert({
     where: { assignmentId_studentId_attempt: { assignmentId, studentId: user.userId, attempt: resolved.attempt } },

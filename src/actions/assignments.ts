@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
+import { getT } from '@/lib/i18n-server'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -23,27 +24,28 @@ function parseDate(value: FormDataEntryValue | null): Date | null {
 
 export async function createAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
   const user = await requireStaff()
-  if (!user.schoolId) return { error: '请先创建学校。' }
+  const { t } = await getT()
+  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
   const prisma = await getDb()
 
   const title = (formData.get('title') as string)?.trim()
-  if (!title) return { error: '请输入作业标题' }
+  if (!title) return { error: t('err.needTitle') }
 
   const sentences = parseSentences((formData.get('sentences') as string) ?? '')
-  if (sentences.length === 0) return { error: '请至少输入一句要背诵的句子（每行一句）' }
+  if (sentences.length === 0) return { error: t('err.needSentences') }
 
   const classIds = formData
     .getAll('classIds')
     .map((v) => Number(v))
     .filter((n) => Number.isInteger(n))
-  if (classIds.length === 0) return { error: '请选择至少一个班级' }
+  if (classIds.length === 0) return { error: t('err.needClass') }
 
   // Ensure every selected class belongs to this school.
   const validClasses = await prisma.classGroup.findMany({
     where: { id: { in: classIds }, schoolId: user.schoolId },
     select: { id: true },
   })
-  if (validClasses.length !== classIds.length) return { error: '所选班级无效' }
+  if (validClasses.length !== classIds.length) return { error: t('err.invalidClass') }
 
   const monthLabel = (formData.get('monthLabel') as string)?.trim() || null
   const instructions = (formData.get('instructions') as string)?.trim() || null

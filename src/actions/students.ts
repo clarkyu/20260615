@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
 import { parseRoster, type RosterRow } from '@/lib/roster'
+import { getT } from '@/lib/i18n-server'
 
 type PreviewState = {
   error?: string
@@ -29,9 +30,10 @@ async function readFile(formData: FormData): Promise<ArrayBuffer | null> {
 
 export async function previewRoster(prevState: unknown, formData: FormData): Promise<PreviewState> {
   await requireStaff()
+  const { t } = await getT()
   const buf = await readFile(formData)
-  if (!buf) return { error: '请选择 Excel 文件（.xlsx）' }
-  const parsed = await parseRoster(buf)
+  if (!buf) return { error: t('err.pickExcel') }
+  const parsed = parseRoster(buf)
   if (parsed.headerError) return { error: parsed.headerError }
   return { rows: parsed.rows, validCount: parsed.validCount, errorCount: parsed.errorCount }
 }
@@ -40,12 +42,13 @@ export async function previewRoster(prevState: unknown, formData: FormData): Pro
 // New students get initial password = 学号 and must change it on first login.
 export async function commitRoster(prevState: unknown, formData: FormData): Promise<CommitState> {
   const user = await requireStaff()
-  if (!user.schoolId) return { error: '请先创建学校，再导入名单。' }
+  const { t } = await getT()
+  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
   const prisma = await getDb()
   const buf = await readFile(formData)
-  if (!buf) return { error: '请选择 Excel 文件（.xlsx）' }
+  if (!buf) return { error: t('err.pickExcel') }
 
-  const parsed = await parseRoster(buf)
+  const parsed = parseRoster(buf)
   if (parsed.headerError) return { error: parsed.headerError }
 
   const schoolId = user.schoolId

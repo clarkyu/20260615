@@ -11,6 +11,7 @@ import { getAppUrl } from '@/lib/app-url'
 import { normalizeEmail } from '@/lib/utils'
 import { generateToken, hashToken } from '@/lib/tokens'
 import { validatePassword, validateName } from '@/lib/validation'
+import { getT } from '@/lib/i18n-server'
 import {
   rateLimitLogin,
   rateLimitRegister,
@@ -48,27 +49,24 @@ async function issueVerificationEmail(userId: number, email: string) {
   await sendVerificationEmail(email, verifyUrl)
 }
 
-// Teacher / admin self sign-up (email + verification).
 export async function register(prevState: unknown, formData: FormData): Promise<ActionState> {
-  if (!(await rateLimitRegister())) return { error: 'Too many attempts. Please try again later.' }
+  const { t } = await getT()
+  if (!(await rateLimitRegister())) return { error: t('err.tooMany') }
   const prisma = await getDb()
 
   const email = normalizeEmail((formData.get('email') as string) ?? '')
-  if (!email) return { error: 'Enter a valid email address' }
+  if (!email) return { error: t('err.invalidEmail') }
 
-  const password = (formData.get('password') as string) ?? ''
-  const passwordError = validatePassword(password)
-  if (passwordError) return { error: passwordError }
+  const passwordError = validatePassword((formData.get('password') as string) ?? '')
+  if (passwordError) return { error: t(passwordError) }
 
   const { value: name, error: nameError } = validateName(formData.get('name') as string | null)
-  if (nameError) return { error: nameError }
+  if (nameError) return { error: t(nameError) }
 
   const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing?.emailVerified) {
-    return { error: 'This email is already registered. Try signing in instead.' }
-  }
+  if (existing?.emailVerified) return { error: t('err.emailTaken') }
 
-  const passwordHash = await hashPassword(password)
+  const passwordHash = await hashPassword((formData.get('password') as string) ?? '')
   const isSuperAdmin = email === normalizeEmail(process.env.ADMIN_EMAIL ?? '')
   const role = isSuperAdmin ? 'SUPER_ADMIN' : 'TEACHER'
 
@@ -80,7 +78,7 @@ export async function register(prevState: unknown, formData: FormData): Promise<
     await issueVerificationEmail(userId, email)
   } catch (err) {
     console.error('[register] Failed to send verification email:', err)
-    return { error: 'We could not send the verification email. Please try again shortly.' }
+    return { error: t('err.emailSendFail') }
   }
   return { success: true }
 }
@@ -102,20 +100,16 @@ export async function resendVerification(prevState: unknown, formData: FormData)
 }
 
 export async function verifyEmail(prevState: unknown, formData: FormData): Promise<ActionState> {
-  if (!(await rateLimitVerify())) return { error: 'Too many attempts. Please try again later.' }
+  const { t } = await getT()
+  if (!(await rateLimitVerify())) return { error: t('err.tooMany') }
   const prisma = await getDb()
   const token = (formData.get('token') as string)?.trim()
-  if (!token) return { error: 'This verification link is invalid.' }
+  if (!token) return { error: t('err.linkInvalid') }
 
   const tokenHash = await hashToken(token)
   const now = new Date()
-
-  // D1 has no interactive transactions: read+validate first, then a batched
-  // ($transaction array) write.
   const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } })
-  if (!record || record.usedAt || record.expiresAt <= now) {
-    return { error: 'This verification link is invalid or has expired.' }
-  }
+  if (!record || record.usedAt || record.expiresAt <= now) return { error: t('err.linkExpired') }
   await prisma.$transaction([
     prisma.user.update({ where: { id: record.userId }, data: { emailVerified: now } }),
     prisma.emailVerificationToken.update({ where: { id: record.id }, data: { usedAt: now } }),
@@ -123,54 +117,52 @@ export async function verifyEmail(prevState: unknown, formData: FormData): Promi
   ])
 
   const user = await prisma.user.findUnique({ where: { id: record.userId } })
-  if (!user) return { error: 'Account not found.' }
+  if (!user) return { error: t('err.accountNotFound') }
   await establishSession(user)
   redirect('/dashboard')
 }
 
-// Teacher / admin login (email).
 export async function login(prevState: unknown, formData: FormData): Promise<ActionState> {
-  if (!(await rateLimitLogin())) return { error: 'Too many login attempts. Try again in 5 minutes.' }
+  const { t } = await getT()
+  if (!(await rateLimitLogin())) return { error: t('err.tooManyLogin') }
   const prisma = await getDb()
 
   const email = normalizeEmail((formData.get('email') as string) ?? '')
   const password = (formData.get('password') as string) ?? ''
-
   const user = email ? await prisma.user.findUnique({ where: { email } }) : null
   if (!user || user.role === 'STUDENT') {
     await fakeVerifyPassword(password)
-    return { error: 'Invalid email or password' }
+    return { error: t('err.invalidCreds') }
   }
   const valid = await verifyPassword(password, user.passwordHash)
-  if (!valid) return { error: 'Invalid email or password' }
-  if (!user.emailVerified) return { error: 'Please verify your email before signing in.', needsVerification: true }
+  if (!valid) return { error: t('err.invalidCreds') }
+  if (!user.emailVerified) return { error: t('err.needVerify'), needsVerification: true }
 
   await establishSession(user)
   redirect('/dashboard')
 }
 
-// Student login (school code + 学号 + password). No email required.
 export async function studentLogin(prevState: unknown, formData: FormData): Promise<ActionState> {
-  if (!(await rateLimitLogin())) return { error: '尝试过于频繁，请 5 分钟后再试。' }
+  const { t } = await getT()
+  if (!(await rateLimitLogin())) return { error: t('err.tooManyLogin') }
   const prisma = await getDb()
 
   const schoolCode = (formData.get('schoolCode') as string)?.trim()
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const password = (formData.get('password') as string) ?? ''
-  if (!schoolCode || !studentNo) return { error: '请输入学校代码和学号' }
+  if (!schoolCode || !studentNo) return { error: t('err.needSchoolAndId') }
 
-  const school = await prisma.school.findUnique({ where: { code: schoolCode } })
+  const school = await prisma.school.findUnique({ where: { code: schoolCode.toUpperCase() } })
   const user = school
     ? await prisma.user.findFirst({ where: { schoolId: school.id, studentNo, role: 'STUDENT' } })
     : null
-
   if (!user) {
     await fakeVerifyPassword(password)
-    return { error: '学校代码、学号或密码不正确' }
+    return { error: t('err.studentBadCreds') }
   }
   const valid = await verifyPassword(password, user.passwordHash)
-  if (!valid) return { error: '学校代码、学号或密码不正确' }
-  if (!user.isActive) return { error: '账号已停用，请联系老师。' }
+  if (!valid) return { error: t('err.studentBadCreds') }
+  if (!user.isActive) return { error: t('err.accountDisabled') }
 
   await establishSession(user)
   redirect(user.mustChangePassword ? '/student/change-password' : '/student')
@@ -183,10 +175,11 @@ export async function logout() {
 }
 
 export async function requestPasswordReset(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const { t } = await getT()
   if (!(await rateLimitResetRequest())) return { success: true }
   const prisma = await getDb()
   const email = normalizeEmail((formData.get('email') as string) ?? '')
-  if (!email) return { error: 'Enter a valid email address' }
+  if (!email) return { error: t('err.invalidEmail') }
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (user && user.email) {
@@ -206,24 +199,22 @@ export async function requestPasswordReset(prevState: unknown, formData: FormDat
 }
 
 export async function resetPassword(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const { t } = await getT()
   const token = (formData.get('token') as string)?.trim()
   const password = (formData.get('password') as string) ?? ''
   const confirmPassword = (formData.get('confirmPassword') as string) ?? ''
 
-  if (!token) return { error: 'Password reset link is missing or invalid' }
+  if (!token) return { error: t('err.resetLinkMissing') }
   const passwordError = validatePassword(password)
-  if (passwordError) return { error: passwordError }
-  if (password !== confirmPassword) return { error: 'Passwords do not match' }
-  if (!(await rateLimitResetExecute())) return { error: 'Too many attempts. Try again later.' }
+  if (passwordError) return { error: t(passwordError) }
+  if (password !== confirmPassword) return { error: t('err.pwMismatch') }
+  if (!(await rateLimitResetExecute())) return { error: t('err.tooMany') }
 
   const prisma = await getDb()
   const tokenHash = await hashToken(token)
   const now = new Date()
-
   const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } })
-  if (!record || record.usedAt || record.expiresAt <= now) {
-    return { error: 'Password reset link has expired' }
-  }
+  if (!record || record.usedAt || record.expiresAt <= now) return { error: t('err.resetExpired') }
   const newHash = await hashPassword(password)
   await prisma.$transaction([
     prisma.user.update({ where: { id: record.userId }, data: { passwordHash: newHash, emailVerified: now } }),
@@ -233,23 +224,23 @@ export async function resetPassword(prevState: unknown, formData: FormData): Pro
   return { success: true }
 }
 
-// Works for any signed-in user; clears the forced-change flag (student first login).
 export async function changePassword(prevState: unknown, formData: FormData): Promise<ActionState> {
   const current = await requireAuth()
+  const { t } = await getT()
   const prisma = await getDb()
   const currentPassword = (formData.get('currentPassword') as string) ?? ''
   const newPassword = (formData.get('newPassword') as string) ?? ''
   const confirmPassword = (formData.get('confirmPassword') as string) ?? ''
 
-  if (!currentPassword) return { error: '请输入当前密码' }
+  if (!currentPassword) return { error: t('err.needCurrentPw') }
   const passwordError = validatePassword(newPassword)
-  if (passwordError) return { error: passwordError }
-  if (newPassword !== confirmPassword) return { error: '两次输入的新密码不一致' }
+  if (passwordError) return { error: t(passwordError) }
+  if (newPassword !== confirmPassword) return { error: t('err.pwMismatch') }
 
   const user = await prisma.user.findUnique({ where: { id: current.userId } })
-  if (!user) return { error: '用户不存在' }
+  if (!user) return { error: t('err.userNotFound') }
   const valid = await verifyPassword(currentPassword, user.passwordHash)
-  if (!valid) return { error: '当前密码不正确' }
+  if (!valid) return { error: t('err.currentPwWrong') }
 
   await prisma.user.update({
     where: { id: user.id },

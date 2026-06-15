@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
+import { getT } from '@/lib/i18n-server'
 import { gradeSubmission } from '@/lib/ai/grade'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 
@@ -21,18 +22,19 @@ async function loadSubmissionForStaff(prisma: PrismaClient, submissionId: number
 
 export async function runGrading(prevState: unknown, formData: FormData): Promise<ActionState> {
   const user = await requireStaff()
+  const { t } = await getT()
   const prisma = await getDb()
   const submissionId = Number(formData.get('submissionId'))
   const perceptionModel = (formData.get('perceptionModel') as string)?.trim()
   const judgeModel = (formData.get('judgeModel') as string)?.trim()
   const rubric = (formData.get('rubric') as string)?.trim() || '按完整度、准确度、发音、流利度综合评分。'
 
-  if (!submissionId) return { error: '缺少提交记录' }
-  if (!perceptionModel || !judgeModel) return { error: '请选择感知模型与评分模型' }
+  if (!submissionId) return { error: t('err.needSubmission') }
+  if (!perceptionModel || !judgeModel) return { error: t('err.needModels') }
 
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
-  if (!submission) return { error: '提交记录不存在或无权访问' }
-  if (!submission.videoKey) return { error: '该学生还没有上传视频' }
+  if (!submission) return { error: t('err.subNoAccess') }
+  if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
   let videoUrl: string | undefined
   if (storageConfigured()) {
@@ -75,7 +77,7 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   } catch (err) {
     console.error('[runGrading] grading failed:', err)
     await prisma.submission.update({ where: { id: submission.id }, data: { status: 'FAILED' } })
-    return { error: err instanceof Error ? err.message : '评阅失败' }
+    return { error: err instanceof Error ? err.message : t('err.gradeFail') }
   }
 
   revalidatePath(`/dashboard/assignments/${submission.assignmentId}`)
@@ -85,33 +87,35 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
 // Presigned playback URL so the teacher can watch before overriding.
 export async function getSubmissionVideoUrl(submissionId: number): Promise<{ url?: string; error?: string }> {
   const user = await requireStaff()
-  if (!storageConfigured()) return { error: '视频存储未配置（R2）。' }
+  const { t } = await getT()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
   const prisma = await getDb()
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
-  if (!submission?.videoKey) return { error: '没有视频。' }
+  if (!submission?.videoKey) return { error: t('err.noVideo') }
   try {
     return { url: await presignDownload(submission.videoKey) }
   } catch {
-    return { error: '获取视频地址失败。' }
+    return { error: t('err.videoUrlFail') }
   }
 }
 
 // Teacher manual override — the AI score is advisory, the teacher's is final.
 export async function overrideScore(prevState: unknown, formData: FormData): Promise<ActionState> {
   const user = await requireStaff()
+  const { t } = await getT()
   const prisma = await getDb()
   const submissionId = Number(formData.get('submissionId'))
   const scoreRaw = (formData.get('score') as string)?.trim()
   const feedback = (formData.get('feedback') as string)?.trim()
-  if (!submissionId) return { error: '缺少提交记录' }
+  if (!submissionId) return { error: t('err.needSubmission') }
 
   const score = Number(scoreRaw)
   if (scoreRaw === '' || isNaN(score) || score < 0 || score > MAX_SCORE) {
-    return { error: `请输入 0–${MAX_SCORE} 的分数` }
+    return { error: t('err.scoreRange') }
   }
 
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
-  if (!submission) return { error: '提交记录不存在或无权访问' }
+  if (!submission) return { error: t('err.subNoAccess') }
 
   await prisma.submission.update({
     where: { id: submission.id },

@@ -24,7 +24,7 @@
   ],
   "vars": {
     "APP_NAME": "英语背诵作业",
-    "APP_URL": "https://recitation.iclarks.workers.dev",
+    "APP_URL": "https://recite.clarkyu.com",
     "MINIMAX_BASE_URL": "https://api.minimax.chat/v1"
   },
   "observability": {
