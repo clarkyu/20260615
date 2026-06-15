@@ -37,7 +37,14 @@ export default async function StudentsPage() {
             <p className="text-sm text-muted-foreground">{t('stu.noClasses')}</p>
           ) : (
             <ClassList
-              classes={classes.map((c) => ({ id: c.id, name: c.name, major: c.major, count: c._count.members }))}
+              classes={classes.map((c) => ({
+                id: c.id,
+                name: c.name,
+                department: c.department,
+                major: c.major,
+                grade: c.grade,
+                count: c._count.members,
+              }))}
             />
           )}
         </CardContent>

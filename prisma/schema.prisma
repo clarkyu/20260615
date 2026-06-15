@@ -39,6 +39,7 @@ model ClassGroup {
   name       String
   department String?
   major      String?
+  grade      String?
   createdAt  DateTime @default(now())
   school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   members    User[]
