@@ -35,9 +35,13 @@ export default async function NewAssignmentDirectPage() {
     )
   }
 
+  // Use the plain class name (same as the Students page); only add the course
+  // when the same class appears more than once (same class, different course).
+  const nameCounts = new Map<string, number>()
+  for (const o of offerings) nameCounts.set(o.class.name, (nameCounts.get(o.class.name) ?? 0) + 1)
   const targets = offerings.map((o) => ({
     offeringId: o.id,
-    label: `${o.course.name} · ${o.class.name} · ${o.year} ${o.semester === '2' ? t('teach.sem2') : t('teach.sem1')}`,
+    label: (nameCounts.get(o.class.name) ?? 0) > 1 ? `${o.class.name} · ${o.course.name}` : o.class.name,
   }))
 
   return (

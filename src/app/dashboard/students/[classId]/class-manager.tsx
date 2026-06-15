@@ -24,6 +24,7 @@ interface Student {
   studentNo: string
   name: string
   phone: string
+  email: string
 }
 interface Cls {
   id: number
@@ -201,9 +202,15 @@ export function ClassManager({
                 <Input id="asnm" name="name" required />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="asphone">{t('cls.phone')}</Label>
-              <Input id="asphone" name="phone" inputMode="tel" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="asphone">{t('cls.phone')}</Label>
+                <Input id="asphone" name="phone" inputMode="tel" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="asemail">{t('email')}</Label>
+                <Input id="asemail" name="email" type="email" />
+              </div>
             </div>
             {addState?.error ? <FormMessage>{addState.error}</FormMessage> : null}
             {addState?.success ? <FormMessage tone="success">{t('done')}</FormMessage> : null}
@@ -247,6 +254,7 @@ function StudentEdit({
   const [name, setName] = useState(s.name)
   const [no, setNo] = useState(s.studentNo)
   const [phone, setPhone] = useState(s.phone)
+  const [email, setEmail] = useState(s.email)
   const [classId, setClassId] = useState(currentClassId)
 
   return (
@@ -255,7 +263,10 @@ function StudentEdit({
         <Input value={no} onChange={(e) => setNo(e.target.value)} placeholder={t('cls.studentNo')} className="h-10" />
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cls.name')} className="h-10" />
       </div>
-      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('cls.phone')} inputMode="tel" className="h-10" />
+      <div className="grid grid-cols-2 gap-2">
+        <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('cls.phone')} inputMode="tel" className="h-10" />
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('email')} type="email" className="h-10" />
+      </div>
       <select value={classId} onChange={(e) => setClassId(Number(e.target.value))} className={SELECT}>
         {allClasses.map((c) => (
           <option key={c.id} value={c.id}>{c.name}</option>
@@ -273,6 +284,7 @@ function StudentEdit({
             fd.set('name', name)
             fd.set('studentNo', no)
             fd.set('phone', phone)
+            fd.set('email', email)
             fd.set('classId', String(classId))
             onSave(fd)
           }}

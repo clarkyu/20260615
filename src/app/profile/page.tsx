@@ -56,7 +56,7 @@ export default async function ProfilePage() {
           ))}
         </CardContent>
       </Card>
-      <ContactSettings phone={user.phone ?? ''} />
+      <ContactSettings email={user.email ?? ''} phone={user.phone ?? ''} />
       {isStaff ? (
         <StaffSettings
           staffNo={user.staffNo ?? ''}

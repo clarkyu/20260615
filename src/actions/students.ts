@@ -113,6 +113,19 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
   const toCreate = valid.filter((r) => !idByNo.has(r.studentNo))
   const toUpdate = valid.filter((r) => idByNo.has(r.studentNo))
 
+  // Emails are globally unique — only assign ones that are free (and de-dup within
+  // the file) so a clashing email never aborts the whole import.
+  const wantedEmails = [...new Set(toCreate.map((r) => r.email).filter((v): v is string => Boolean(v)))]
+  const takenRows = wantedEmails.length
+    ? await prisma.user.findMany({ where: { email: { in: wantedEmails } }, select: { email: true } })
+    : []
+  const usedEmail = new Set(takenRows.map((u) => u.email))
+  const emailByNo = new Map<string, string | null>()
+  for (const r of toCreate) {
+    if (r.email && !usedEmail.has(r.email)) { usedEmail.add(r.email); emailByNo.set(r.studentNo, r.email) }
+    else emailByNo.set(r.studentNo, null)
+  }
+
   // 5) Create new students in a single batch (lighter initial-password hash).
   let created = 0
   if (toCreate.length > 0) {
@@ -124,6 +137,7 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
         studentNo: r.studentNo,
         name: r.name,
         phone: r.phone ?? null,
+        email: emailByNo.get(r.studentNo) ?? null,
         passwordHash: await hashPassword(r.studentNo, BULK_HASH_ITERATIONS),
         mustChangePassword: true,
       })),
@@ -197,12 +211,14 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const name = (formData.get('name') as string)?.trim()
   const phone = (formData.get('phone') as string)?.trim() || null
+  const email = (formData.get('email') as string)?.trim().toLowerCase() || null
   if (!studentNo || !name) return { error: t('err.needNoAndName') }
 
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
   if (!cls) return { error: t('err.classNotFound') }
   const dup = await prisma.user.findFirst({ where: { schoolId: cls.schoolId, studentNo, role: 'STUDENT' } })
   if (dup) return { error: t('err.studentNoExists') }
+  if (email && (await prisma.user.findFirst({ where: { email } }))) return { error: t('err.emailTaken') }
 
   await prisma.user.create({
     data: {
@@ -212,6 +228,7 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
       studentNo,
       name,
       phone,
+      email,
       passwordHash: await hashPassword(studentNo),
       mustChangePassword: true,
     },
@@ -229,6 +246,7 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
   const studentNo = (formData.get('studentNo') as string)?.trim()
   const newClassId = Number(formData.get('classId'))
   const phone = (formData.get('phone') as string)?.trim() || null
+  const email = (formData.get('email') as string)?.trim().toLowerCase() || null
   if (!studentNo || !name) return { error: t('err.needNoAndName') }
 
   const stu = await prisma.user.findFirst({ where: { id: studentId, role: 'STUDENT', schoolId: user.schoolId ?? -1 } })
@@ -237,8 +255,9 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
   if (!cls) return { error: t('err.classNotFound') }
   const dup = await prisma.user.findFirst({ where: { schoolId: stu.schoolId, studentNo, role: 'STUDENT', NOT: { id: studentId } } })
   if (dup) return { error: t('err.studentNoExists') }
+  if (email && (await prisma.user.findFirst({ where: { email, NOT: { id: studentId } } }))) return { error: t('err.emailTaken') }
 
-  await prisma.user.update({ where: { id: studentId }, data: { name, studentNo, classId: newClassId, phone } })
+  await prisma.user.update({ where: { id: studentId }, data: { name, studentNo, classId: newClassId, phone, email } })
   if (stu.classId) revalidatePath(`/dashboard/students/${stu.classId}`)
   revalidatePath(`/dashboard/students/${newClassId}`)
   return { success: true }
