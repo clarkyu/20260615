@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "recitation",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "recitation-db",
+      "database_id": "32a87766-2835-448c-a56e-44a08b598c3e",
+      "migrations_dir": "d1/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "recitations"
+    }
+  ],
+  "vars": {
+    "APP_NAME": "英语背诵作业",
+    "APP_URL": "https://recite.clarkyu.com",
+    "MINIMAX_BASE_URL": "https://api.minimax.chat/v1"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

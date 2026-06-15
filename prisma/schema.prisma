@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum SubmissionStatus {
+  DRAFT
+  UPLOADED
+  PROCESSING
+  GRADED
+  FLAGGED
+  FAILED
+}
+
+model School {
+  id        Int          @id @default(autoincrement())
+  name      String       @unique
+  code      String       @unique
+  createdAt DateTime     @default(now())
+  classes   ClassGroup[]
+  users     User[]
+  courses   Course[]
+  offerings CourseOffering[]
+}
+
+model ClassGroup {
+  id         Int      @id @default(autoincrement())
+  schoolId   Int
+  name       String
+  department String?
+  major      String?
+  createdAt  DateTime @default(now())
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  members    User[]
+  offerings  CourseOffering[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  role         Role     @default(TEACHER)
+
+  email         String?   @unique
+  emailVerified DateTime?
+
+  studentNo  String?
+  schoolId   Int?
+  classId    Int?
+  department String?
+  major      String?
+
+  name         String?
+  passwordHash String
+  isActive     Boolean  @default(true)
+  mustChangePassword Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  school      School?      @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  class       ClassGroup?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  submissions Submission[]
+  taughtOfferings   CourseOffering[] @relation("OfferingTeacher")
+  gradedSubmissions Submission[]     @relation("SubmissionGradedBy")
+
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+
+  @@unique([schoolId, studentNo])
+  @@index([schoolId])
+  @@index([classId])
+}
+
+// 课程：课程名称 + 课程代码
+model Course {
+  id        Int      @id @default(autoincrement())
+  schoolId  Int
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  offerings CourseOffering[]
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
+// 授课（课头）：老师在某学年·某学期·某班 教 某课程
+model CourseOffering {
+  id        Int      @id @default(autoincrement())
+  schoolId  Int
+  courseId  Int
+  teacherId Int
+  classId   Int
+  year      String // 学年, e.g. "2025-2026"
+  semester  String // 学期, e.g. "1" / "2"
+  createdAt DateTime @default(now())
+  school    School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  course    Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher   User        @relation("OfferingTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  class     ClassGroup  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+
+  @@unique([courseId, classId, year, semester])
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([classId])
+}
+
+model Assignment {
+  id           Int       @id @default(autoincrement())
+  offeringId   Int
+  title        String
+  monthLabel   String?
+  instructions String?
+  rubric       String?
+  referenceAudioKey String?
+  openAt       DateTime?
+  dueAt        DateTime?
+  requireEyesClosed Boolean @default(true)
+  maxAttempts  Int      @default(1)
+  defaultPerceptionModel String?
+  defaultJudgeModel      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  sentences   Sentence[]
+  submissions Submission[]
+
+  @@index([offeringId])
+}
+
+model Sentence {
+  id                Int     @id @default(autoincrement())
+  assignmentId      Int
+  order             Int
+  text              String
+  referenceAudioKey String?
+  assignment        Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
+}
+
+model Submission {
+  id           Int              @id @default(autoincrement())
+  assignmentId Int
+  studentId    Int
+  attempt      Int              @default(1)
+  status       SubmissionStatus @default(DRAFT)
+
+  recitedText String?
+  textSubmittedAt DateTime?
+
+  videoKey   String?
+  audioKey   String?
+  durationSec Int?
+  sizeBytes  Int?
+  violations String?
+
+  perceptionModel String?
+  judgeModel      String?
+  transcript      String?
+  aiResult        String?
+  aiScore         Float?
+  teacherScore    Float?
+  finalScore      Float?
+  feedback        String?
+  gradedById      Int?
+  gradedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gradedBy   User?      @relation("SubmissionGradedBy", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  @@unique([assignmentId, studentId, attempt])
+  @@index([assignmentId])
+  @@index([studentId])
+}
+
+model EmailVerificationToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

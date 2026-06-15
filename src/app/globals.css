@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --background: 240 33% 99%;
+    --foreground: 224 39% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 39% 12%;
+    --primary: 243 75% 59%; /* indigo */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 24% 96%;
+    --secondary-foreground: 224 30% 20%;
+    --muted: 240 20% 96%;
+    --muted-foreground: 224 12% 46%;
+    --accent: 243 75% 96%;
+    --accent-foreground: 243 65% 40%;
+    --success: 152 60% 42%;
+    --warning: 32 90% 50%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 18% 90%;
+    --input: 240 18% 90%;
+    --ring: 243 75% 59%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 226 36% 8%;
+    --foreground: 220 30% 96%;
+    --card: 226 30% 12%;
+    --card-foreground: 220 30% 96%;
+    --primary: 243 80% 70%;
+    --primary-foreground: 226 40% 10%;
+    --secondary: 226 24% 18%;
+    --secondary-foreground: 220 25% 92%;
+    --muted: 226 24% 16%;
+    --muted-foreground: 220 14% 62%;
+    --accent: 243 40% 24%;
+    --accent-foreground: 243 80% 86%;
+    --success: 152 55% 50%;
+    --warning: 32 90% 58%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 226 22% 22%;
+    --input: 226 22% 24%;
+    --ring: 243 80% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+  /* Respect device safe areas (notch / home indicator) */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@layer utilities {
+  .shadow-card {
+    box-shadow: 0 1px 2px 0 hsl(224 39% 12% / 0.04), 0 8px 24px -12px hsl(243 50% 40% / 0.12);
+  }
+  .shadow-soft {
+    box-shadow: 0 1px 2px 0 hsl(224 39% 12% / 0.05);
+  }
+  .tap {
+    @apply transition-transform active:scale-[0.97];
+  }
+  .animate-in-up {
+    animation: inUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes inUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

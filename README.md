@@ -1,0 +1,74 @@
+# 英语背诵作业 App
+
+手机端英语背诵作业平台：老师导入名单、发布 50 句背诵作业；学生**闭眼背诵 + 前置摄像头录制**并提交；**AI 按评分标准评阅打分**；老师人工复核、按班级导出 Excel 成绩。PWA 手机优先，**部署在 Cloudflare（Workers + D1 + R2）**，面向大陆用户。
+
+## 技术栈（Cloudflare 原生）
+
+- Next.js 15（App Router）+ React 19，**PWA 手机优先**
+- 运行时：**Cloudflare Workers**，经 `@opennextjs/cloudflare`（OpenNext）适配
+- 数据库：**Cloudflare D1**（SQLite）+ Prisma 7 `@prisma/adapter-d1`
+- 会话：iron-session（WebCrypto）；**口令：WebCrypto PBKDF2**（Workers 上 bcrypt 不可行）
+- 邮件：**Resend** HTTP API；对象存储：**R2**（aws4fetch 预签名直传）
+- 可插拔 **AI 评阅层**：两段式（① 感知 → ② 评分）+ 模型注册表
+- Tailwind + shadcn 风格组件；Vitest
+
+## 角色与登录
+
+- **老师 / 管理员**：邮箱注册 + 邮件验证登录（`ADMIN_EMAIL` 首注册为超管）
+- **学生**：名单制，**学校代码 + 学号**登录，初始密码 = 学号，首登强制改密
+
+## 主要流程
+
+- **老师**：建校 → Excel 名单导入（预览 → 幂等）→ 发布作业（50 句/班级/时间窗/闭眼）→ 阅卷看板（选模型 + 阅卷时填评分标准 + AI 评阅 + 人工改分 + 看视频）→ 按班级导出 Excel
+- **学生**：看作业 → 复习 → 全屏录制（前置、切屏/离开记违规）→ 预签名直传 R2 → 提交 → 看成绩
+
+## AI 评阅层（`src/lib/ai/`）
+
+- `registry.ts`：模型注册表（Gemini/Qwen/MiniMax/GPT-4o/Whisper/DeepSeek/Claude）+ 能力/模态标签 + 预设
+- `grade.ts`：两段式编排（感知→评分）；`adapters.ts`：各家适配器（**当前占位桩**，整条流程已通，接真实 key 即替换）
+- DeepSeek 仅做②评分（纯文本）；Gemini 一把梭最适合。专用发音引擎为二期
+
+## 本地开发
+
+```bash
+npm install
+npm run cf:typegen            # 生成 Cloudflare 绑定类型（可选）
+npm run d1:migrate:local      # 在本地 D1 应用迁移（d1/migrations）
+npm run dev                   # http://localhost:3000（OpenNext 注入本地绑定）
+```
+
+本地 secrets 放 `.dev.vars`（见 `.env.example` 的变量名）。绑定（D1 `DB` / R2 `BUCKET`）在 `wrangler.jsonc`。
+
+## 校验
+
+```bash
+npm test && npx tsc --noEmit && npm run lint && npm run cf:build
+```
+
+`cf:build` 产出 `.open-next/worker.js`（Workers 包）。`npm run cf:preview` 可本地以 workerd 预览。
+
+## 部署到 Cloudflare
+
+```bash
+# 一次性：建资源
+npx wrangler d1 create recitation-db      # 把返回的 database_id 填进 wrangler.jsonc
+npx wrangler r2 bucket create recitations
+# secrets（逐个）
+npx wrangler secret put SESSION_SECRET
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put R2_ENDPOINT       # 及 R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET / APP_URL / ADMIN_EMAIL / EMAIL_FROM / AI keys
+
+# 迁移 + 部署
+npm run d1:migrate            # 远程 D1 应用 d1/migrations
+npm run cf:deploy            # opennextjs-cloudflare deploy
+```
+
+> ⚠️ **需要 Workers Paid（约 $5/月）**：Queues / Durable Objects / 更高 CPU 时长 / D1 超免费额度。
+> ⚠️ Cloudflare 大陆无节点（无 ICP），国内用户走海外 PoP，体验与香港机相当。
+
+## 迁移进度（Path B：Cloudflare 原生）
+
+- ✅ Phase 0：OpenNext + Wrangler 工具链；`cf:build` 产出 Workers 包
+- ✅ Phase 1（核心）：DB→D1（Prisma adapter，请求级 `getDb()`）；交互式事务改 D1 batch
+- ✅ Phase 2：tokens/口令→WebCrypto(PBKDF2)；邮件→Resend；预签名→aws4fetch
+- ⏭️ 待办：限流改 Durable Object（当前进程内 Map，serverless 下偏弱）；后台评阅→Queues/Workflows；接真实 AI（先 Gemini）；CI/CD（GitHub Actions → `cf:deploy`，PR 出 preview）；wrangler dev + 本地 D1 端到端实测；ExcelJS 在 Workers 的运行期验证；真实 PWA 图标 / 隐私同意 / 视频留存
