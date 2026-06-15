@@ -50,15 +50,32 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
                 <Input id="cc" name="courseCode" required defaultValue={initial?.courseCode} placeholder="ENG102" autoCapitalize="characters" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cls">{t('teach.class')}</Label>
-              <select id="cls" name="classId" defaultValue={initial?.classId ?? ''} required className={SELECT}>
-                <option value="" disabled>—</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+            {editing ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="cls">{t('teach.class')}</Label>
+                <select id="cls" name="classId" defaultValue={initial?.classId ?? ''} required className={SELECT}>
+                  <option value="" disabled>—</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>{t('teach.classes')}</Label>
+                <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
+                  {classes.map((c) => (
+                    <label
+                      key={c.id}
+                      className="tap flex cursor-pointer items-center gap-2 rounded-xl border border-input bg-background px-3 py-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent has-[:checked]:text-accent-foreground"
+                    >
+                      <input type="checkbox" name="classId" value={c.id} className="h-4 w-4 shrink-0 accent-primary" />
+                      <span className="truncate">{c.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="yr">{t('teach.year')}</Label>
