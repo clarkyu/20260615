@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { Plus, Pencil, ChevronRight, ChevronLeft, ClipboardList } from 'lucide-react'
+import { Plus, Pencil, ChevronRight, ChevronLeft, ClipboardList, TrendingUp } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -47,6 +47,21 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
           <Button variant="outline" size="sm"><Pencil className="h-4 w-4" />{t('teach.manage')}</Button>
         </Link>
       </div>
+
+      <Link href={`/dashboard/teaching/${offering.id}/insights`}>
+        <Card className="tap border-primary/30 bg-primary/5 hover:shadow-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold leading-snug">{t('insights.title')}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{t('insights.cardDesc')}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </Link>
 
       <div className="flex items-center justify-between pt-1">
         <h2 className="font-semibold">{t('teach.assignments')}</h2>
