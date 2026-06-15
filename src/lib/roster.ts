@@ -8,10 +8,11 @@ export interface RosterRow {
   department?: string
   major?: string
   grade?: string
+  phone?: string
   error?: string
 }
 
-type Field = 'studentNo' | 'name' | 'className' | 'department' | 'major' | 'grade'
+type Field = 'studentNo' | 'name' | 'className' | 'department' | 'major' | 'grade' | 'phone'
 
 // Accept either Chinese or English headers, case/space-insensitive.
 const HEADER_ALIASES: Record<Field, string[]> = {
@@ -21,6 +22,7 @@ const HEADER_ALIASES: Record<Field, string[]> = {
   department: ['院系', 'department', 'dept', '系', '学院', '系部'],
   major: ['专业', 'major', 'majorname'],
   grade: ['年级', 'grade', '级', '入学年份', 'year', '届'],
+  phone: ['手机号', '手机', '电话', '联系电话', 'phone', 'mobile', 'tel'],
 }
 
 function norm(s: unknown): string {
@@ -131,6 +133,7 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
     const department = get(row, 'department') || undefined
     const major = get(row, 'major') || extractMajor(rawClass)
     const grade = get(row, 'grade') || extractGrade(rawClass)
+    const phone = get(row, 'phone') || undefined
     if (!studentNo && !name && !rawClass) continue
 
     let error: string | undefined
@@ -142,7 +145,7 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
 
     if (error) errorCount++
     else validCount++
-    rows.push({ rowNumber: r + 1, studentNo, name, className, department, major, grade, error })
+    rows.push({ rowNumber: r + 1, studentNo, name, className, department, major, grade, phone, error })
   }
 
   return { rows, validCount, errorCount }

@@ -27,26 +27,59 @@ model School {
   name      String       @unique
   code      String       @unique
   createdAt DateTime     @default(now())
-  classes   ClassGroup[]
-  users     User[]
-  courses   Course[]
-  offerings CourseOffering[]
+  classes     ClassGroup[]
+  users       User[]
+  courses     Course[]
+  offerings   CourseOffering[]
+  departments Department[]
+  majors      Major[]
+}
+
+// 院系 / 部门：既是学生的学院院系，也是教师所属部门。
+model Department {
+  id        Int      @id @default(autoincrement())
+  schoolId  Int
+  name      String
+  createdAt DateTime @default(now())
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  majors    Major[]
+  teachers  User[]   @relation("UserDepartment")
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+// 专业：属于某个院系。
+model Major {
+  id           Int        @id @default(autoincrement())
+  schoolId     Int
+  departmentId Int
+  name         String
+  createdAt    DateTime   @default(now())
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  classes      ClassGroup[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@index([departmentId])
 }
 
 model ClassGroup {
   id         Int      @id @default(autoincrement())
   schoolId   Int
   name       String
-  department String?
-  major      String?
+  majorId    Int?
   grade      String?
   createdAt  DateTime @default(now())
   school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  major      Major?   @relation(fields: [majorId], references: [id], onDelete: SetNull)
   members    User[]
   offerings  CourseOffering[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
+  @@index([majorId])
 }
 
 model User {
@@ -58,10 +91,10 @@ model User {
 
   studentNo  String?
   staffNo    String?
+  phone      String?
   schoolId   Int?
   classId    Int?
-  department String?
-  major      String?
+  departmentId Int?
 
   name         String?
   passwordHash String
@@ -72,6 +105,7 @@ model User {
 
   school      School?      @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   class       ClassGroup?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  department  Department?  @relation("UserDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
   submissions Submission[]
   taughtOfferings   CourseOffering[] @relation("OfferingTeacher")
   gradedSubmissions Submission[]     @relation("SubmissionGradedBy")
@@ -83,6 +117,7 @@ model User {
   @@unique([schoolId, staffNo])
   @@index([schoolId])
   @@index([classId])
+  @@index([departmentId])
 }
 
 // 课程：课程名称 + 课程代码

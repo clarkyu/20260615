@@ -23,14 +23,20 @@ interface Student {
   id: number
   studentNo: string
   name: string
-  major: string
+  phone: string
 }
 interface Cls {
   id: number
   name: string
+  majorId: number | null
   major: string
   department: string
   grade: string
+}
+interface MajorOpt {
+  id: number
+  name: string
+  department: string
 }
 
 type Action = (fd: FormData) => Promise<{ error?: string; success?: boolean }>
@@ -40,10 +46,12 @@ export function ClassManager({
   cls,
   students,
   allClasses,
+  majors,
 }: {
   cls: Cls
   students: Student[]
   allClasses: { id: number; name: string }[]
+  majors: MajorOpt[]
 }) {
   const t = useT()
   const router = useRouter()
@@ -87,20 +95,22 @@ export function ClassManager({
               <Label htmlFor="cn">{t('cls.className')}</Label>
               <Input id="cn" name="name" required defaultValue={cls.name} />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="grd">{t('cls.grade')}</Label>
                 <Input id="grd" name="grade" defaultValue={cls.grade} placeholder="2025" inputMode="numeric" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maj">{t('cls.major')}</Label>
-                <Input id="maj" name="major" defaultValue={cls.major} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="dep">{t('cls.dept')}</Label>
-                <Input id="dep" name="department" defaultValue={cls.department} />
+                <select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className={SELECT}>
+                  <option value="">{t('cls.noMajor')}</option>
+                  {majors.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}（{m.department}）</option>
+                  ))}
+                </select>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">{t('cls.majorHint')}</p>
             {classState?.error ? <FormMessage>{classState.error}</FormMessage> : null}
             {classState?.success ? <FormMessage tone="success">{t('done')}</FormMessage> : null}
             <Button type="submit" disabled={classPending}>{t('cls.save')}</Button>
@@ -134,7 +144,7 @@ export function ClassManager({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium">{s.name}</div>
-                      <div className="text-xs text-muted-foreground">{s.studentNo}{s.major ? ` · ${s.major}` : ''}</div>
+                      <div className="text-xs text-muted-foreground">{s.studentNo}{s.phone ? ` · ${s.phone}` : ''}</div>
                     </div>
                     <div className="flex flex-wrap justify-end gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => setEditId(s.id)}>{t('cls.edit')}</Button>
@@ -192,8 +202,8 @@ export function ClassManager({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="asmaj">{t('cls.major')}</Label>
-              <Input id="asmaj" name="major" defaultValue={cls.major} />
+              <Label htmlFor="asphone">{t('cls.phone')}</Label>
+              <Input id="asphone" name="phone" inputMode="tel" />
             </div>
             {addState?.error ? <FormMessage>{addState.error}</FormMessage> : null}
             {addState?.success ? <FormMessage tone="success">{t('done')}</FormMessage> : null}
@@ -236,7 +246,7 @@ function StudentEdit({
 }) {
   const [name, setName] = useState(s.name)
   const [no, setNo] = useState(s.studentNo)
-  const [major, setMajor] = useState(s.major)
+  const [phone, setPhone] = useState(s.phone)
   const [classId, setClassId] = useState(currentClassId)
 
   return (
@@ -245,7 +255,7 @@ function StudentEdit({
         <Input value={no} onChange={(e) => setNo(e.target.value)} placeholder={t('cls.studentNo')} className="h-10" />
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cls.name')} className="h-10" />
       </div>
-      <Input value={major} onChange={(e) => setMajor(e.target.value)} placeholder={t('cls.major')} className="h-10" />
+      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('cls.phone')} inputMode="tel" className="h-10" />
       <select value={classId} onChange={(e) => setClassId(Number(e.target.value))} className={SELECT}>
         {allClasses.map((c) => (
           <option key={c.id} value={c.id}>{c.name}</option>
@@ -262,7 +272,7 @@ function StudentEdit({
             fd.set('studentId', String(s.id))
             fd.set('name', name)
             fd.set('studentNo', no)
-            fd.set('major', major)
+            fd.set('phone', phone)
             fd.set('classId', String(classId))
             onSave(fd)
           }}

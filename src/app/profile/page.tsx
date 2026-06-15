@@ -4,6 +4,7 @@ import { getT } from '@/lib/i18n-server'
 import { Card, CardContent } from '@/components/ui/card'
 import { ProfileClient } from './profile-client'
 import { StaffSettings } from './staff-settings'
+import { ContactSettings } from './contact-settings'
 
 export default async function ProfilePage() {
   const session = await requireAuth()
@@ -11,7 +12,11 @@ export default async function ProfilePage() {
   const { t, locale } = await getT()
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    include: { school: true, class: true },
+    include: {
+      school: true,
+      class: { include: { major: { include: { department: { select: { name: true } } } } } },
+      department: { select: { name: true } },
+    },
   })
   if (!user) {
     const { logout } = await import('@/actions/auth')
@@ -20,13 +25,22 @@ export default async function ProfilePage() {
   }
 
   const isStaff = user.role !== 'STUDENT'
+  const stuMajor = user.class?.major
+  const departments = isStaff && user.schoolId
+    ? await prisma.department.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
+    : []
+
   const rows = [
     user.email ? { k: t('email'), v: user.email } : null,
     user.studentNo ? { k: locale === 'zh' ? '学号' : 'Student ID', v: user.studentNo } : null,
     user.staffNo ? { k: t('login.staffNo'), v: user.staffNo } : null,
     { k: t('name'), v: user.name || '—' },
+    user.phone ? { k: t('prof.phone'), v: user.phone } : null,
     user.school ? { k: locale === 'zh' ? '学校' : 'School', v: user.school.name } : null,
+    user.department ? { k: t('prof.department'), v: user.department.name } : null,
     user.class ? { k: locale === 'zh' ? '班级' : 'Class', v: user.class.name } : null,
+    stuMajor ? { k: locale === 'zh' ? '专业' : 'Major', v: stuMajor.name } : null,
+    stuMajor ? { k: t('prof.department'), v: stuMajor.department.name } : null,
   ].filter(Boolean) as { k: string; v: string }[]
 
   return (
@@ -42,8 +56,15 @@ export default async function ProfilePage() {
           ))}
         </CardContent>
       </Card>
+      <ContactSettings phone={user.phone ?? ''} />
       {isStaff ? (
-        <StaffSettings staffNo={user.staffNo ?? ''} schoolName={user.school?.name ?? ''} hasSchool={Boolean(user.school)} />
+        <StaffSettings
+          staffNo={user.staffNo ?? ''}
+          departmentId={user.departmentId}
+          departments={departments}
+          schoolName={user.school?.name ?? ''}
+          hasSchool={Boolean(user.school)}
+        />
       ) : null}
       <ProfileClient />
     </div>

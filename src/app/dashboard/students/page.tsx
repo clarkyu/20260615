@@ -16,7 +16,10 @@ export default async function StudentsPage() {
   const classes = await prisma.classGroup.findMany({
     where: { schoolId: me.school.id },
     orderBy: { name: 'asc' },
-    include: { _count: { select: { members: true } } },
+    include: {
+      _count: { select: { members: true } },
+      major: { include: { department: { select: { name: true } } } },
+    },
   })
 
   return (
@@ -40,8 +43,8 @@ export default async function StudentsPage() {
               classes={classes.map((c) => ({
                 id: c.id,
                 name: c.name,
-                department: c.department,
-                major: c.major,
+                department: c.major?.department.name ?? null,
+                major: c.major?.name ?? null,
                 grade: c.grade,
                 count: c._count.members,
               }))}
