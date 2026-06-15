@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, FileSpreadsheet, Pencil } from 'lucide-react'
+import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck } from 'lucide-react'
 import { runGrading, overrideScore, getSubmissionVideoUrl } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge, statusTone } from '@/components/ui/badge'
+import { GradeFocus } from './grade-focus'
 
 interface Row {
   id: number
@@ -58,6 +59,7 @@ export function GradingClient(props: {
   const [editing, setEditing] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [focusIdx, setFocusIdx] = useState<number | null>(null)
 
   const effPerception = advanced ? perceptionModel : preset?.perceptionModel ?? perceptionModel
   const effJudge = advanced ? judgeModel : preset?.judgeModel ?? judgeModel
@@ -188,8 +190,19 @@ export function GradingClient(props: {
       {error ? <FormMessage>{error}</FormMessage> : null}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">{t('grade.subTitle')}</CardTitle>
+          {props.rows.length > 0 ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                const first = visibleRows.findIndex((r) => r.status === 'UPLOADED' || r.status === 'FLAGGED')
+                setFocusIdx(first >= 0 ? first : 0)
+              }}
+            >
+              <ClipboardCheck className="h-4 w-4" />{t('grade.focus')}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-2">
           {props.rows.length === 0 ? (
@@ -245,6 +258,19 @@ export function GradingClient(props: {
           )}
         </CardContent>
       </Card>
+
+      {focusIdx !== null && visibleRows[focusIdx] ? (
+        <GradeFocus
+          rows={visibleRows}
+          index={focusIdx}
+          setIndex={setFocusIdx}
+          onClose={() => setFocusIdx(null)}
+          perceptionModel={effPerception}
+          judgeModel={effJudge}
+          rubric={rubric}
+          onChanged={() => router.refresh()}
+        />
+      ) : null}
     </div>
   )
 }
