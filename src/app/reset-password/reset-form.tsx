@@ -8,7 +8,7 @@ import { useT } from '@/components/i18n-provider'
 import { AuthShell } from '@/components/auth-shell'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 
 export function ResetForm({ token }: { token: string }) {
@@ -29,11 +29,11 @@ export function ResetForm({ token }: { token: string }) {
         <input type="hidden" name="token" value={token} />
         <div className="space-y-1.5">
           <Label htmlFor="password">{t('reset.newPw')}</Label>
-          <Input id="password" name="password" type="password" autoComplete="new-password" required minLength={8} />
+          <PasswordInput id="password" name="password" autoComplete="new-password" required minLength={8} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="confirmPassword">{t('reset.confirmPw')}</Label>
-          <Input id="confirmPassword" name="confirmPassword" type="password" autoComplete="new-password" required minLength={8} />
+          <PasswordInput id="confirmPassword" name="confirmPassword" autoComplete="new-password" required minLength={8} />
         </div>
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
         {state?.success ? <FormMessage tone="success">{t('reset.updated')}</FormMessage> : null}

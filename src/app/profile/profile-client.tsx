@@ -7,7 +7,7 @@ import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 
 export function ProfileClient() {
@@ -31,15 +31,15 @@ export function ProfileClient() {
           <form action={action} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="currentPassword">{t('prof.currentPw')}</Label>
-              <Input id="currentPassword" name="currentPassword" type="password" required />
+              <PasswordInput id="currentPassword" name="currentPassword" required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="newPassword">{t('prof.newPw')}</Label>
-              <Input id="newPassword" name="newPassword" type="password" required minLength={8} />
+              <PasswordInput id="newPassword" name="newPassword" required minLength={8} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirmPassword">{t('prof.confirmPw')}</Label>
-              <Input id="confirmPassword" name="confirmPassword" type="password" required minLength={8} />
+              <PasswordInput id="confirmPassword" name="confirmPassword" required minLength={8} />
             </div>
             {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
             <Button type="submit" disabled={pending} size="lg" className="w-full">

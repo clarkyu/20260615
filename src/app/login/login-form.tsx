@@ -10,6 +10,7 @@ import { FormMessage } from '@/components/form-message'
 import { SchoolPicker } from '@/components/school-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 
 export function LoginForm({ next, schools }: { next: string; schools: { id: number; name: string }[] }) {
@@ -51,7 +52,7 @@ export function LoginForm({ next, schools }: { next: string; schools: { id: numb
         )}
         <div className="space-y-1.5">
           <Label htmlFor="password">{t('password')}</Label>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          <PasswordInput id="password" name="password" autoComplete="current-password" required />
         </div>
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
         <Button type="submit" disabled={isPending} size="lg" className="w-full">
