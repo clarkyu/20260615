@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
 
 const PENDING: SubmissionStatus[] = ['UPLOADED', 'FLAGGED']
@@ -52,12 +53,12 @@ export default async function DashboardPage() {
   const needRows = ids.length
     ? await prisma.assignment.findMany({
         where: { id: { in: ids } },
-        select: { id: true, title: true, offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } } },
+        select: { id: true, title: true, category: true, offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } } },
       })
     : []
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows
-    .map((a) => ({ id: a.id, title: a.title, course: a.offering.course.name, cls: a.offering.class.name, pending: countById.get(a.id) ?? 0 }))
+    .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, pending: countById.get(a.id) ?? 0 }))
     .sort((a, b) => b.pending - a.pending)
 
   const stats = [
@@ -143,6 +144,7 @@ export default async function DashboardPage() {
               <Card className="tap hover:shadow-card">
                 <CardContent className="flex items-center gap-3 p-4">
                   <div className="min-w-0 flex-1">
+                    {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
                     <p className="truncate font-semibold leading-snug">{a.title}</p>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">{a.course} · {a.cls}</p>
                   </div>

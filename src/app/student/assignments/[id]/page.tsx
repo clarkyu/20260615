@@ -40,6 +40,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
     <SubmissionFlow
       assignmentId={assignment.id}
       title={assignment.title}
+      category={assignment.category}
       instructions={assignment.instructions}
       sentences={assignment.sentences.map((s) => ({ order: s.order, text: s.text }))}
       requireEyesClosed={assignment.requireEyesClosed}

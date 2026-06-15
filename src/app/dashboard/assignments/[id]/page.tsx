@@ -62,6 +62,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       <GradingClient
         assignmentId={assignment.id}
         title={assignment.title}
+        category={assignment.category}
         sentenceCount={assignment._count.sentences}
         classes={[{ id: assignment.offering.class.id, name: assignment.offering.class.name }]}
         rows={rows}

@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
 export default async function OfferingPage({ params }: { params: Promise<{ offeringId: string }> }) {
   const { offeringId: oid } = await params
@@ -67,6 +68,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
             <Card className="tap hover:shadow-card">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
+                  {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
                   <p className="font-semibold leading-snug">{a.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {a._count.sentences} {t('asg.sentences')} · {a._count.submissions} {t('asg.submissions')}
