@@ -1,50 +1,66 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { GraduationCap, BookOpenCheck, ChevronRight } from 'lucide-react'
 import { getCurrentUser, homePathForRole } from '@/lib/auth'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-
-const APP_NAME = process.env.APP_NAME || '英语背诵作业'
+import { getT } from '@/lib/i18n-server'
+import { Card, CardContent } from '@/components/ui/card'
 
 export default async function HomePage() {
   const user = await getCurrentUser()
   if (user) redirect(homePathForRole(user.role))
+  const { t } = await getT()
+  const APP_NAME = process.env.APP_NAME || '英语背诵作业'
+
+  const roles = [
+    {
+      href: '/student-login',
+      title: t('landing.studentTitle'),
+      desc: t('landing.studentDesc'),
+      cta: t('landing.studentCta'),
+      icon: GraduationCap,
+      accent: 'bg-primary text-primary-foreground',
+    },
+    {
+      href: '/login',
+      title: t('landing.teacherTitle'),
+      desc: t('landing.teacherDesc'),
+      cta: t('landing.teacherCta'),
+      icon: BookOpenCheck,
+      accent: 'bg-accent text-accent-foreground',
+    },
+  ]
 
   return (
     <div className="space-y-6 py-6">
-      <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">{APP_NAME}</h1>
-        <p className="text-sm text-muted-foreground">闭眼背诵 · 录制提交 · AI 评阅 · 按班级统计</p>
+      <div className="space-y-3 pt-6 text-center">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-primary text-2xl font-bold text-primary-foreground shadow-card">
+          背
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight">{APP_NAME}</h1>
+        <p className="text-sm text-muted-foreground">{t('landing.tagline')}</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">我是学生</CardTitle>
-          <CardDescription>用学校代码 + 学号登录，完成背诵作业。</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Link href="/student-login">
-            <Button className="w-full">学生登录</Button>
-          </Link>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">我是老师</CardTitle>
-          <CardDescription>导入名单、发布作业、AI 评阅并导出成绩。</CardDescription>
-        </CardHeader>
-        <CardContent className="flex gap-3">
-          <Link href="/login" className="flex-1">
-            <Button variant="outline" className="w-full">
-              老师登录
-            </Button>
-          </Link>
-          <Link href="/register" className="flex-1">
-            <Button className="w-full">注册</Button>
-          </Link>
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        {roles.map((r) => {
+          const Icon = r.icon
+          return (
+            <Link key={r.href} href={r.href}>
+              <Card className="tap transition-shadow hover:shadow-card">
+                <CardContent className="flex items-center gap-4 p-4">
+                  <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${r.accent}`}>
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold">{r.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">{r.desc}</p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </Link>
+          )
+        })}
+      </div>
     </div>
   )
 }

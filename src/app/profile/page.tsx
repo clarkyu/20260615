@@ -1,46 +1,44 @@
 import { requireAuth } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { getT } from '@/lib/i18n-server'
+import { Card, CardContent } from '@/components/ui/card'
 import { ProfileClient } from './profile-client'
 
 export default async function ProfilePage() {
   const session = await requireAuth()
   const prisma = await getDb()
-  const user = await prisma.user.findUnique({ where: { id: session.userId! } })
+  const { t, locale } = await getT()
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    include: { school: true, class: true },
+  })
   if (!user) {
-    // Session points at a deleted user — treat as signed out.
     const { logout } = await import('@/actions/auth')
     await logout()
     return null
   }
 
+  const rows = [
+    user.email ? { k: t('email'), v: user.email } : null,
+    user.studentNo ? { k: locale === 'zh' ? '学号' : 'Student ID', v: user.studentNo } : null,
+    { k: t('name'), v: user.name || '—' },
+    user.school ? { k: locale === 'zh' ? '学校' : 'School', v: user.school.name } : null,
+    user.class ? { k: locale === 'zh' ? '班级' : 'Class', v: user.class.name } : null,
+  ].filter(Boolean) as { k: string; v: string }[]
+
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="space-y-4 py-2">
+      <h1 className="text-2xl font-bold tracking-tight">{t('prof.account')}</h1>
       <Card>
-        <CardHeader>
-          <CardTitle>Account</CardTitle>
-          <CardDescription>Your account details.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Email</span>
-            <span className="font-medium">{user.email}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Name</span>
-            <span className="font-medium">{user.name || '—'}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Email verified</span>
-            <span className="font-medium">{user.emailVerified ? 'Yes' : 'No'}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Member since</span>
-            <span className="font-medium">{user.createdAt.toISOString().slice(0, 10)}</span>
-          </div>
+        <CardContent className="divide-y divide-border/60 p-0">
+          {rows.map((r) => (
+            <div key={r.k} className="flex items-center justify-between gap-4 px-5 py-3.5 text-sm">
+              <span className="text-muted-foreground">{r.k}</span>
+              <span className="font-medium">{r.v}</span>
+            </div>
+          ))}
         </CardContent>
       </Card>
-
       <ProfileClient />
     </div>
   )

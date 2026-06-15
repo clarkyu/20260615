@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
+import { BookOpenCheck } from 'lucide-react'
 import { login, resendVerification } from '@/actions/auth'
+import { useT } from '@/components/i18n-provider'
 import { AuthShell } from '@/components/auth-shell'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -10,70 +12,60 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export function LoginForm({ next }: { next: string }) {
+  const t = useT()
   const [email, setEmail] = useState('')
   const [state, action, isPending] = useActionState(login, null)
   const [resendState, resendAction, resendPending] = useActionState(resendVerification, null)
 
   return (
     <AuthShell
-      title="Sign in"
-      description="Welcome back. Sign in with your email and password."
+      icon={<BookOpenCheck className="h-7 w-7" />}
+      title={t('tlogin.title')}
+      description={t('tlogin.desc')}
       footer={
         <>
-          Don&apos;t have an account?{' '}
-          <Link href={`/register?next=${encodeURIComponent(next)}`} className="font-medium text-foreground hover:underline">
-            Register
+          {t('tlogin.noAccount')}{' '}
+          <Link href={`/register?next=${encodeURIComponent(next)}`} className="font-semibold text-primary">
+            {t('register')}
           </Link>
         </>
       }
     >
       <form action={action} className="space-y-4">
         <input type="hidden" name="redirectTo" value={next} />
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-          />
+        <div className="space-y-1.5">
+          <Label htmlFor="email">{t('email')}</Label>
+          <Input id="email" name="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required placeholder="Your password" />
+        <div className="space-y-1.5">
+          <Label htmlFor="password">{t('password')}</Label>
+          <Input id="password" name="password" type="password" autoComplete="current-password" required />
         </div>
-
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-
-        <Button type="submit" disabled={isPending} className="w-full">
-          {isPending ? 'Signing in…' : 'Sign in'}
+        <Button type="submit" disabled={isPending} size="lg" className="w-full">
+          {isPending ? t('tlogin.signingIn') : t('signIn')}
         </Button>
       </form>
 
       {state?.needsVerification ? (
-        <form action={resendAction} className="space-y-2 border-t pt-4">
+        <form action={resendAction} className="space-y-2 border-t border-border/60 pt-4">
           <input type="hidden" name="email" value={email} />
-          <p className="text-sm text-muted-foreground">
-            Your email isn&apos;t verified yet. We can send the verification link again.
-          </p>
-          {resendState?.success ? (
-            <FormMessage tone="success">If that account exists, a new verification link is on its way.</FormMessage>
-          ) : null}
+          <p className="text-sm text-muted-foreground">{t('tlogin.needVerify')}</p>
+          {resendState?.success ? <FormMessage tone="success">{t('tlogin.resent')}</FormMessage> : null}
           <Button type="submit" variant="outline" disabled={resendPending} className="w-full">
-            {resendPending ? 'Sending…' : 'Resend verification email'}
+            {resendPending ? t('loading') : t('tlogin.resend')}
           </Button>
         </form>
       ) : null}
 
-      <p className="text-center text-sm">
-        <Link href="/forgot-password" className="text-muted-foreground hover:text-foreground hover:underline">
-          Forgot your password?
+      <div className="flex items-center justify-between text-sm">
+        <Link href="/forgot-password" className="text-muted-foreground hover:text-foreground">
+          {t('tlogin.forgot')}
         </Link>
-      </p>
+        <Link href="/student-login" className="text-muted-foreground hover:text-foreground">
+          {t('slogin.imStudent')}
+        </Link>
+      </div>
     </AuthShell>
   )
 }

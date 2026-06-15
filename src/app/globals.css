@@ -2,46 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 240 33% 99%;
+    --foreground: 224 39% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --card-foreground: 224 39% 12%;
+    --primary: 243 75% 59%; /* indigo */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 24% 96%;
+    --secondary-foreground: 224 30% 20%;
+    --muted: 240 20% 96%;
+    --muted-foreground: 224 12% 46%;
+    --accent: 243 75% 96%;
+    --accent-foreground: 243 65% 40%;
+    --success: 152 60% 42%;
+    --warning: 32 90% 50%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 18% 90%;
+    --input: 240 18% 90%;
+    --ring: 243 75% 59%;
+    --radius: 1rem;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5.9%;
-    --card-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 50.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: 226 36% 8%;
+    --foreground: 220 30% 96%;
+    --card: 226 30% 12%;
+    --card-foreground: 220 30% 96%;
+    --primary: 243 80% 70%;
+    --primary-foreground: 226 40% 10%;
+    --secondary: 226 24% 18%;
+    --secondary-foreground: 220 25% 92%;
+    --muted: 226 24% 16%;
+    --muted-foreground: 220 14% 62%;
+    --accent: 243 40% 24%;
+    --accent-foreground: 243 80% 86%;
+    --success: 152 55% 50%;
+    --warning: 32 90% 58%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 226 22% 22%;
+    --input: 226 22% 24%;
+    --ring: 243 80% 70%;
   }
 }
 
@@ -49,8 +54,46 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    @apply bg-background text-foreground;
-    min-height: 100vh;
+    @apply bg-background text-foreground antialiased;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+  /* Respect device safe areas (notch / home indicator) */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@layer utilities {
+  .shadow-card {
+    box-shadow: 0 1px 2px 0 hsl(224 39% 12% / 0.04), 0 8px 24px -12px hsl(243 50% 40% / 0.12);
+  }
+  .shadow-soft {
+    box-shadow: 0 1px 2px 0 hsl(224 39% 12% / 0.05);
+  }
+  .tap {
+    @apply transition-transform active:scale-[0.97];
+  }
+  .animate-in-up {
+    animation: inUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes inUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

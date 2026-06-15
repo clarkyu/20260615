@@ -1,6 +1,6 @@
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// Small inline banner for action results. `tone` controls the colour.
 export function FormMessage({
   tone = 'error',
   children,
@@ -8,17 +8,19 @@ export function FormMessage({
   tone?: 'error' | 'success'
   children: React.ReactNode
 }) {
+  const Icon = tone === 'error' ? AlertCircle : CheckCircle2
   return (
-    <p
+    <div
       role={tone === 'error' ? 'alert' : 'status'}
       className={cn(
-        'rounded-md border px-3 py-2 text-sm',
+        'flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-sm',
         tone === 'error'
-          ? 'border-destructive/30 bg-destructive/10 text-destructive'
-          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+          ? 'border-destructive/25 bg-destructive/8 text-destructive'
+          : 'border-success/25 bg-success/10 text-success',
       )}
     >
-      {children}
-    </p>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{children}</span>
+    </div>
   )
 }

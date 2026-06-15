@@ -2,48 +2,37 @@
 
 import { useActionState } from 'react'
 import Link from 'next/link'
+import { MailCheck } from 'lucide-react'
 import { verifyEmail } from '@/actions/auth'
+import { useT } from '@/components/i18n-provider'
 import { AuthShell } from '@/components/auth-shell'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 
 export function VerifyForm({ token }: { token: string }) {
-  // On success the action redirects home, so we only render the button/error
-  // states here. The action (not page render) consumes the token, which keeps
-  // email-client link prefetchers from spending it.
+  const t = useT()
   const [state, action, isPending] = useActionState(verifyEmail, null)
+  const footer = (
+    <Link href="/login" className="font-semibold text-primary">
+      {t('verify.backSignIn')}
+    </Link>
+  )
 
   if (!token) {
     return (
-      <AuthShell
-        title="Verify your email"
-        description="This link is missing its token."
-        footer={
-          <Link href="/login" className="font-medium text-foreground hover:underline">
-            Back to sign in
-          </Link>
-        }
-      >
-        <FormMessage>The verification link is invalid. Please use the most recent email we sent you.</FormMessage>
+      <AuthShell icon={<MailCheck className="h-7 w-7" />} title={t('verify.title')} footer={footer}>
+        <FormMessage>{t('verify.missing')}</FormMessage>
       </AuthShell>
     )
   }
 
   return (
-    <AuthShell
-      title="Verify your email"
-      description="Confirm your email address to activate your account."
-      footer={
-        <Link href="/login" className="font-medium text-foreground hover:underline">
-          Back to sign in
-        </Link>
-      }
-    >
+    <AuthShell icon={<MailCheck className="h-7 w-7" />} title={t('verify.title')} description={t('verify.desc')} footer={footer}>
       <form action={action} className="space-y-4">
         <input type="hidden" name="token" value={token} />
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-        <Button type="submit" disabled={isPending} className="w-full">
-          {isPending ? 'Verifying…' : 'Verify my email'}
+        <Button type="submit" disabled={isPending} size="lg" className="w-full">
+          {isPending ? t('verify.verifying') : t('verify.btn')}
         </Button>
       </form>
     </AuthShell>

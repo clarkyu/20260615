@@ -2,7 +2,9 @@
 
 import { useActionState } from 'react'
 import Link from 'next/link'
+import { GraduationCap } from 'lucide-react'
 import { studentLogin } from '@/actions/auth'
+import { useT } from '@/components/i18n-provider'
 import { AuthShell } from '@/components/auth-shell'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -10,34 +12,36 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export default function StudentLoginPage() {
+  const t = useT()
   const [state, action, isPending] = useActionState(studentLogin, null)
 
   return (
     <AuthShell
-      title="学生登录"
-      description="用学校代码 + 学号登录。初始密码为你的学号，登录后需要修改。"
+      icon={<GraduationCap className="h-7 w-7" />}
+      title={t('slogin.title')}
+      description={t('slogin.desc')}
       footer={
-        <Link href="/login" className="font-medium text-foreground hover:underline">
-          我是老师 →
+        <Link href="/login" className="font-semibold text-primary">
+          {t('slogin.imTeacher')}
         </Link>
       }
     >
       <form action={action} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="schoolCode">学校代码</Label>
-          <Input id="schoolCode" name="schoolCode" autoCapitalize="characters" required placeholder="例如 PKU2026" />
+        <div className="space-y-1.5">
+          <Label htmlFor="schoolCode">{t('slogin.schoolCode')}</Label>
+          <Input id="schoolCode" name="schoolCode" autoCapitalize="characters" required placeholder="WHPA" />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="studentNo">学号</Label>
-          <Input id="studentNo" name="studentNo" required placeholder="你的学号" />
+        <div className="space-y-1.5">
+          <Label htmlFor="studentNo">{t('slogin.studentId')}</Label>
+          <Input id="studentNo" name="studentNo" required inputMode="numeric" />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="password">密码</Label>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required placeholder="初始密码为学号" />
+        <div className="space-y-1.5">
+          <Label htmlFor="password">{t('password')}</Label>
+          <Input id="password" name="password" type="password" autoComplete="current-password" required placeholder={t('slogin.initialPw')} />
         </div>
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-        <Button type="submit" disabled={isPending} className="w-full">
-          {isPending ? '登录中…' : '登录'}
+        <Button type="submit" disabled={isPending} size="lg" className="w-full">
+          {isPending ? t('loading') : t('signIn')}
         </Button>
       </form>
     </AuthShell>

@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { CheckCircle2 } from 'lucide-react'
 import { getUploadUrl, finalizeSubmission } from '@/actions/submissions'
+import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 
 interface Sentence {
   order: number
@@ -27,9 +29,7 @@ function pickMimeType(): { mime: string; ext: string } {
     { mime: 'video/mp4', ext: 'mp4' },
   ]
   const MR = typeof window !== 'undefined' ? window.MediaRecorder : undefined
-  for (const c of candidates) {
-    if (MR && MR.isTypeSupported(c.mime)) return c
-  }
+  for (const c of candidates) if (MR && MR.isTypeSupported(c.mime)) return c
   return { mime: '', ext: 'webm' }
 }
 
@@ -44,6 +44,7 @@ export function Recorder(props: {
   latestFeedback: string | null
   windowState: 'open' | 'not-open' | 'closed'
 }) {
+  const t = useT()
   const [phase, setPhase] = useState<Phase>('review')
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -61,12 +62,9 @@ export function Recorder(props: {
     setViolations((v) => [...v, { type, at: Date.now() }])
   }, [])
 
-  // While recording, leaving the page/app counts as a violation.
   useEffect(() => {
     if (phase !== 'recording') return
-    const onHide = () => {
-      if (document.visibilityState === 'hidden') addViolation('visibility-hidden')
-    }
+    const onHide = () => { if (document.visibilityState === 'hidden') addViolation('visibility-hidden') }
     const onBlur = () => addViolation('window-blur')
     document.addEventListener('visibilitychange', onHide)
     window.addEventListener('blur', onBlur)
@@ -77,7 +75,7 @@ export function Recorder(props: {
   }, [phase, addViolation])
 
   const cleanupStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current?.getTracks().forEach((tr) => tr.stop())
     streamRef.current = null
     if (timerRef.current) clearInterval(timerRef.current)
   }, [])
@@ -87,7 +85,7 @@ export function Recorder(props: {
   const startRecording = useCallback(async () => {
     setError(null)
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setError('当前浏览器不支持摄像头录制，请用较新版本的 Chrome / Safari。')
+      setError(t('rec.noSupport'))
       return
     }
     try {
@@ -104,9 +102,7 @@ export function Recorder(props: {
       const { mime } = pickMimeType()
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
       chunksRef.current = []
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = () => {
         blobRef.current = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || 'video/webm' })
         setPhase('recorded')
@@ -125,12 +121,11 @@ export function Recorder(props: {
       setViolations([])
       timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
       setPhase('recording')
-      // Best-effort fullscreen to discourage leaving the app.
       document.documentElement.requestFullscreen?.().catch(() => {})
     } catch {
-      setError('无法访问摄像头/麦克风。请在浏览器中允许权限后重试。')
+      setError(t('rec.noPermission'))
     }
-  }, [cleanupStream])
+  }, [cleanupStream, t])
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop()
@@ -147,13 +142,13 @@ export function Recorder(props: {
     try {
       const res = await getUploadUrl(props.assignmentId, blob.type || 'video/webm', fileExt)
       if ('error' in res || !res.url) {
-        setError(res.error ?? '获取上传地址失败')
+        setError(res.error ?? 'upload failed')
         setPhase('recorded')
         return
       }
       const put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type || 'video/webm' } })
       if (!put.ok) {
-        setError('上传失败，请检查网络后重试。')
+        setError(t('rec.uploadFail'))
         setPhase('recorded')
         return
       }
@@ -165,37 +160,22 @@ export function Recorder(props: {
       }
       setPhase('done')
     } catch {
-      setError('提交出错，请重试。')
+      setError(t('rec.uploadFail'))
       setPhase('recorded')
     }
-  }, [props.assignmentId, elapsed, violations])
-
-  if (props.windowState !== 'open') {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{props.title}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <FormMessage>{props.windowState === 'not-open' ? '作业还未开放。' : '作业已截止。'}</FormMessage>
-          <Link href="/student">
-            <Button variant="outline" className="w-full">返回</Button>
-          </Link>
-        </CardContent>
-      </Card>
-    )
-  }
+  }, [props.assignmentId, elapsed, violations, t])
 
   if (phase === 'done') {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>提交成功 ✅</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">老师评阅后即可在作业列表查看成绩。</p>
-          <Link href="/student">
-            <Button className="w-full">返回作业列表</Button>
+        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+          <div className="grid h-14 w-14 place-items-center rounded-full bg-success/15 text-success">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <p className="text-lg font-bold">{t('rec.success')}</p>
+          <p className="text-sm text-muted-foreground">{t('rec.successDesc')}</p>
+          <Link href="/student" className="w-full">
+            <Button className="w-full">{t('sub.backToList')}</Button>
           </Link>
         </CardContent>
       </Card>
@@ -203,60 +183,47 @@ export function Recorder(props: {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{props.title}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {props.latestStatus && props.latestStatus !== 'DRAFT' ? (
-            <p className="text-muted-foreground">
-              当前状态：已提交。{props.latestScore != null ? `得分 ${props.latestScore}。` : ''} 剩余可提交次数：{props.attemptsLeft}。
-            </p>
-          ) : null}
+        <CardContent className="space-y-3 p-4 text-sm">
           <p className="text-muted-foreground">
-            要求：{props.requireEyesClosed ? '闭眼背诵' : '背诵'}、一镜到底、全程不要离开本页面。录制过程中切到其他应用会被记为违规。
+            {t('rec.requirement', { eyes: props.requireEyesClosed ? t('rec.eyesClosed') : t('rec.recite') })}
           </p>
           <details>
-            <summary className="cursor-pointer font-medium">先复习要背的 {props.sentences.length} 句（录制时请收起）</summary>
-            <ol className="mt-2 list-decimal space-y-1 pl-5">
-              {props.sentences.map((s) => (
-                <li key={s.order}>{s.text}</li>
-              ))}
+            <summary className="cursor-pointer font-medium text-foreground">{t('rec.review', { n: props.sentences.length })}</summary>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+              {props.sentences.map((s) => <li key={s.order}>{s.text}</li>)}
             </ol>
           </details>
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="space-y-3 pt-6">
-          <video ref={videoRef} playsInline className="aspect-video w-full rounded-md bg-black" />
+        <CardContent className="space-y-3 p-4">
+          <video ref={videoRef} playsInline className="aspect-video w-full rounded-xl bg-black" />
           {phase === 'recording' ? (
-            <p className="text-center text-sm font-medium text-red-500">● 录制中 {elapsed}s{violations.length > 0 ? ` · ⚠️ ${violations.length} 次离开` : ''}</p>
+            <p className="text-center text-sm font-semibold text-destructive">
+              ● {t('rec.recording')} {elapsed}s{violations.length > 0 ? ` · ⚠️ ${violations.length} ${t('rec.leftTimes')}` : ''}
+            </p>
           ) : null}
-
           {error ? <FormMessage>{error}</FormMessage> : null}
 
           {props.attemptsLeft <= 0 && phase === 'review' ? (
-            <FormMessage>提交次数已用完。</FormMessage>
+            <FormMessage>{t('rec.usedUp')}</FormMessage>
           ) : phase === 'review' ? (
-            <Button className="w-full" onClick={startRecording}>开始录制</Button>
+            <Button className="w-full" size="lg" onClick={startRecording}>{t('rec.start')}</Button>
           ) : phase === 'recording' ? (
-            <Button className="w-full" variant="destructive" onClick={stopRecording}>停止录制</Button>
+            <Button className="w-full" size="lg" variant="destructive" onClick={stopRecording}>{t('rec.stop')}</Button>
           ) : phase === 'recorded' ? (
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setPhase('review')}>重录</Button>
-              <Button className="flex-1" onClick={submit}>提交</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setPhase('review')}>{t('rec.rerecord')}</Button>
+              <Button className="flex-1" onClick={submit}>{t('submit')}</Button>
             </div>
           ) : (
-            <Button className="w-full" disabled>上传中…</Button>
+            <Button className="w-full" disabled>{t('rec.uploading')}</Button>
           )}
         </CardContent>
       </Card>
-
-      <Link href="/student" className="block text-center text-sm text-muted-foreground hover:text-foreground">
-        返回作业列表
-      </Link>
     </div>
   )
 }

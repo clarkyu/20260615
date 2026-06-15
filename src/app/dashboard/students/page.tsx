@@ -1,12 +1,14 @@
 import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { getT } from '@/lib/i18n-server'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ImportClient } from './import-client'
 
 export default async function StudentsPage() {
   const user = await requireStaff()
   const prisma = await getDb()
+  const { t } = await getT()
   const me = await prisma.user.findUnique({ where: { id: user.userId }, include: { school: true } })
   if (!me?.school) redirect('/dashboard')
 
@@ -17,27 +19,26 @@ export default async function StudentsPage() {
   })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 py-2">
       <div>
-        <h1 className="text-xl font-bold">学生名单</h1>
-        <p className="text-sm text-muted-foreground">导入后，学生用「学校代码 {me.school.code} + 学号」登录，初始密码为学号。</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t('stu.title')}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t('stu.loginHint', { code: me.school.code })}</p>
       </div>
 
       <ImportClient />
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">班级（{classes.length}）</CardTitle>
-          <CardDescription>导入名单时按「班级」列自动建班。</CardDescription>
+          <CardTitle className="text-base">{t('stu.classes')}（{classes.length}）</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm">
+        <CardContent className="space-y-0 text-sm">
           {classes.length === 0 ? (
-            <p className="text-muted-foreground">还没有班级，先导入名单。</p>
+            <p className="text-muted-foreground">{t('stu.noClasses')}</p>
           ) : (
             classes.map((c) => (
-              <div key={c.id} className="flex justify-between border-b py-1 last:border-0">
-                <span>{c.name}{c.major ? ` · ${c.major}` : ''}</span>
-                <span className="text-muted-foreground">{c._count.members} 人</span>
+              <div key={c.id} className="flex justify-between border-b border-border/60 py-2 last:border-0">
+                <span className="font-medium">{c.name}{c.major ? ` · ${c.major}` : ''}</span>
+                <span className="text-muted-foreground">{c._count.members} {t('stu.people')}</span>
               </div>
             ))
           )}

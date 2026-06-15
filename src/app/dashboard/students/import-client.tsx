@@ -2,13 +2,16 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { UploadCloud } from 'lucide-react'
 import { previewRoster, commitRoster } from '@/actions/students'
 import type { RosterRow } from '@/lib/roster'
+import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
 
 export function ImportClient() {
+  const t = useT()
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -26,10 +29,7 @@ export function ImportClient() {
   }
 
   function onPreview() {
-    if (!file) {
-      setError('请选择 Excel 文件（.xlsx）')
-      return
-    }
+    if (!file) return setError(t('stu.import'))
     reset()
     startTransition(async () => {
       const fd = new FormData()
@@ -51,7 +51,7 @@ export function ImportClient() {
       const res = await commitRoster(null, fd)
       if (res.error) setError(res.error)
       else {
-        setResult(`导入完成：新增 ${res.created} 人，更新 ${res.updated} 人，跳过 ${res.skipped} 行，涉及班级 ${res.classesTouched} 个。`)
+        setResult(`+${res.created} · ↻${res.updated} · ⏭${res.skipped}`)
         setRows(null)
         router.refresh()
       }
@@ -61,57 +61,55 @@ export function ImportClient() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">导入名单</CardTitle>
-        <CardDescription>Excel 需含「学号、姓名、班级」列，可选「院系、专业」。先预览再确认导入。</CardDescription>
+        <CardTitle className="text-base">{t('stu.import')}</CardTitle>
+        <CardDescription>{t('stu.importDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null)
-            reset()
-          }}
-          className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-input file:bg-secondary file:px-3 file:py-1.5 file:text-sm"
-        />
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-secondary/40 px-4 py-3 text-sm">
+          <UploadCloud className="h-5 w-5 text-muted-foreground" />
+          <span className="flex-1 truncate text-muted-foreground">{file ? file.name : 'Excel (.xlsx)'}</span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); reset() }}
+          />
+        </label>
 
         {error ? <FormMessage>{error}</FormMessage> : null}
         {result ? <FormMessage tone="success">{result}</FormMessage> : null}
 
         <div className="flex gap-3">
           <Button variant="outline" className="flex-1" onClick={onPreview} disabled={pending || !file}>
-            {pending && !rows ? '解析中…' : '预览'}
+            {pending && !rows ? t('stu.parsing') : t('stu.preview')}
           </Button>
           {rows && counts && counts.valid > 0 ? (
             <Button className="flex-1" onClick={onCommit} disabled={pending}>
-              {pending ? '导入中…' : `确认导入 ${counts.valid} 人`}
+              {pending ? t('loading') : `${t('stu.confirm')} ${counts.valid}`}
             </Button>
           ) : null}
         </div>
 
         {rows && counts ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              共 {rows.length} 行，可导入 {counts.valid}，有问题 {counts.error}。
-            </p>
-            <div className="max-h-72 overflow-auto rounded-md border text-sm">
+          <div className="overflow-hidden rounded-xl border border-border">
+            <div className="max-h-72 overflow-auto text-sm">
               <table className="w-full">
                 <thead className="sticky top-0 bg-secondary text-left text-xs">
                   <tr>
-                    <th className="px-2 py-1">学号</th>
-                    <th className="px-2 py-1">姓名</th>
-                    <th className="px-2 py-1">班级</th>
-                    <th className="px-2 py-1">问题</th>
+                    <th className="px-3 py-2">{t('stu.colNo')}</th>
+                    <th className="px-3 py-2">{t('stu.colName')}</th>
+                    <th className="px-3 py-2">{t('stu.colClass')}</th>
+                    <th className="px-3 py-2">{t('stu.colIssue')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.slice(0, 200).map((r) => (
-                    <tr key={r.rowNumber} className={r.error ? 'bg-destructive/10' : ''}>
-                      <td className="px-2 py-1">{r.studentNo}</td>
-                      <td className="px-2 py-1">{r.name}</td>
-                      <td className="px-2 py-1">{r.className}</td>
-                      <td className="px-2 py-1 text-destructive">{r.error ?? ''}</td>
+                    <tr key={r.rowNumber} className={r.error ? 'bg-destructive/8' : 'border-t border-border/50'}>
+                      <td className="px-3 py-1.5">{r.studentNo}</td>
+                      <td className="px-3 py-1.5">{r.name}</td>
+                      <td className="px-3 py-1.5">{r.className}</td>
+                      <td className="px-3 py-1.5 text-destructive">{r.error ?? ''}</td>
                     </tr>
                   ))}
                 </tbody>
