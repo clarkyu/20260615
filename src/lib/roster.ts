@@ -52,6 +52,15 @@ function toUint8(buffer: ArrayBuffer | Buffer): Uint8Array {
 }
 
 export function parseRoster(buffer: ArrayBuffer | Buffer): ParsedRoster {
+  try {
+    return parseRosterUnsafe(buffer)
+  } catch (err) {
+    console.error('[parseRoster] failed:', err)
+    return { rows: [], validCount: 0, errorCount: 0, headerError: '解析文件出错，请确认是有效的 .xls / .xlsx 名单。' }
+  }
+}
+
+function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
   let wb: XLSX.WorkBook
   try {
     wb = XLSX.read(toUint8(buffer), { type: 'array' })

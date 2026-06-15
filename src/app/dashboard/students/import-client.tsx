@@ -29,16 +29,21 @@ export function ImportClient() {
   }
 
   function onPreview() {
-    if (!file) return setError(t('stu.import'))
+    if (!file) return setError(t('err.pickExcel'))
     reset()
     startTransition(async () => {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await previewRoster(null, fd)
-      if (res.error) setError(res.error)
-      else {
-        setRows(res.rows ?? [])
-        setCounts({ valid: res.validCount ?? 0, error: res.errorCount ?? 0 })
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await previewRoster(null, fd)
+        if (res.error) setError(res.error)
+        else {
+          setRows(res.rows ?? [])
+          setCounts({ valid: res.validCount ?? 0, error: res.errorCount ?? 0 })
+        }
+      } catch (e) {
+        console.error('[import preview]', e)
+        setError(t('err.importFail'))
       }
     })
   }
@@ -46,14 +51,19 @@ export function ImportClient() {
   function onCommit() {
     if (!file) return
     startTransition(async () => {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await commitRoster(null, fd)
-      if (res.error) setError(res.error)
-      else {
-        setResult(`+${res.created} · ↻${res.updated} · ⏭${res.skipped}`)
-        setRows(null)
-        router.refresh()
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await commitRoster(null, fd)
+        if (res.error) setError(res.error)
+        else {
+          setResult(`+${res.created} · ↻${res.updated} · ⏭${res.skipped}`)
+          setRows(null)
+          router.refresh()
+        }
+      } catch (e) {
+        console.error('[import commit]', e)
+        setError(t('err.importFail'))
       }
     })
   }

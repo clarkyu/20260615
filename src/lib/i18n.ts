@@ -273,6 +273,7 @@ const zh: Dict = {
   'err.scoreRange': '请输入 0–100 的分数',
   'err.noVideo': '没有视频。',
   'err.videoUrlFail': '获取视频地址失败。',
+  'err.importFail': '导入出错，请稍后重试或换一个文件。',
 }
 
 const en: Dict = {
@@ -526,6 +527,7 @@ const en: Dict = {
   'err.scoreRange': 'Enter a score from 0 to 100',
   'err.noVideo': 'No video.',
   'err.videoUrlFail': 'Could not get the video URL.',
+  'err.importFail': 'Import failed. Try again or use another file.',
 }
 
 export const dictionaries: Record<Locale, Dict> = { zh, en }
