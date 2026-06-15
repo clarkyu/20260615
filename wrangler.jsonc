@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "recitation-db",
-      "database_id": "PLACEHOLDER_RUN_wrangler_d1_create",
+      "database_id": "32a87766-2835-448c-a56e-44a08b598c3e",
       "migrations_dir": "d1/migrations"
     }
   ],
@@ -22,6 +22,11 @@
       "bucket_name": "recitations"
     }
   ],
+  "vars": {
+    "APP_NAME": "英语背诵作业",
+    "APP_URL": "https://recitation.iclarks.workers.dev",
+    "MINIMAX_BASE_URL": "https://api.minimax.chat/v1"
+  },
   "observability": {
     "enabled": true
   }
