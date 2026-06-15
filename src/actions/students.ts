@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
-import { hashPassword } from '@/lib/password'
+import { hashPassword, BULK_HASH_ITERATIONS } from '@/lib/password'
 import { parseRoster, type RosterRow } from '@/lib/roster'
 import { getT } from '@/lib/i18n-server'
 
@@ -52,50 +52,60 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
   if (parsed.headerError) return { error: parsed.headerError }
 
   const schoolId = user.schoolId
+  const valid = parsed.rows.filter((r) => !r.error)
+  const skipped = parsed.rows.length - valid.length
+
+  // 1) Ensure every class exists (bulk fetch + create only the missing ones).
+  const classNames = [...new Set(valid.map((r) => r.className))]
+  const existingClasses = await prisma.classGroup.findMany({ where: { schoolId, name: { in: classNames } } })
+  const classIdByName = new Map(existingClasses.map((c) => [c.name, c.id]))
+  for (const name of classNames) {
+    if (classIdByName.has(name)) continue
+    const rep = valid.find((r) => r.className === name)
+    const c = await prisma.classGroup.create({ data: { schoolId, name, department: rep?.department, major: rep?.major } })
+    classIdByName.set(name, c.id)
+  }
+
+  // 2) Which students already exist (one query).
+  const existing = await prisma.user.findMany({
+    where: { schoolId, role: 'STUDENT', studentNo: { in: valid.map((r) => r.studentNo) } },
+    select: { id: true, studentNo: true },
+  })
+  const idByNo = new Map(existing.map((e) => [e.studentNo!, e.id]))
+  const toCreate = valid.filter((r) => !idByNo.has(r.studentNo))
+  const toUpdate = valid.filter((r) => idByNo.has(r.studentNo))
+
+  // 3) Create new students in a single batch (lighter initial-password hash).
   let created = 0
-  let updated = 0
-  let skipped = 0
-  const classIds = new Set<number>()
+  if (toCreate.length > 0) {
+    const data = await Promise.all(
+      toCreate.map(async (r) => ({
+        role: 'STUDENT' as const,
+        schoolId,
+        classId: classIdByName.get(r.className)!,
+        studentNo: r.studentNo,
+        name: r.name,
+        department: r.department,
+        major: r.major,
+        passwordHash: await hashPassword(r.studentNo, BULK_HASH_ITERATIONS),
+        mustChangePassword: true,
+      })),
+    )
+    created = (await prisma.user.createMany({ data })).count
+  }
 
-  for (const row of parsed.rows) {
-    if (row.error) {
-      skipped++
-      continue
-    }
-    const cls = await prisma.classGroup.upsert({
-      where: { schoolId_name: { schoolId, name: row.className } },
-      update: { department: row.department, major: row.major },
-      create: { schoolId, name: row.className, department: row.department, major: row.major },
-    })
-    classIds.add(cls.id)
-
-    const existing = await prisma.user.findFirst({
-      where: { schoolId, studentNo: row.studentNo, role: 'STUDENT' },
-    })
-    if (existing) {
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: { name: row.name, classId: cls.id, department: row.department, major: row.major },
-      })
-      updated++
-    } else {
-      await prisma.user.create({
-        data: {
-          role: 'STUDENT',
-          schoolId,
-          classId: cls.id,
-          studentNo: row.studentNo,
-          name: row.name,
-          department: row.department,
-          major: row.major,
-          passwordHash: await hashPassword(row.studentNo),
-          mustChangePassword: true,
-        },
-      })
-      created++
-    }
+  // 4) Update existing students in one batched transaction.
+  if (toUpdate.length > 0) {
+    await prisma.$transaction(
+      toUpdate.map((r) =>
+        prisma.user.update({
+          where: { id: idByNo.get(r.studentNo)! },
+          data: { name: r.name, classId: classIdByName.get(r.className)!, department: r.department, major: r.major },
+        }),
+      ),
+    )
   }
 
   revalidatePath('/dashboard/students')
-  return { created, updated, skipped, classesTouched: classIds.size }
+  return { created, updated: toUpdate.length, skipped, classesTouched: classNames.length }
 }

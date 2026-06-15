@@ -34,11 +34,17 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0
 }
 
-export async function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string, iterations = ITERATIONS): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES))
-  const hash = await deriveBits(password, salt)
-  return `pbkdf2$${ITERATIONS}$${toB64(salt)}$${toB64(hash)}`
+  const hash = await deriveBits(password, salt, iterations)
+  return `pbkdf2$${iterations}$${toB64(salt)}$${toB64(hash)}`
 }
+
+// Lighter cost for bulk-provisioned initial passwords (which equal the student
+// ID and must be changed on first login). verifyPassword reads the iteration
+// count from the stored hash, so login works for any cost. Keeps mass imports
+// within the Workers CPU budget.
+export const BULK_HASH_ITERATIONS = 10_000
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const parts = stored.split('$')
