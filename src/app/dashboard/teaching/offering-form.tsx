@@ -1,6 +1,7 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useMemo, useState } from 'react'
+import { Search } from 'lucide-react'
 import { createOffering, updateOffering, deleteOffering } from '@/actions/offerings'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -61,20 +62,7 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
                 </select>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <Label>{t('teach.classes')}</Label>
-                <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
-                  {classes.map((c) => (
-                    <label
-                      key={c.id}
-                      className="tap flex cursor-pointer items-center gap-2 rounded-xl border border-input bg-background px-3 py-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent has-[:checked]:text-accent-foreground"
-                    >
-                      <input type="checkbox" name="classId" value={c.id} className="h-4 w-4 shrink-0 accent-primary" />
-                      <span className="truncate">{c.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <MultiClassPicker classes={classes} t={t} />
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -107,6 +95,76 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  )
+}
+
+// Multi-select class picker with a search box. Selection is kept in state and
+// mirrored to hidden inputs, so filtering the visible list never drops a pick.
+function MultiClassPicker({ classes, t }: { classes: { id: number; name: string }[]; t: (k: string, v?: Record<string, string | number>) => string }) {
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [q, setQ] = useState('')
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return needle ? classes.filter((c) => c.name.toLowerCase().includes(needle)) : classes
+  }, [classes, q])
+
+  function toggle(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{t('teach.classes')}</Label>
+        {selected.size > 0 ? (
+          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-muted-foreground hover:text-foreground">
+            {t('filter.selected', { n: selected.size })} · {t('filter.clear')}
+          </button>
+        ) : null}
+      </div>
+
+      {classes.length > 6 ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('filter.searchClass')} className="pl-9" />
+        </div>
+      ) : null}
+
+      {/* Hidden inputs carry every selected class, even those filtered out of view. */}
+      {[...selected].map((id) => (
+        <input key={id} type="hidden" name="classId" value={id} />
+      ))}
+
+      <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
+        {filtered.map((c) => {
+          const on = selected.has(c.id)
+          return (
+            <button
+              type="button"
+              key={c.id}
+              onClick={() => toggle(c.id)}
+              aria-pressed={on}
+              className={
+                'tap flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm ' +
+                (on ? 'border-primary bg-accent text-accent-foreground' : 'border-input bg-background')
+              }
+            >
+              <span className={'grid h-4 w-4 shrink-0 place-items-center rounded border ' + (on ? 'border-primary bg-primary text-primary-foreground' : 'border-input')}>
+                {on ? '✓' : ''}
+              </span>
+              <span className="truncate">{c.name}</span>
+            </button>
+          )
+        })}
+      </div>
+      {filtered.length === 0 ? <p className="py-2 text-center text-xs text-muted-foreground">{t('filter.none')}</p> : null}
     </div>
   )
 }
