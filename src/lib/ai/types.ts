@@ -67,6 +67,9 @@ export interface JudgeResult {
   score: number // 0..maxScore
   breakdown?: Record<string, number>
   feedback: string // detailed, learner-facing (Chinese)
+  // Model's self-rated certainty (0..1). Drives "AI-first grading": high-confidence
+  // clean submissions can skip the teacher queue; everything else is reviewed.
+  confidence?: number
   raw?: unknown
 }
 

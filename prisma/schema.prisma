@@ -218,6 +218,8 @@ model Submission {
   transcript      String?
   aiResult        String?
   aiScore         Float?
+  confidence      Float?
+  needsReview     Boolean   @default(false)
   teacherScore    Float?
   finalScore      Float?
   feedback        String?

@@ -5,12 +5,12 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
-import { gradeSubmission } from '@/lib/ai/grade'
 import { presignDownload, storageConfigured } from '@/lib/storage'
+import { autoGradeSubmission, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 
 type ActionState = { error?: string; success?: boolean }
 
-const MAX_SCORE = 100
+const MAX_SCORE = DEFAULT_MAX_SCORE
 
 // Ensures the submission belongs to a school the staff member manages.
 async function loadSubmissionForStaff(prisma: PrismaClient, submissionId: number, schoolId: number | null | undefined) {
@@ -36,49 +36,13 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   if (!submission) return { error: t('err.subNoAccess') }
   if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
-  let videoUrl: string | undefined
-  if (storageConfigured()) {
-    try {
-      videoUrl = await presignDownload(submission.videoKey)
-    } catch (err) {
-      console.error('[runGrading] presign download failed:', err)
-    }
-  }
-
-  await prisma.submission.update({ where: { id: submission.id }, data: { status: 'PROCESSING' } })
-
-  try {
-    const result = await gradeSubmission({
-      perceptionModelId: perceptionModel,
-      judgeModelId: judgeModel,
-      rubric,
-      maxScore: MAX_SCORE,
-      referenceSentences: submission.assignment.sentences.map((s) => ({ order: s.order, text: s.text })),
-      requireEyesClosed: submission.assignment.requireEyesClosed,
-      videoUrl,
-      recitedText: submission.recitedText ?? undefined,
-    })
-
-    await prisma.submission.update({
-      where: { id: submission.id },
-      data: {
-        status: 'GRADED',
-        perceptionModel: result.perceptionModel,
-        judgeModel: result.judgeModel,
-        transcript: result.perception.transcript,
-        aiResult: JSON.stringify(result),
-        aiScore: result.judge.score,
-        finalScore: submission.teacherScore ?? result.judge.score,
-        feedback: result.judge.feedback,
-        gradedById: user.userId,
-        gradedAt: new Date(),
-      },
-    })
-  } catch (err) {
-    console.error('[runGrading] grading failed:', err)
-    await prisma.submission.update({ where: { id: submission.id }, data: { status: 'FAILED' } })
-    return { error: err instanceof Error ? err.message : t('err.gradeFail') }
-  }
+  const res = await autoGradeSubmission(prisma, submission, {
+    perceptionModel,
+    judgeModel,
+    rubric,
+    graderUserId: user.userId,
+  })
+  if (!res.ok) return { error: res.error || t('err.gradeFail') }
 
   revalidatePath(`/dashboard/assignments/${submission.assignmentId}`)
   return { success: true }
@@ -125,6 +89,7 @@ export async function overrideScore(prevState: unknown, formData: FormData): Pro
       finalScore: score,
       feedback: feedback || submission.feedback,
       status: 'GRADED',
+      needsReview: false,
       gradedById: user.userId,
       gradedAt: new Date(),
     },

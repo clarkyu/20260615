@@ -61,6 +61,8 @@ class StubJudge implements JudgeProvider {
       score,
       breakdown: { 完整度: Math.round(avg * input.maxScore * 0.5), 准确度: Math.round(avg * input.maxScore * 0.5) },
       feedback: `[stub:${this.provider}/${modelId}] 依据评分标准给出占位评语：背诵较完整，建议加强个别句子的发音与连读。`,
+      // Confidence tracks how cleanly the perception matched the reference.
+      confidence: Math.max(0, Math.min(1, avg)),
     }
   }
 }
