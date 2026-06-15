@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { PenLine, Video } from 'lucide-react'
+import { PenLine, Video, Check } from 'lucide-react'
 import { submitRecitedText } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -25,26 +25,28 @@ function StepBar({ step }: { step: 1 | 2 }) {
     { n: 2 as const, label: t('sub.step2'), icon: Video },
   ]
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center">
       {items.map((it, i) => {
         const Icon = it.icon
         const state = it.n < step ? 'done' : it.n === step ? 'active' : 'todo'
         return (
-          <div key={it.n} className="flex flex-1 items-center gap-2">
-            <div
-              className={
-                'flex flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ' +
-                (state === 'active'
-                  ? 'border-primary/40 bg-accent text-accent-foreground'
-                  : state === 'done'
-                    ? 'border-success/30 bg-success/10 text-success'
-                    : 'border-border bg-card text-muted-foreground')
-              }
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{it.label}</span>
+          <div key={it.n} className="flex flex-1 items-center">
+            <div className="flex items-center gap-2">
+              <div
+                className={
+                  'grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors ' +
+                  (state === 'active'
+                    ? 'bg-primary text-primary-foreground'
+                    : state === 'done'
+                      ? 'bg-success text-white'
+                      : 'bg-secondary text-muted-foreground')
+                }
+              >
+                {state === 'done' ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+              </div>
+              <span className={'text-sm font-medium ' + (state === 'todo' ? 'text-muted-foreground' : 'text-foreground')}>{it.label}</span>
             </div>
-            {i === 0 ? <span className="text-muted-foreground">→</span> : null}
+            {i === 0 ? <div className={'mx-2 h-0.5 flex-1 rounded ' + (step > 1 ? 'bg-success' : 'bg-border')} /> : null}
           </div>
         )
       })}

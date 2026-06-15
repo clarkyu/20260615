@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Eye, ListChecks, Video } from 'lucide-react'
 import { getUploadUrl, finalizeSubmission } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -14,7 +14,7 @@ interface Sentence {
   text: string
 }
 
-type Phase = 'review' | 'recording' | 'recorded' | 'uploading' | 'done'
+type Phase = 'review' | 'countdown' | 'recording' | 'recorded' | 'uploading' | 'done'
 
 interface Violation {
   type: string
@@ -48,6 +48,7 @@ export function Recorder(props: {
   const [phase, setPhase] = useState<Phase>('review')
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [count, setCount] = useState(3)
   const [violations, setViolations] = useState<Violation[]>([])
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -82,7 +83,45 @@ export function Recorder(props: {
 
   useEffect(() => () => cleanupStream(), [cleanupStream])
 
-  const startRecording = useCallback(async () => {
+  // Actually start the MediaRecorder (camera stream is already live by now).
+  const beginRecord = useCallback(() => {
+    const stream = streamRef.current
+    if (!stream) { setPhase('review'); return }
+    const { mime } = pickMimeType()
+    const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+    chunksRef.current = []
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+    recorder.onstop = () => {
+      blobRef.current = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || 'video/webm' })
+      setPhase('recorded')
+      cleanupStream()
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+        videoRef.current.src = URL.createObjectURL(blobRef.current)
+        videoRef.current.muted = false
+        videoRef.current.controls = true
+      }
+    }
+    recorder.start()
+    recorderRef.current = recorder
+    startedAtRef.current = Date.now()
+    setElapsed(0)
+    setViolations([])
+    timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
+    setPhase('recording')
+    document.documentElement.requestFullscreen?.().catch(() => {})
+  }, [cleanupStream])
+
+  // 3-2-1 countdown while the live preview is already showing.
+  useEffect(() => {
+    if (phase !== 'countdown') return
+    if (count <= 0) { beginRecord(); return }
+    const id = setTimeout(() => setCount((c) => c - 1), 850)
+    return () => clearTimeout(id)
+  }, [phase, count, beginRecord])
+
+  // Turn on the camera, show the mirror preview, then run the countdown.
+  const arm = useCallback(async () => {
     setError(null)
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setError(t('rec.noSupport'))
@@ -97,35 +136,15 @@ export function Recorder(props: {
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         videoRef.current.muted = true
+        videoRef.current.controls = false
         await videoRef.current.play().catch(() => {})
       }
-      const { mime } = pickMimeType()
-      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
-      chunksRef.current = []
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      recorder.onstop = () => {
-        blobRef.current = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || 'video/webm' })
-        setPhase('recorded')
-        cleanupStream()
-        if (videoRef.current) {
-          videoRef.current.srcObject = null
-          videoRef.current.src = URL.createObjectURL(blobRef.current)
-          videoRef.current.muted = false
-          videoRef.current.controls = true
-        }
-      }
-      recorder.start()
-      recorderRef.current = recorder
-      startedAtRef.current = Date.now()
-      setElapsed(0)
-      setViolations([])
-      timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
-      setPhase('recording')
-      document.documentElement.requestFullscreen?.().catch(() => {})
+      setCount(3)
+      setPhase('countdown')
     } catch {
       setError(t('rec.noPermission'))
     }
-  }, [cleanupStream, t])
+  }, [t])
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop()
@@ -168,59 +187,103 @@ export function Recorder(props: {
   if (phase === 'done') {
     return (
       <Card>
-        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-          <div className="grid h-14 w-14 place-items-center rounded-full bg-success/15 text-success">
-            <CheckCircle2 className="h-8 w-8" />
+        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <div className="animate-in-up grid h-16 w-16 place-items-center rounded-full bg-success/15 text-success">
+            <CheckCircle2 className="h-9 w-9" />
           </div>
-          <p className="text-lg font-bold">{t('rec.success')}</p>
+          <p className="text-xl font-bold">{t('rec.success')}</p>
           <p className="text-sm text-muted-foreground">{t('rec.successDesc')}</p>
-          <Link href="/student" className="w-full">
-            <Button className="w-full">{t('sub.backToList')}</Button>
+          <Link href="/student" className="mt-1 w-full">
+            <Button className="w-full" size="lg">{t('sub.backToList')}</Button>
           </Link>
         </CardContent>
       </Card>
     )
   }
 
+  const live = phase === 'countdown' || phase === 'recording'
+  const banner = props.requireEyesClosed ? t('rec.eyesBanner') : t('rec.reciteBanner')
+
   return (
     <div className="space-y-3">
-      <Card>
-        <CardContent className="space-y-3 p-4 text-sm">
-          <p className="text-muted-foreground">
-            {t('rec.requirement', { eyes: props.requireEyesClosed ? t('rec.eyesClosed') : t('rec.recite') })}
-          </p>
-          <details>
-            <summary className="cursor-pointer font-medium text-foreground">{t('rec.review', { n: props.sentences.length })}</summary>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
-              {props.sentences.map((s) => <li key={s.order}>{s.text}</li>)}
-            </ol>
-          </details>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="space-y-3 p-4">
-          <video ref={videoRef} playsInline className="aspect-video w-full rounded-xl bg-black" />
-          {phase === 'recording' ? (
-            <p className="text-center text-sm font-semibold text-destructive">
-              ● {t('rec.recording')} {elapsed}s{violations.length > 0 ? ` · ⚠️ ${violations.length} ${t('rec.leftTimes')}` : ''}
+      {phase === 'review' ? (
+        <Card>
+          <CardContent className="space-y-3 p-4 text-sm">
+            <p className="flex items-start gap-2 text-muted-foreground">
+              <Video className="mt-0.5 h-4 w-4 shrink-0" />
+              {t('rec.requirement', { eyes: props.requireEyesClosed ? t('rec.eyesClosed') : t('rec.recite') })}
             </p>
-          ) : null}
+            <details className="rounded-xl bg-secondary/60 p-3">
+              <summary className="flex cursor-pointer items-center gap-2 font-medium text-foreground">
+                <ListChecks className="h-4 w-4" />{t('rec.review', { n: props.sentences.length })}
+              </summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+                {props.sentences.map((s) => <li key={s.order}>{s.text}</li>)}
+              </ol>
+            </details>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="overflow-hidden">
+        <CardContent className="space-y-3 p-4">
+          <div className="relative overflow-hidden rounded-2xl bg-black">
+            <video
+              ref={videoRef}
+              playsInline
+              className={'aspect-[3/4] w-full object-cover ' + (live ? '-scale-x-100' : '')}
+            />
+
+            {/* Recording chip */}
+            {phase === 'recording' ? (
+              <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-semibold text-white">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                {elapsed}s
+                {violations.length > 0 ? <span className="text-amber-300">· ⚠️ {violations.length}</span> : null}
+              </div>
+            ) : null}
+
+            {/* On-camera prompt during recording */}
+            {phase === 'recording' ? (
+              <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 bg-gradient-to-b from-black/55 to-transparent py-3 text-sm font-semibold text-white">
+                {props.requireEyesClosed ? <Eye className="h-4 w-4" /> : null}{banner}
+              </div>
+            ) : null}
+
+            {/* Countdown overlay */}
+            {phase === 'countdown' ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/45 text-white">
+                <span key={count} className="animate-in-up text-7xl font-black tabular-nums">{count > 0 ? count : ''}</span>
+                <span className="text-sm font-medium opacity-90">{t('rec.getReady')}</span>
+              </div>
+            ) : null}
+
+            {/* Idle placeholder */}
+            {phase === 'review' ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70">
+                <Video className="h-10 w-10" />
+                <span className="px-6 text-center text-xs">{t('rec.countHint')}</span>
+              </div>
+            ) : null}
+          </div>
+
           {error ? <FormMessage>{error}</FormMessage> : null}
 
           {props.attemptsLeft <= 0 && phase === 'review' ? (
             <FormMessage>{t('rec.usedUp')}</FormMessage>
           ) : phase === 'review' ? (
-            <Button className="w-full" size="lg" onClick={startRecording}>{t('rec.start')}</Button>
+            <Button className="w-full" size="lg" onClick={arm}>{t('rec.start')}</Button>
+          ) : phase === 'countdown' ? (
+            <Button className="w-full" size="lg" variant="outline" onClick={() => { cleanupStream(); setPhase('review') }}>{t('rec.getReady')}</Button>
           ) : phase === 'recording' ? (
             <Button className="w-full" size="lg" variant="destructive" onClick={stopRecording}>{t('rec.stop')}</Button>
           ) : phase === 'recorded' ? (
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setPhase('review')}>{t('rec.rerecord')}</Button>
-              <Button className="flex-1" onClick={submit}>{t('submit')}</Button>
+              <Button className="flex-1" size="lg" onClick={submit}>{t('submit')}</Button>
             </div>
           ) : (
-            <Button className="w-full" disabled>{t('rec.uploading')}</Button>
+            <Button className="w-full" size="lg" disabled>{t('rec.uploading')}</Button>
           )}
         </CardContent>
       </Card>
