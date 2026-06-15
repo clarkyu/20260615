@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
-import { NewAssignmentForm } from './new-assignment-form'
+import { AssignmentForm } from '../assignment-form'
 
 export default async function NewAssignmentPage() {
   const user = await requireStaff()
@@ -28,7 +28,7 @@ export default async function NewAssignmentPage() {
 
   return (
     <div className="py-2">
-      <NewAssignmentForm classes={classes} />
+      <AssignmentForm classes={classes} />
     </div>
   )
 }

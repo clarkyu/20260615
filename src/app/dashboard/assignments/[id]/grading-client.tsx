@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, FileSpreadsheet } from 'lucide-react'
+import { Sparkles, Play, FileSpreadsheet, Pencil } from 'lucide-react'
 import { runGrading, overrideScore, getSubmissionVideoUrl } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -102,9 +103,14 @@ export function GradingClient(props: {
 
   return (
     <div className="space-y-4 py-2">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{props.title}</h1>
-        <p className="text-sm text-muted-foreground">{props.sentenceCount} {t('asg.sentences')} · {props.rows.length} {t('grade.students')}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{props.title}</h1>
+          <p className="text-sm text-muted-foreground">{props.sentenceCount} {t('asg.sentences')} · {props.rows.length} {t('grade.students')}</p>
+        </div>
+        <Link href={`/dashboard/assignments/${props.assignmentId}/edit`}>
+          <Button variant="outline" size="sm"><Pencil className="h-4 w-4" />{t('asg.edit')}</Button>
+        </Link>
       </div>
 
       <Card>

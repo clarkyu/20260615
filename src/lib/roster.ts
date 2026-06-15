@@ -51,6 +51,20 @@ function toUint8(buffer: ArrayBuffer | Buffer): Uint8Array {
   return new Uint8Array(buffer)
 }
 
+// "专科2025无人机应用技术2531321区队" -> "2531321" (longest 6+ digit run = 班号).
+// Names without such a code are left untouched.
+export function shortClassName(raw: string): string {
+  const runs = raw.match(/\d{6,}/g)
+  if (!runs || runs.length === 0) return raw.trim()
+  return runs.reduce((a, b) => (b.length >= a.length ? b : a))
+}
+
+// "...2025无人机应用技术2531321区队" -> "无人机应用技术" (between year and 班号).
+export function extractMajor(raw: string): string | undefined {
+  const m = raw.match(/(?:专科|本科|高职|中职|高级|中级)?\s*\d{4}\s*([一-龥]+?)\s*\d{6,}/)
+  return m && m[1] ? m[1] : undefined
+}
+
 export function parseRoster(buffer: ArrayBuffer | Buffer): ParsedRoster {
   try {
     return parseRosterUnsafe(buffer)
@@ -100,10 +114,11 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
     const row = grid[r] ?? []
     const studentNo = get(row, 'studentNo')
     const name = get(row, 'name')
-    const className = get(row, 'className')
+    const rawClass = get(row, 'className')
+    const className = shortClassName(rawClass)
     const department = get(row, 'department') || undefined
-    const major = get(row, 'major') || undefined
-    if (!studentNo && !name && !className) continue
+    const major = get(row, 'major') || extractMajor(rawClass)
+    if (!studentNo && !name && !rawClass) continue
 
     let error: string | undefined
     if (!studentNo) error = '学号为空'
