@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
   if (!assignment || !cls) return new NextResponse('Not found', { status: 404 })
 
-  const students = await userRepo.listClassStudents(prisma, user.schoolId, classId)
+  const students = await userRepo.listClassRoster(prisma, user.schoolId, classId)
   const submissions = await submissionRepo.listForAssignmentStudents(prisma, assignmentId, students.map((s) => s.id))
   const latest = new Map<number, (typeof submissions)[number]>()
   for (const s of submissions) if (!latest.has(s.studentId)) latest.set(s.studentId, s)

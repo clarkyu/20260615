@@ -60,8 +60,10 @@ export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDo
       <CardContent className="space-y-3 p-4">
         <p className="text-sm text-muted-foreground">{t('photo.hint')}</p>
         <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={onPick} className="hidden" />
-        <div
+        <button
+          type="button"
           onClick={() => inputRef.current?.click()}
+          aria-label={t('photo.pick')}
           className="grid aspect-[3/4] w-full cursor-pointer place-items-center overflow-hidden rounded-2xl border border-dashed border-input bg-secondary/40"
         >
           {preview ? (
@@ -73,7 +75,7 @@ export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDo
               <span className="text-sm">{t('photo.pick')}</span>
             </div>
           )}
-        </div>
+        </button>
         {error ? <FormMessage>{error}</FormMessage> : null}
         {preview ? (
           <div className="flex gap-3">
