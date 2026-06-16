@@ -1,4 +1,4 @@
-import type { ModelDescriptor } from './types'
+import type { ModelDescriptor, Provider } from './types'
 
 // The catalogue of models teachers can pick from. `id` is the actual API model
 // name sent to the provider. Capability + modality tags drive which stage each
@@ -116,6 +116,46 @@ export const DEFAULT_JUDGE_MODEL = 'gemini-2.5-flash'
 // Authoring (备课出题) is Gemini-only today; keep its default independent of the
 // judge default so changing one never silently breaks the other.
 export const DEFAULT_AUTHOR_MODEL = 'gemini-2.5-flash'
+
+// ── teacher-facing catalogue metadata (用户中心：各家·使用范围·价格) ──
+
+export const PROVIDER_LABELS: Record<Provider, string> = {
+  gemini: 'Google · Gemini',
+  qwen: '阿里 · 通义千问',
+  openai: 'OpenAI',
+  claude: 'Anthropic · Claude',
+  deepseek: 'DeepSeek',
+  minimax: 'MiniMax',
+  whisper: 'OpenAI · Whisper',
+}
+
+// Which runtime secret each provider's key comes from (used by the catalogue +,
+// later, by per-teacher BYOK key storage).
+export const PROVIDER_KEY_ENV: Record<Provider, string> = {
+  gemini: 'GEMINI_API_KEY',
+  qwen: 'QWEN_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  claude: 'ANTHROPIC_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+  whisper: 'OPENAI_API_KEY',
+}
+
+// Rough list price (per 1M tokens unless noted) — display only; prices change, so
+// verify on each provider's site. Mixed USD/¥ matching each provider's native unit.
+export const MODEL_PRICING: Record<string, string> = {
+  'gemini-2.5-flash': '输入 $0.30（文/图/视频）· $1.0（音频）｜ 输出 $2.50',
+  'gemini-3-flash-preview': '输入 $0.50（文/图/视频）· $1.0（音频）｜ 输出 $3.00',
+  'gemini-3.5-flash': '输入 $1.50 ｜ 输出 $9.00',
+  'gemini-2.5-pro': '输入 $1.25–2.50 ｜ 输出 $10–15',
+  'gemini-3.1-pro-preview': '输入 $2–4 ｜ 输出 $12–18',
+  'qwen-omni-turbo': '约 ¥0.3 起（输入）/ ¥0.6 起（输出）· 以阿里控制台为准',
+  'gpt-4o': '约 $2.50（输入）｜ 输出 $10 · 旧款，需核对',
+  'claude-opus-4-8': '输入 $5 ｜ 输出 $25',
+  'deepseek-chat': '输入 ¥1（缓存 ¥0.02）｜ 输出 ¥2 · 2026-07-24 停用→V4 Flash',
+  'MiniMax-Text-01': '输入 ¥1 ｜ 输出 ¥8',
+  'whisper-1': '约 $0.006 / 分钟（按音频时长计）',
+}
 
 export function getModel(id: string): ModelDescriptor | undefined {
   return MODELS.find((m) => m.id === id)
