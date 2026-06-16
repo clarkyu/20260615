@@ -69,6 +69,7 @@ const JUDGE_SCHEMA = {
       },
     },
     feedback: { type: 'STRING' },
+    confidence: { type: 'NUMBER' },
   },
   required: ['score', 'feedback'],
 } as const
@@ -124,6 +125,7 @@ export function buildJudgePrompt(input: JudgeInput): string {
     '',
     `满分：${input.maxScore} 分。score 必须在 0~${input.maxScore} 之间。`,
     'breakdown 给出各维度得分（dimension+points）。feedback 用中文，指出做得好与需改进之处，可引用具体句子。',
+    'confidence 取 0~1，表示你对本次评分的把握程度（音频清晰、与参考高度吻合时给高分；含糊、缺失、异常时给低分）。',
     '',
     '参考句子：',
     referenceBlock(input.referenceSentences),
@@ -140,7 +142,7 @@ export function buildJudgePrompt(input: JudgeInput): string {
 }
 
 export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
-  const r = raw as { score?: unknown; breakdown?: { dimension?: string; points?: number }[]; feedback?: unknown }
+  const r = raw as { score?: unknown; breakdown?: { dimension?: string; points?: number }[]; feedback?: unknown; confidence?: unknown }
   const score = Math.max(0, Math.min(maxScore, Math.round(Number(r?.score) || 0)))
   const breakdown: Record<string, number> = {}
   if (Array.isArray(r?.breakdown)) {
@@ -148,7 +150,9 @@ export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
       if (b && typeof b.dimension === 'string') breakdown[b.dimension] = Number(b.points) || 0
     }
   }
-  return { score, breakdown, feedback: typeof r?.feedback === 'string' ? r.feedback : '', raw }
+  const confRaw = Number(r?.confidence)
+  const confidence = Number.isFinite(confRaw) ? Math.max(0, Math.min(1, confRaw)) : undefined
+  return { score, breakdown, feedback: typeof r?.feedback === 'string' ? r.feedback : '', confidence, raw }
 }
 
 // ── Network ───────────────────────────────────────────────────────────────────

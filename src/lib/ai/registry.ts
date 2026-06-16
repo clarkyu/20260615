@@ -88,6 +88,9 @@ export const PRESETS: Preset[] = [
 // Gemini Flash natively handles audio/video and can both perceive and judge.
 export const DEFAULT_PERCEPTION_MODEL = 'gemini-2.5-flash'
 export const DEFAULT_JUDGE_MODEL = 'gemini-2.5-flash'
+// Authoring (备课出题) is Gemini-only today; keep its default independent of the
+// judge default so changing one never silently breaks the other.
+export const DEFAULT_AUTHOR_MODEL = 'gemini-2.5-flash'
 
 export function getModel(id: string): ModelDescriptor | undefined {
   return MODELS.find((m) => m.id === id)

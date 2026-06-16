@@ -74,6 +74,13 @@ export async function gradePracticeAttempt(
   if (!loaded.ok) return { status: 'error', message: t(loaded.error) }
   const { assignment } = loaded
 
+  // Security: only presign a key that demonstrably belongs to THIS student under
+  // THIS assignment's practice prefix — never trust an arbitrary client-supplied key.
+  const ownPrefix = `practice/${assignmentId}/${user.userId}/`
+  if (payload.mediaKey && !payload.mediaKey.startsWith(ownPrefix)) {
+    return { status: 'error', message: t('err.subNotFound') }
+  }
+
   let audioUrl: string | undefined
   if (payload.kind === 'audio' && payload.mediaKey && storageConfigured()) {
     try {
