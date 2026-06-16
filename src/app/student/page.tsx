@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Inbox } from 'lucide-react'
+import { Inbox, Sparkles } from 'lucide-react'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -22,15 +22,43 @@ export default async function StudentHome() {
     )
   }
 
-  const assignments = await prisma.assignment.findMany({
-    where: { offering: { classId: me.classId } },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      _count: { select: { sentences: true } },
-      offering: { include: { course: { select: { name: true } } } },
-      submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1 },
-    },
-  })
+  const [assignments, practiceRows] = await Promise.all([
+    prisma.assignment.findMany({
+      where: { offering: { classId: me.classId } },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { sentences: true } },
+        offering: { include: { course: { select: { name: true } } } },
+        submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1 },
+      },
+    }),
+    prisma.practiceAttempt.findMany({
+      where: { studentId: user.userId, aiScore: { not: null } },
+      select: { assignmentId: true, aiScore: true },
+    }),
+  ])
+
+  // My growth: 平时成绩 (best practice per assignment), 测试成绩 (graded submissions),
+  // completion, and whether my latest graded score beat the previous one.
+  const round1 = (n: number) => Math.round(n * 10) / 10
+  const mean = (xs: number[]) => (xs.length ? round1(xs.reduce((a, b) => a + b, 0) / xs.length) : null)
+  const bestPractice = new Map<number, number>()
+  for (const p of practiceRows) {
+    if (p.aiScore == null) continue
+    const cur = bestPractice.get(p.assignmentId)
+    if (cur == null || p.aiScore > cur) bestPractice.set(p.assignmentId, p.aiScore)
+  }
+  const total = assignments.length
+  const submittedCount = assignments.filter((a) => a.submissions[0] && a.submissions[0].status !== 'DRAFT').length
+  const examAvg = mean(assignments.map((a) => a.submissions[0]?.finalScore).filter((v): v is number => v != null))
+  const dailyAvg = mean(assignments.map((a) => bestPractice.get(a.id)).filter((v): v is number => v != null))
+  const gradedScores = assignments.map((a) => a.submissions[0]?.finalScore).filter((v): v is number => v != null) // createdAt desc
+  const improved = gradedScores.length >= 2 && gradedScores[0] > gradedScores[1]
+  const tiles = [
+    { label: t('shome.daily'), value: dailyAvg == null ? '—' : String(dailyAvg) },
+    { label: t('shome.exam'), value: examAvg == null ? '—' : String(examAvg) },
+    { label: t('shome.completion'), value: `${submittedCount}/${total}` },
+  ]
 
   return (
     <div className="space-y-4 py-2">
@@ -38,6 +66,25 @@ export default async function StudentHome() {
         <h1 className="text-2xl font-bold tracking-tight">{t('shome.title')}</h1>
         <p className="text-sm text-muted-foreground">{me.name}（{me.studentNo}）</p>
       </div>
+
+      {total > 0 ? (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center gap-1.5 text-sm font-semibold">
+              <Sparkles className="h-4 w-4 text-primary" />{t('shome.growth')}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {tiles.map((tile) => (
+                <div key={tile.label} className="text-center">
+                  <div className="text-2xl font-extrabold tracking-tight tabular-nums">{tile.value}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{tile.label}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{improved ? `🎉 ${t('shome.improved')}` : t('shome.cheerUp')}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {assignments.length === 0 ? (
         <Card>

@@ -103,7 +103,8 @@ export function SubmissionFlow(props: {
   latestStatus: string | null
   latestScore: number | null
   latestFeedback: string | null
-  latestPerSentence: { order: number; accuracy: number; completeness: number }[]
+  latestPerSentence: { order: number; accuracy: number; completeness: number; spokenText?: string }[]
+  latestTranscript?: string
 }) {
   const t = useT()
   const completed = props.latestStatus !== null && DONE_STATUSES.includes(props.latestStatus)
@@ -184,16 +185,25 @@ export function SubmissionFlow(props: {
                   const p = byOrder.get(s.order)
                   const weak = p ? p.accuracy < 0.6 || p.completeness < 0.6 : false
                   return (
-                    <li key={s.order} className="flex items-start gap-2">
-                      {weak
-                        ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
-                        : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
-                      <span className={weak ? 'text-foreground' : 'text-muted-foreground'}>{s.text}</span>
+                    <li key={s.order} className="space-y-0.5">
+                      <div className="flex items-start gap-2">
+                        {weak
+                          ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
+                          : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
+                        <span className={weak ? 'text-foreground' : 'text-muted-foreground'}>{s.text}</span>
+                      </div>
+                      {weak && p?.spokenText ? <div className="pl-6 text-xs text-muted-foreground">{t('sub.youSaid')}{p.spokenText}</div> : null}
                     </li>
                   )
                 })}
               </ul>
               <p className="text-xs text-muted-foreground">{t('sub.perSentenceHint')}</p>
+              {props.latestTranscript ? (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">{t('sub.transcript')}</summary>
+                  <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-secondary p-2 font-sans">{props.latestTranscript}</pre>
+                </details>
+              ) : null}
             </div>
           ) : null}
           {props.attemptsLeft > 0 ? (

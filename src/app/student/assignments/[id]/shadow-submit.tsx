@@ -124,7 +124,15 @@ export function ShadowSubmit(props: {
 
   const total = props.chunks.length
   const doneCount = recorded.size
-  const markRecorded = useCallback((order: number) => setRecorded((s) => new Set(s).add(order)), [])
+  // Auto-advance: after a sentence is recorded, scroll the next unrecorded one into view.
+  const markRecorded = useCallback((order: number) => {
+    setRecorded((s) => {
+      const next = new Set(s).add(order)
+      const nextIdx = props.chunks.findIndex((_, i) => !next.has(i + 1))
+      if (nextIdx >= 0) setTimeout(() => document.getElementById(`shadow-s-${nextIdx + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
+      return next
+    })
+  }, [props.chunks])
 
   function submit() {
     setPhase('finishing'); setError(null)
@@ -223,7 +231,7 @@ export function ShadowSubmit(props: {
         {props.chunks.map((c, i) => {
           const order = i + 1
           return (
-            <li key={order} className="rounded-xl border border-border/70 p-3 text-sm">
+            <li key={order} id={`shadow-s-${order}`} className="scroll-mt-16 rounded-xl border border-border/70 p-3 text-sm">
               <div className="font-semibold">{order}. {c.english}</div>
               {showZh && c.chinese ? <div className="mt-0.5 text-xs text-muted-foreground">{c.chinese}</div> : null}
               {c.exampleEn ? <div className="mt-0.5 text-xs italic">{c.exampleEn}{showZh && c.exampleZh ? <span className="not-italic text-muted-foreground"> / {c.exampleZh}</span> : null}</div> : null}
