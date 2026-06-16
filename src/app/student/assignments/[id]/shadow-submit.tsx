@@ -54,11 +54,11 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
       const res = await getShadowTakeUploadUrl(assignmentId, order, type, blob.type.includes('mp4') ? 'm4a' : ext)
       if ('error' in res || !res.url) { setError(res.error ?? t('rec.uploadFail')); setPhase('idle'); return }
       const put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': type } })
-      if (!put.ok) { setError(t('rec.uploadFail')); setPhase('idle'); return }
+      if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setPhase('idle'); return }
       setPhase('idle')
       onRecorded()
-    } catch {
-      setError(t('rec.uploadFail')); setPhase('idle')
+    } catch (e) {
+      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`); setPhase('idle')
     }
   }, [assignmentId, order, onRecorded, t])
 
