@@ -6,7 +6,7 @@ import { staffContext } from '@/lib/action-context'
 import type { CurrentUser } from '@/lib/auth'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
 import { parseChunks } from '@/lib/bank'
-import { starterSets } from '@/lib/curriculum/starter-bank'
+import { starterSets, englishFlowSets } from '@/lib/curriculum/starter-bank'
 import * as bankRepo from '@/lib/repo/bank'
 import { parseForm, reqText, optText, reqId, checkbox, z } from '@/lib/validate'
 
@@ -56,6 +56,28 @@ export async function importStarterBank(): Promise<{ imported: number; skipped: 
       continue
     }
     await bankRepo.createWithChunks(prisma, scope, set.name, set.chunks, set.meta)
+    imported++
+  }
+  revalidatePath('/dashboard/bank')
+  return { imported, skipped }
+}
+
+// Import the English Flow "2000 chunks" pack as global official sets (super-admin
+// only). 40 sets × 50, idempotent by source — safe to re-click, and a timed-out
+// run resumes where it left off on the next click.
+export async function importEnglishFlow(): Promise<{ imported: number; skipped: number; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!isSuper(user)) return { imported: 0, skipped: 0, error: t('err.forbidden') }
+  const existing = await bankRepo.globalSources(prisma)
+
+  let imported = 0
+  let skipped = 0
+  for (const set of englishFlowSets()) {
+    if (set.meta.source && existing.has(set.meta.source)) {
+      skipped++
+      continue
+    }
+    await bankRepo.createWithChunks(prisma, null, set.name, set.chunks, set.meta)
     imported++
   }
   revalidatePath('/dashboard/bank')

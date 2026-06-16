@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { CreateSetForm } from './create-set-form'
 import { ImportStarter } from './import-starter'
+import { ImportEnglishFlow } from './import-english-flow'
 import { BankFilters } from './bank-filters'
 
 export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string }> }) {
@@ -37,6 +38,7 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <CreateSetForm canPublishGlobal={isSuperAdmin} />
         <ImportStarter toGlobal={isSuperAdmin} />
+        {isSuperAdmin ? <ImportEnglishFlow /> : null}
       </div>
 
       <BankFilters cefr={cefr} strand={strand} domain={domain} />
