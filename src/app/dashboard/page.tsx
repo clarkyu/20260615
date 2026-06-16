@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog } from 'lucide-react'
 import type { SubmissionStatus } from '@prisma/client'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
@@ -38,10 +38,11 @@ export default async function DashboardPage() {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
   const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1)
 
-  const [students, classes, assignments, pendingCount, dueToday, pendingGroups] = await Promise.all([
+  const [students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups] = await Promise.all([
     prisma.user.count({ where: { schoolId, role: 'STUDENT' } }),
     prisma.classGroup.count({ where: { schoolId } }),
     prisma.assignment.count({ where: { offering: offeringWhere } }),
+    prisma.courseOffering.count({ where: offeringWhere }),
     prisma.submission.count({ where: { needsReview: true, status: { in: NEEDS_TEACHER_STATUS }, assignment: { offering: offeringWhere } } }),
     prisma.assignment.count({ where: { offering: offeringWhere, dueAt: { gte: todayStart, lt: todayEnd } } }),
     prisma.submission.groupBy({
@@ -81,6 +82,31 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* First-run guide: 3 steps to the first assignment */}
+      {assignments === 0 ? (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <p className="font-semibold">{t('onbd.title')}</p>
+            <div className="mt-3 space-y-2">
+              {[
+                { done: classes > 0, label: t('onbd.step1'), href: '/dashboard/students' },
+                { done: offeringsCount > 0, label: t('onbd.step2'), href: '/dashboard/teaching/new' },
+                { done: false, label: t('onbd.step3'), href: '/dashboard/teaching/new-assignment' },
+              ].map((s, i) => (
+                <Link key={i} href={s.href} className="tap flex items-center gap-3 rounded-xl bg-background/70 p-3 hover:bg-background">
+                  <span className={'grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold ' + (s.done ? 'bg-success text-white' : 'bg-secondary text-muted-foreground')}>
+                    {s.done ? <Check className="h-4 w-4" /> : i + 1}
+                  </span>
+                  <span className={'flex-1 text-sm ' + (s.done ? 'text-muted-foreground line-through' : 'font-medium')}>{s.label}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">{t('onbd.teachersHint')}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* To-do banner */}
       {pendingCount > 0 || dueToday > 0 ? (
         <Card className="border-primary/30 bg-primary/5">
@@ -112,9 +138,9 @@ export default async function DashboardPage() {
       </Link>
 
       {/* Secondary actions */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Link href="/dashboard/teaching">
-          <Card className="tap hover:shadow-card">
+          <Card className="tap h-full hover:shadow-card">
             <CardContent className="flex flex-col gap-1.5 p-4">
               <GraduationCap className="h-5 w-5 text-accent-foreground" />
               <p className="text-sm font-semibold">{t('teach.title')}</p>
@@ -122,10 +148,18 @@ export default async function DashboardPage() {
           </Card>
         </Link>
         <Link href="/dashboard/students">
-          <Card className="tap hover:shadow-card">
+          <Card className="tap h-full hover:shadow-card">
             <CardContent className="flex flex-col gap-1.5 p-4">
               <Users className="h-5 w-5 text-accent-foreground" />
               <p className="text-sm font-semibold">{t('dash.rosterTitle')}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/teachers">
+          <Card className="tap h-full hover:shadow-card">
+            <CardContent className="flex flex-col gap-1.5 p-4">
+              <UserCog className="h-5 w-5 text-accent-foreground" />
+              <p className="text-sm font-semibold">{t('teacher.title')}</p>
             </CardContent>
           </Card>
         </Link>

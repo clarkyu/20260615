@@ -5,6 +5,7 @@ import { getT } from '@/lib/i18n-server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ImportClient } from './import-client'
 import { ClassList } from './class-list'
+import { NewClassForm } from './new-class-form'
 
 export default async function StudentsPage() {
   const user = await requireStaff()
@@ -32,8 +33,9 @@ export default async function StudentsPage() {
       <ImportClient />
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">{t('stu.classes')}（{classes.length}）</CardTitle>
+          <NewClassForm />
         </CardHeader>
         <CardContent>
           {classes.length === 0 ? (
