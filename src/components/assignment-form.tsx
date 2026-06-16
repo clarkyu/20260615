@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useMemo, useRef, useState } from 'react'
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles, ImageUp } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
@@ -31,6 +31,22 @@ export interface AssignmentInitial {
 }
 
 const CATEGORY_PRESETS = ['背诵作业', '口语作业', '书面作业', '试卷作业', '听写作业', '默写作业']
+
+// Open/due times round-trip through the browser, where the timezone is known. A
+// `datetime-local` input is a *local* wall-clock; a UTC server would otherwise read
+// it as UTC (e.g. 8h off in China — assignments would look "not open yet"). So we
+// convert UTC ISO → local for display, and local → UTC ISO (hidden field) on submit.
+function toLocalInput(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+function localToIso(local: string): string {
+  if (!local) return ''
+  const d = new Date(local)
+  return isNaN(d.getTime()) ? '' : d.toISOString()
+}
 
 export interface PublishTarget {
   offeringId: number
@@ -99,6 +115,14 @@ export function AssignmentForm({
   const monthOptions = initial?.monthLabel && !months.includes(initial.monthLabel) ? [initial.monthLabel, ...months] : months
   const now = new Date()
   const defaultMonth = initial?.monthLabel ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  // Open/due as local-time input values; the hidden fields submit the UTC instant.
+  const [openAt, setOpenAt] = useState('')
+  const [dueAt, setDueAt] = useState('')
+  useEffect(() => {
+    setOpenAt(initial?.openAt ? toLocalInput(initial.openAt) : '')
+    setDueAt(initial?.dueAt ? toLocalInput(initial.dueAt) : '')
+  }, [initial?.openAt, initial?.dueAt])
 
   return (
     <div className="space-y-4">
@@ -216,11 +240,13 @@ export function AssignmentForm({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="openAt">{t('asg.fOpenAt')}</Label>
-                <Input id="openAt" name="openAt" type="datetime-local" defaultValue={initial?.openAt} />
+                <input type="hidden" name="openAt" value={localToIso(openAt)} />
+                <Input id="openAt" type="datetime-local" value={openAt} onChange={(e) => setOpenAt(e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dueAt">{t('asg.fDueAt')}</Label>
-                <Input id="dueAt" name="dueAt" type="datetime-local" defaultValue={initial?.dueAt} />
+                <input type="hidden" name="dueAt" value={localToIso(dueAt)} />
+                <Input id="dueAt" type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
               </div>
             </div>
             <div className="space-y-1.5">
