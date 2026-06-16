@@ -10,6 +10,7 @@ import type { PrismaClient } from '@prisma/client'
 import { gradeSubmission } from '@/lib/ai/grade'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
+import * as submissionRepo from '@/lib/repo/submissions'
 
 export const DEFAULT_MAX_SCORE = 100
 
@@ -118,7 +119,7 @@ export async function autoGradeSubmission(
     }
   }
 
-  await prisma.submission.update({ where: { id: submission.id }, data: { status: 'PROCESSING' } })
+  await submissionRepo.markProcessing(prisma, submission.id)
 
   try {
     const result = await gradeSubmission({
@@ -138,23 +139,19 @@ export async function autoGradeSubmission(
       hasViolation: hasAntiCheatViolation(submission.violations),
     })
 
-    await prisma.submission.update({
-      where: { id: submission.id },
-      data: {
-        status: decision.status,
-        needsReview: decision.needsReview,
-        confidence: result.judge.confidence ?? null,
-        perceptionModel: result.perceptionModel,
-        judgeModel: result.judgeModel,
-        transcript: result.perception.transcript,
-        aiResult: JSON.stringify(result),
-        aiScore: result.judge.score,
-        // A teacher's earlier manual score always wins over the fresh AI score.
-        finalScore: submission.teacherScore ?? result.judge.score,
-        feedback: result.judge.feedback,
-        gradedById: opts.graderUserId ?? null,
-        gradedAt: new Date(),
-      },
+    await submissionRepo.applyGradeResult(prisma, submission.id, {
+      status: decision.status,
+      needsReview: decision.needsReview,
+      confidence: result.judge.confidence ?? null,
+      perceptionModel: result.perceptionModel,
+      judgeModel: result.judgeModel,
+      transcript: result.perception.transcript,
+      aiResult: JSON.stringify(result),
+      aiScore: result.judge.score,
+      // A teacher's earlier manual score always wins over the fresh AI score.
+      finalScore: submission.teacherScore ?? result.judge.score,
+      feedback: result.judge.feedback,
+      gradedById: opts.graderUserId ?? null,
     })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
@@ -162,14 +159,11 @@ export async function autoGradeSubmission(
     if (isUnavailable(message)) {
       // Model not configured — revert to the pre-grade state and leave it for the
       // teacher rather than marking it failed.
-      await prisma.submission.update({
-        where: { id: submission.id },
-        data: { status: submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED', needsReview: true },
-      })
+      await submissionRepo.revertToQueue(prisma, submission.id, submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED')
       return { ok: false, error: message }
     }
     console.error('[autoGradeSubmission] grading failed:', err)
-    await prisma.submission.update({ where: { id: submission.id }, data: { status: 'FAILED', needsReview: true } })
+    await submissionRepo.markFailed(prisma, submission.id)
     return { ok: false, error: message }
   }
 }
@@ -179,10 +173,7 @@ export async function autoGradeSubmission(
 // nothing to grade (no media / no reference sentences) so the job layer can
 // settle it instead of retrying forever; otherwise the AutoGradeResult.
 export async function autoGradeById(prisma: PrismaClient, submissionId: number): Promise<AutoGradeResult | null> {
-  const submission = await prisma.submission.findUnique({
-    where: { id: submissionId },
-    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
-  })
+  const submission = await submissionRepo.findGradable(prisma, submissionId)
   if (!submission) return null
   if (!submission.videoKey && !submission.audioKey) return null
   if (submission.assignment.sentences.length === 0) return null

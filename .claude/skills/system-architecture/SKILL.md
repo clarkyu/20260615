@@ -83,8 +83,11 @@ export async function doThing(prisma, schoolId, input): Promise<Result> {
 ```
 - Takes `prisma` + plain inputs; errors are i18n key strings; navigation targets are
   returned for the action to `redirect`. No `requireXxx`, `getT`, `cookies`, `redirect`.
-- Reads/writes via repos. **Exception:** a cohesive bulk op (e.g. `domain/roster.ts`
-  import) may call prisma directly rather than fragment into one-shot repos.
+- Reads/writes via repos. **Exceptions** (cohesive units that own their own table
+  mechanics, not tenant-scoped data access): `domain/roster.ts` (the bulk import) and
+  `domain/jobs.ts` (the `GradingJob` queue table) may call prisma directly. Everything
+  else — including the grading state machine (`grading.ts`/`shadow.ts`) — goes through
+  `repo/submissions.ts`.
 
 ### Input validation — the only trusted boundary
 - All action input goes through `parseForm(schema, formData)` from `@/lib/validate`
