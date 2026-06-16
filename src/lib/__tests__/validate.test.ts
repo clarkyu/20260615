@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseForm, reqText, optText, checkbox, idList, intField, z } from '@/lib/validate'
+import { parseForm, reqText, optText, checkbox, idList, intField, optId, z } from '@/lib/validate'
 
 function fd(entries: [string, string][]): FormData {
   const f = new FormData()
@@ -34,5 +34,13 @@ describe('parseForm', () => {
     const r = parseForm(schema, fd([['name', 'x'], ['ids', '7'], ['n', '5']]))
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.data).toMatchObject({ pub: false, ids: [7], n: 5 })
+  })
+
+  it('optId maps blank/absent to null and coerces a value', () => {
+    const s = z.object({ dep: optId })
+    expect(parseForm(s, fd([['dep', '']]))).toEqual({ ok: true, data: { dep: null } })
+    expect(parseForm(s, fd([]))).toEqual({ ok: true, data: { dep: null } })
+    const r = parseForm(s, fd([['dep', '4']]))
+    expect(r.ok && r.data.dep).toBe(4)
   })
 })
