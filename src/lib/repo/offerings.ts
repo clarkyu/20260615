@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Role } from '@prisma/client'
 
 // Tenant-scoped data access for course offerings (课头：某师·某班·某学期教某课).
 // All reads are scoped by school; the `?? -1` sentinel keeps a missing school
@@ -6,6 +6,16 @@ import type { PrismaClient } from '@prisma/client'
 
 export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
   return prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
+}
+
+// A staff member's offerings (teacher → own; admin → whole school), newest term
+// first, with course + class names — the common "pick a class to publish to" list.
+export function listForStaff(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.courseOffering.findMany({
+    where: { schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) },
+    orderBy: [{ year: 'desc' }, { semester: 'desc' }, { id: 'desc' }],
+    include: { course: { select: { name: true } }, class: { select: { name: true } } },
+  })
 }
 
 // Of the given offering ids, those that belong to the school (publish-target check).

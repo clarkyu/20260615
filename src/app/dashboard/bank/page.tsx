@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Video, ListChecks } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as bankRepo from '@/lib/repo/bank'
 import { Card, CardContent } from '@/components/ui/card'
 import { CreateSetForm } from './create-set-form'
 
@@ -13,11 +14,7 @@ export default async function BankPage() {
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const sets = await prisma.chunkSet.findMany({
-    where: { schoolId: user.schoolId },
-    select: { id: true, name: true, shadowVideoKey: true, _count: { select: { chunks: true } } },
-    orderBy: { createdAt: 'desc' },
-  })
+  const sets = await bankRepo.listForSchool(prisma, user.schoolId)
 
   return (
     <div className="space-y-4 py-2">
