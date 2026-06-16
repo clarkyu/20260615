@@ -1,0 +1,128 @@
+// Roster import orchestration.
+//
+// Bulk import is a single cohesive data-orchestration unit (departments → majors →
+// classes → backfill → students), with interleaved reads, id-resolution and batched
+// transactions — so it owns its prisma access directly rather than fragmenting into
+// a dozen single-use repo calls. The win over the old code is that it's out of the
+// action: a named, school-scoped function returning plain counts.
+
+import type { PrismaClient } from '@prisma/client'
+import { hashPassword, BULK_HASH_ITERATIONS } from '@/lib/password'
+import type { ParsedRoster } from '@/lib/roster'
+
+export interface ImportResult {
+  created: number
+  updated: number
+  skipped: number
+  classesTouched: number
+}
+
+// Upsert classes + students (and their departments/majors) scoped to one school.
+// New students get initial password = 学号 and must change it on first login.
+export async function importRoster(prisma: PrismaClient, schoolId: number, parsed: ParsedRoster): Promise<ImportResult> {
+  const valid = parsed.rows.filter((r) => !r.error)
+  const skipped = parsed.rows.length - valid.length
+
+  // 1) Departments (院系) — create the missing ones.
+  const deptNames = [...new Set(valid.map((r) => r.department).filter((v): v is string => Boolean(v)))]
+  const existingDepts = await prisma.department.findMany({ where: { schoolId, name: { in: deptNames } } })
+  const deptIdByName = new Map(existingDepts.map((d) => [d.name, d.id]))
+  for (const name of deptNames) {
+    if (deptIdByName.has(name)) continue
+    const d = await prisma.department.create({ data: { schoolId, name } })
+    deptIdByName.set(name, d.id)
+  }
+
+  // 2) Majors (专业) — each belongs to a department.
+  const majorNames = [...new Set(valid.map((r) => r.major).filter((v): v is string => Boolean(v)))]
+  const existingMajors = await prisma.major.findMany({ where: { schoolId, name: { in: majorNames } } })
+  const majorIdByName = new Map(existingMajors.map((m) => [m.name, m.id]))
+  for (const name of majorNames) {
+    if (majorIdByName.has(name)) continue
+    const rep = valid.find((r) => r.major === name && r.department)
+    const departmentId = rep?.department ? deptIdByName.get(rep.department) : undefined
+    if (!departmentId) continue // a major with no department — skip linking
+    const m = await prisma.major.create({ data: { schoolId, departmentId, name } })
+    majorIdByName.set(name, m.id)
+  }
+
+  // 3) Classes — link to a major; create the missing ones.
+  const classNames = [...new Set(valid.map((r) => r.className))]
+  const existingClasses = await prisma.classGroup.findMany({ where: { schoolId, name: { in: classNames } } })
+  const classIdByName = new Map(existingClasses.map((c) => [c.name, c.id]))
+  for (const name of classNames) {
+    if (classIdByName.has(name)) continue
+    const rep = valid.find((r) => r.className === name)
+    const majorId = rep?.major ? majorIdByName.get(rep.major) ?? null : null
+    const c = await prisma.classGroup.create({ data: { schoolId, name, majorId, grade: rep?.grade } })
+    classIdByName.set(name, c.id)
+  }
+
+  // Backfill major / grade on classes missing them — only fills blanks.
+  const backfills = existingClasses
+    .map((c) => {
+      const rep = valid.find((r) => r.className === c.name)
+      const data: { majorId?: number; grade?: string } = {}
+      const mId = rep?.major ? majorIdByName.get(rep.major) : undefined
+      if (!c.majorId && mId) data.majorId = mId
+      if (!c.grade && rep?.grade) data.grade = rep.grade
+      return Object.keys(data).length ? prisma.classGroup.update({ where: { id: c.id }, data }) : null
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+  if (backfills.length > 0) await prisma.$transaction(backfills)
+
+  // 4) Which students already exist (one query).
+  const existing = await prisma.user.findMany({
+    where: { schoolId, role: 'STUDENT', studentNo: { in: valid.map((r) => r.studentNo) } },
+    select: { id: true, studentNo: true },
+  })
+  const idByNo = new Map(existing.map((e) => [e.studentNo!, e.id]))
+  const toCreate = valid.filter((r) => !idByNo.has(r.studentNo))
+  const toUpdate = valid.filter((r) => idByNo.has(r.studentNo))
+
+  // Emails are globally unique — only assign ones that are free (and de-dup within
+  // the file) so a clashing email never aborts the whole import.
+  const wantedEmails = [...new Set(toCreate.map((r) => r.email).filter((v): v is string => Boolean(v)))]
+  const takenRows = wantedEmails.length
+    ? await prisma.user.findMany({ where: { email: { in: wantedEmails } }, select: { email: true } })
+    : []
+  const usedEmail = new Set(takenRows.map((u) => u.email))
+  const emailByNo = new Map<string, string | null>()
+  for (const r of toCreate) {
+    if (r.email && !usedEmail.has(r.email)) { usedEmail.add(r.email); emailByNo.set(r.studentNo, r.email) }
+    else emailByNo.set(r.studentNo, null)
+  }
+
+  // 5) Create new students in a single batch (lighter initial-password hash).
+  let created = 0
+  if (toCreate.length > 0) {
+    const data = await Promise.all(
+      toCreate.map(async (r) => ({
+        role: 'STUDENT' as const,
+        schoolId,
+        classId: classIdByName.get(r.className)!,
+        studentNo: r.studentNo,
+        name: r.name,
+        phone: r.phone ?? null,
+        email: emailByNo.get(r.studentNo) ?? null,
+        passwordHash: await hashPassword(r.studentNo, BULK_HASH_ITERATIONS),
+        mustChangePassword: true,
+      })),
+    )
+    created = (await prisma.user.createMany({ data })).count
+  }
+
+  // 6) Update existing students (name / class / phone-if-provided) in one batch.
+  if (toUpdate.length > 0) {
+    await prisma.$transaction(
+      toUpdate.map((r) =>
+        prisma.user.update({
+          where: { id: idByNo.get(r.studentNo)! },
+          data: { name: r.name, classId: classIdByName.get(r.className)!, ...(r.phone ? { phone: r.phone } : {}) },
+        }),
+      ),
+    )
+  }
+
+  return { created, updated: toUpdate.length, skipped, classesTouched: classNames.length }
+}
