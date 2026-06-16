@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import { encryptSecret } from '@/lib/crypto'
-import { CREDENTIAL_SLOT_IDS } from '@/lib/ai/registry'
+import { CREDENTIAL_SLOT_IDS, getModel } from '@/lib/ai/registry'
 import * as aiKeyRepo from '@/lib/repo/ai-keys'
+import * as userRepo from '@/lib/repo/users'
 
 type State = { ok?: boolean; error?: string }
 
@@ -28,4 +29,21 @@ export async function deleteAiKey(formData: FormData): Promise<void> {
   const provider = String(formData.get('provider') ?? '')
   if (CREDENTIAL_SLOT_IDS.includes(provider)) await aiKeyRepo.remove(prisma, user.userId, provider)
   revalidatePath('/profile/ai')
+}
+
+// '' = use the platform default (null). A valid model with the right capability is
+// stored; anything else is rejected.
+function pickModel(id: string, cap: 'perception' | 'judge'): string | null | undefined {
+  if (id === '') return null
+  return getModel(id)?.capabilities.includes(cap) ? id : undefined
+}
+
+export async function setDefaultModels(prevState: unknown, formData: FormData): Promise<State> {
+  const { user, prisma, t } = await staffContext()
+  const perception = pickModel(String(formData.get('perception') ?? ''), 'perception')
+  const judge = pickModel(String(formData.get('judge') ?? ''), 'judge')
+  if (perception === undefined || judge === undefined) return { error: t('err.invalidCreds') }
+  await userRepo.setGradingDefaults(prisma, user.userId, { defaultPerceptionModel: perception, defaultJudgeModel: judge })
+  revalidatePath('/profile/ai')
+  return { ok: true }
 }

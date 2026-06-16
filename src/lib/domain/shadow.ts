@@ -58,15 +58,16 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   if (!storageConfigured()) return
   const submission = await submissionRepo.findGradableShadow(prisma, submissionId)
   if (!submission || submission.shadowTakes.length === 0) return
+  // Owner = assignment teacher: their default model + BYOK key.
+  const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   const textByOrder = new Map(submission.assignment.sentences.map((s) => [s.order, s.text]))
-  const perceptionModel = submission.assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL
+  const perceptionModel = submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL
 
   const revert = () => submissionRepo.revertToQueue(prisma, submissionId, 'UPLOADED')
 
   await submissionRepo.markProcessing(prisma, submissionId)
   // Grade on the assignment-owning teacher's own API key (BYOK); empty → platform key.
-  const owner = await assignmentRepo.offeringTeacherId(prisma, submission.assignmentId)
-  const keys = await resolveTeacherKeys(prisma, owner?.offering?.teacherId)
+  const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
   await withAiKeys(keys, async () => {
   try {
     const scoreByOrder = new Map<number, number>()
