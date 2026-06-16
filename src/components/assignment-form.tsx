@@ -40,13 +40,23 @@ export function AssignmentForm({
   offeringId,
   targets,
   initial,
+  chunkSet,
 }: {
   offeringId?: number
   targets?: PublishTarget[]
   initial?: AssignmentInitial
+  chunkSet?: { id: number; name: string; count: number; hasVideo: boolean }
 }) {
   const t = useT()
   const editing = Boolean(initial)
+  // Shadowing assignment (from the item bank): sentences + video come from the set,
+  // and recording audio is the natural submission.
+  const shadow = Boolean(chunkSet)
+  const dAudio = initial?.requireAudio ?? (shadow ? true : false)
+  const dVideo = initial?.requireVideo ?? (shadow ? false : true)
+  const dText = initial?.requireText ?? false
+  const dEyes = initial?.requireEyesClosed ?? (shadow ? false : true)
+  const dHand = initial?.requireHandwriting ?? false
   const [state, action, isPending] = useActionState(editing ? updateAssignment : createAssignment, null)
 
   // Core text fields are controlled so the AI draft can fill them.
@@ -91,7 +101,7 @@ export function AssignmentForm({
 
   return (
     <div className="space-y-4">
-      {!editing ? <AiDraftPanel onApply={applyDraft} /> : null}
+      {!editing && !shadow ? <AiDraftPanel onApply={applyDraft} /> : null}
       <Card>
         <CardHeader>
           <CardTitle>{editing ? t('asg.editTitle') : t('asg.newTitle')}</CardTitle>
@@ -159,33 +169,45 @@ export function AssignmentForm({
               <Label htmlFor="instructions">{t('asg.fInstructions')}</Label>
               <Textarea id="instructions" name="instructions" rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder={t('asg.fInstructionsPh')} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sentences">{t('asg.fSentences')}</Label>
-              <p className="text-xs text-muted-foreground">{t('asg.fSentencesHint')}</p>
-              <Textarea id="sentences" name="sentences" rows={6} value={sentences} onChange={(e) => setSentences(e.target.value)} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
-            </div>
+            {chunkSet ? (
+              <div className="space-y-1.5">
+                <Label>{t('asg.fSentences')}</Label>
+                <input type="hidden" name="chunkSetId" value={chunkSet.id} />
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
+                  <div className="font-medium">{t('asg.fromBank')}：{chunkSet.name}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {chunkSet.count} {t('bank.chunkUnit')} · {chunkSet.hasVideo ? t('bank.hasVideo') : t('bank.noVideo')}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="sentences">{t('asg.fSentences')}</Label>
+                <p className="text-xs text-muted-foreground">{t('asg.fSentencesHint')}</p>
+                <Textarea id="sentences" name="sentences" rows={6} value={sentences} onChange={(e) => setSentences(e.target.value)} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>{t('asg.submitKinds')}</Label>
               <div className="space-y-2.5 rounded-xl border border-input p-3 text-sm">
-                {/* Default = eyes-closed video recitation of the sentences. */}
                 <label className="flex items-center gap-2.5">
-                  <input type="checkbox" name="requireVideo" defaultChecked={initial?.requireVideo ?? true} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" name="requireVideo" defaultChecked={dVideo} className="h-4 w-4 accent-primary" />
                   {t('asg.kindVideo')}
                 </label>
                 <label className="flex items-center gap-2.5 pl-6 text-muted-foreground">
-                  <input type="checkbox" name="requireEyesClosed" defaultChecked={initial?.requireEyesClosed ?? true} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" name="requireEyesClosed" defaultChecked={dEyes} className="h-4 w-4 accent-primary" />
                   {t('asg.fEyes')}
                 </label>
                 <label className="flex items-center gap-2.5">
-                  <input type="checkbox" name="requireAudio" defaultChecked={initial?.requireAudio ?? false} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" name="requireAudio" defaultChecked={dAudio} className="h-4 w-4 accent-primary" />
                   {t('asg.kindAudio')}
                 </label>
                 <label className="flex items-center gap-2.5">
-                  <input type="checkbox" name="requireText" defaultChecked={initial?.requireText ?? false} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" name="requireText" defaultChecked={dText} className="h-4 w-4 accent-primary" />
                   {t('asg.kindText')}
                 </label>
                 <label className="flex items-center gap-2.5">
-                  <input type="checkbox" name="requireHandwriting" defaultChecked={initial?.requireHandwriting ?? false} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" name="requireHandwriting" defaultChecked={dHand} className="h-4 w-4 accent-primary" />
                   {t('asg.kindHandwriting')}
                 </label>
               </div>

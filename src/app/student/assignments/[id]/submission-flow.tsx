@@ -88,6 +88,7 @@ export function SubmissionFlow(props: {
   title: string
   category: string | null
   instructions: string | null
+  shadowing?: React.ReactNode
   practice?: React.ReactNode
   sentences: Sentence[]
   requireEyesClosed: boolean
@@ -215,6 +216,7 @@ export function SubmissionFlow(props: {
         <h1 className="text-xl font-bold tracking-tight">{props.title}</h1>
         {props.instructions ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{props.instructions}</p> : null}
       </div>
+      {props.shadowing}
       {props.practice}
       <Steps steps={steps} idx={idx} />
 

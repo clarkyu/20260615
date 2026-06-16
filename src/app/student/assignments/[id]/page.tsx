@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db'
 import { parsePerSentence } from '@/lib/domain/analytics'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
+import { ShadowingReference } from './shadowing-reference'
 
 export default async function StudentAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -20,6 +21,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
     where: { id: assignmentId, offering: { classId: me.classId } },
     include: {
       sentences: { orderBy: { order: 'asc' } },
+      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
       submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1 },
     },
   })
@@ -39,6 +41,16 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   const closed = assignment.dueAt ? now > assignment.dueAt : false
   const sentences = assignment.sentences.map((s) => ({ order: s.order, text: s.text }))
   const windowOpen = !notOpen && !closed
+  const shadowChunks = assignment.shadowVideoKey && assignment.chunkSet
+    ? assignment.chunkSet.chunks.map((c) => ({
+        english: c.english,
+        chinese: c.chinese,
+        meaningEn: c.meaningEn,
+        meaningZh: c.meaningZh,
+        exampleEn: c.exampleEn,
+        exampleZh: c.exampleZh,
+      }))
+    : null
 
   return (
     <SubmissionFlow
@@ -46,6 +58,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
       title={assignment.title}
       category={assignment.category}
       instructions={assignment.instructions}
+      shadowing={windowOpen && shadowChunks ? <ShadowingReference assignmentId={assignment.id} chunks={shadowChunks} /> : null}
       practice={windowOpen && sentences.length > 0 ? <PracticePanel assignmentId={assignment.id} sentences={sentences} /> : null}
       sentences={sentences}
       requireEyesClosed={assignment.requireEyesClosed}
