@@ -1,6 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import * as classRepo from '@/lib/repo/classes'
+import * as userRepo from '@/lib/repo/users'
+import * as majorRepo from '@/lib/repo/majors'
 import { ClassManager } from './class-manager'
 
 export default async function ClassPage({ params }: { params: Promise<{ classId: string }> }) {
@@ -12,24 +15,13 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const cls = await prisma.classGroup.findFirst({
-    where: { id: classId, schoolId: user.schoolId },
-    include: { major: { include: { department: { select: { name: true } } } } },
-  })
+  const cls = await classRepo.findDetailForSchool(prisma, classId, user.schoolId)
   if (!cls) notFound()
 
   const [students, allClasses, majors] = await Promise.all([
-    prisma.user.findMany({
-      where: { classId, role: 'STUDENT' },
-      orderBy: { studentNo: 'asc' },
-      select: { id: true, studentNo: true, name: true, phone: true, email: true },
-    }),
-    prisma.classGroup.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-    prisma.major.findMany({
-      where: { schoolId: user.schoolId },
-      orderBy: { name: 'asc' },
-      include: { department: { select: { name: true } } },
-    }),
+    userRepo.listStudentsInClass(prisma, classId),
+    classRepo.listForSchool(prisma, user.schoolId),
+    majorRepo.listForSchool(prisma, user.schoolId),
   ])
 
   return (

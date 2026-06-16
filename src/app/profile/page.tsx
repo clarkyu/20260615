@@ -1,6 +1,8 @@
 import { requireAuth } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
+import * as departmentRepo from '@/lib/repo/departments'
 import { Card, CardContent } from '@/components/ui/card'
 import { ProfileClient } from './profile-client'
 import { StaffSettings } from './staff-settings'
@@ -10,14 +12,7 @@ export default async function ProfilePage() {
   const session = await requireAuth()
   const prisma = await getDb()
   const { t, locale } = await getT()
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    include: {
-      school: true,
-      class: { include: { major: { include: { department: { select: { name: true } } } } } },
-      department: { select: { name: true } },
-    },
-  })
+  const user = await userRepo.findProfile(prisma, session.userId)
   if (!user) {
     const { logout } = await import('@/actions/auth')
     await logout()
@@ -26,9 +21,7 @@ export default async function ProfilePage() {
 
   const isStaff = user.role !== 'STUDENT'
   const stuMajor = user.class?.major
-  const departments = isStaff && user.schoolId
-    ? await prisma.department.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
-    : []
+  const departments = isStaff && user.schoolId ? await departmentRepo.listForSchool(prisma, user.schoolId) : []
 
   const rows = [
     user.email ? { k: t('email'), v: user.email } : null,

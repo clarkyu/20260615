@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
 import { Card, CardContent } from '@/components/ui/card'
 import { AddTeacherForm } from './add-teacher-form'
 
@@ -13,11 +14,7 @@ export default async function TeachersPage() {
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const teachers = await prisma.user.findMany({
-    where: { schoolId: user.schoolId, role: { in: ['TEACHER', 'SCHOOL_ADMIN'] } },
-    select: { id: true, name: true, staffNo: true, email: true, _count: { select: { taughtOfferings: true } } },
-    orderBy: { createdAt: 'asc' },
-  })
+  const teachers = await userRepo.listStaffForSchool(prisma, user.schoolId)
 
   return (
     <div className="space-y-4 py-2">
