@@ -43,6 +43,9 @@ export const checkbox = z.preprocess((v) => v !== undefined, z.boolean())
 // A positive-int id (e.g. a hidden field). Tampered/missing ⇒ validation fails.
 export const reqId = z.coerce.number().int().positive()
 
+// An optional id (blank/absent ⇒ null), e.g. a select with a "none" choice.
+export const optId = z.preprocess((v) => (v === '' || v == null ? null : v), z.coerce.number().int().positive().nullable())
+
 // A repeated id field (0, 1, or many) → array of positive ints.
 export const idList = z.preprocess(
   (v) => (Array.isArray(v) ? v : v != null ? [v] : []),

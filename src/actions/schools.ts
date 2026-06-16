@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getSession } from '@/lib/session'
 import { getT } from '@/lib/i18n-server'
+import { parseForm, reqText, optText, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -16,10 +17,10 @@ export async function createSchool(prevState: unknown, formData: FormData): Prom
   const user = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const name = (formData.get('name') as string)?.trim()
-  const code = normalizeCode((formData.get('code') as string) ?? '')
-
-  if (!name) return { error: t('err.needSchoolName') }
+  const parsed = parseForm(z.object({ name: reqText('err.needSchoolName', 100), code: optText(20) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const name = parsed.data.name
+  const code = normalizeCode(parsed.data.code ?? '')
   if (code.length < 3 || code.length > 12) return { error: t('err.codeFormat') }
 
   if (await prisma.school.findUnique({ where: { name } })) return { error: t('err.schoolNameExists') }
@@ -42,8 +43,9 @@ export async function renameSchool(prevState: unknown, formData: FormData): Prom
   const { t } = await getT()
   const prisma = await getDb()
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
-  const name = (formData.get('name') as string)?.trim()
-  if (!name) return { error: t('err.needSchoolName') }
+  const parsed = parseForm(z.object({ name: reqText('err.needSchoolName', 100) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const name = parsed.data.name
 
   const dup = await prisma.school.findFirst({ where: { name, NOT: { id: user.schoolId } } })
   if (dup) return { error: t('err.schoolNameExists') }

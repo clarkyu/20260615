@@ -13,6 +13,7 @@ import { normalizeEmail } from '@/lib/utils'
 import { generateToken, hashToken } from '@/lib/tokens'
 import { validatePassword, validateName } from '@/lib/validation'
 import { getT } from '@/lib/i18n-server'
+import { parseForm, optText, optId, z } from '@/lib/validate'
 import {
   rateLimitLogin,
   rateLimitRegister,
@@ -259,9 +260,9 @@ export async function updateStaffProfile(prevState: unknown, formData: FormData)
   const current = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const staffNo = (formData.get('staffNo') as string)?.trim() || null
-  const deptRaw = Number(formData.get('departmentId'))
-  const departmentId = Number.isInteger(deptRaw) && deptRaw > 0 ? deptRaw : null
+  const parsed = parseForm(z.object({ staffNo: optText(50), departmentId: optId }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { staffNo, departmentId } = parsed.data
 
   if (staffNo && current.schoolId) {
     const dup = await prisma.user.findFirst({
@@ -282,8 +283,10 @@ export async function updateContact(prevState: unknown, formData: FormData): Pro
   const current = await requireAuth()
   const { t } = await getT()
   const prisma = await getDb()
-  const phone = (formData.get('phone') as string)?.trim() || null
-  const email = normalizeEmail((formData.get('email') as string) ?? '') || null
+  const parsed = parseForm(z.object({ phone: optText(50), email: optText(120) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const phone = parsed.data.phone
+  const email = normalizeEmail(parsed.data.email ?? '') || null
   if (email) {
     const dup = await prisma.user.findFirst({ where: { email, NOT: { id: current.userId } } })
     if (dup) return { error: t('err.emailTaken') }
