@@ -5,6 +5,8 @@ import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } f
 import { gradePractice } from '@/lib/domain/practice'
 import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
+import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
+import { withAiKeys } from '@/lib/ai/key-context'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as practiceRepo from '@/lib/repo/practice'
 
@@ -71,14 +73,17 @@ export async function gradePracticeAttempt(
     }
   }
 
-  const outcome = await gradePractice({
+  // Practice feedback runs on the assignment-owning teacher's key (BYOK); empty → platform.
+  const owner = await assignmentRepo.offeringTeacherId(prisma, assignmentId)
+  const keys = await resolveTeacherKeys(prisma, owner?.offering?.teacherId)
+  const outcome = await withAiKeys(keys, () => gradePractice({
     perceptionModel: assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
     judgeModel: assignment.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
     rubric: assignment.rubric || DEFAULT_RUBRIC,
     referenceSentences: assignment.sentences.map((s) => ({ order: s.order, text: s.text })),
     audioUrl,
     recitedText: payload.recitedText?.trim() || undefined,
-  })
+  }))
 
   // Persist every practice round (even unavailable/error) for later analytics.
   await practiceRepo.createAttempt(prisma, {
