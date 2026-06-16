@@ -1,8 +1,9 @@
 'use server'
 
-import { requireStaff } from '@/lib/auth'
-import { getT } from '@/lib/i18n-server'
+import { staffContext } from '@/lib/action-context'
 import { draftAssignment } from '@/lib/domain/authoring'
+import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
+import { withAiKeys } from '@/lib/ai/key-context'
 
 export interface DraftFields {
   title: string
@@ -21,8 +22,7 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024
 // Drafts an assignment from a topic and/or a textbook photo. The photo is sent
 // inline (base64) to the model — no R2 round-trip needed for authoring.
 export async function draftAssignmentAction(formData: FormData): Promise<DraftResult> {
-  await requireStaff()
-  const { t } = await getT()
+  const { user, prisma, t } = await staffContext()
 
   const topic = ((formData.get('topic') as string) ?? '').trim()
   const image = formData.get('image')
@@ -41,7 +41,9 @@ export async function draftAssignmentAction(formData: FormData): Promise<DraftRe
     imageMime = file.type || 'image/jpeg'
   }
 
-  const outcome = await draftAssignment({ topic, imageBase64, imageMime })
+  // Use the authoring teacher's own key (BYOK); empty → platform key.
+  const keys = await resolveTeacherKeys(prisma, user.userId)
+  const outcome = await withAiKeys(keys, () => draftAssignment({ topic, imageBase64, imageMime }))
   if (outcome.status === 'unavailable') return { status: 'unavailable' }
   if (outcome.status === 'error') return { status: 'error', message: t('author.failed') }
 
