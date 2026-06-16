@@ -15,21 +15,31 @@ export interface PackSet {
   meta: ChunkSetMeta
 }
 
+// Per-call chunk budget. A single Worker request must not attempt an unbounded
+// batch (CPU / subrequest / time limits → mid-run eviction with no transaction),
+// so each invocation creates sets until ~this many chunks are inserted, then
+// returns `remaining`. The caller re-invokes (idempotent by source) until
+// remaining hits 0 — a bounded, resumable import instead of a long one-shot.
+const MAX_CHUNKS_PER_CALL = 600
+
 export async function importPack(
   prisma: PrismaClient,
   scope: number | null,
   sets: PackSet[],
   existing: Set<string>,
-): Promise<{ imported: number; skipped: number }> {
+  maxChunks: number = MAX_CHUNKS_PER_CALL,
+): Promise<{ imported: number; skipped: number; remaining: number }> {
+  const todo = sets.filter((s) => !(s.meta.source && existing.has(s.meta.source)))
+  const skipped = sets.length - todo.length
+
   let imported = 0
-  let skipped = 0
-  for (const set of sets) {
-    if (set.meta.source && existing.has(set.meta.source)) {
-      skipped++
-      continue
-    }
+  let budget = 0
+  for (const set of todo) {
+    // Always import at least one set; otherwise stop before blowing the budget.
+    if (imported > 0 && budget + set.chunks.length > maxChunks) break
     await bank.createWithChunks(prisma, scope, set.name, set.chunks, set.meta)
     imported++
+    budget += set.chunks.length
   }
-  return { imported, skipped }
+  return { imported, skipped, remaining: todo.length - imported }
 }

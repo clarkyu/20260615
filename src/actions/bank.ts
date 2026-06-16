@@ -42,7 +42,9 @@ export async function createChunkSet(prevState: unknown, formData: FormData): Pr
 // pool (one official copy visible to every school); an ordinary teacher imports
 // into their own school. Idempotent — a source already present in the target's
 // scope is skipped, so it never duplicates official content. Returns counts.
-export async function importStarterBank(): Promise<{ imported: number; skipped: number; error?: string }> {
+type ImportState = { imported?: number; skipped?: number; remaining?: number; error?: string }
+
+export async function importStarterBank(): Promise<ImportState> {
   const { user, prisma, t } = await staffContext()
   const toGlobal = isSuper(user)
   if (!toGlobal && !user.schoolId) return { imported: 0, skipped: 0, error: t('err.createSchoolFirst') }
@@ -56,7 +58,7 @@ export async function importStarterBank(): Promise<{ imported: number; skipped: 
 
 // Import the built-in curated chunk pack as global official sets (super-admin
 // only). Idempotent by source — safe to re-click, and a timed-out run resumes.
-export async function importEnglishFlow(): Promise<{ imported: number; skipped: number; error?: string }> {
+export async function importEnglishFlow(): Promise<ImportState> {
   const { user, prisma, t } = await staffContext()
   if (!isSuper(user)) return { imported: 0, skipped: 0, error: t('err.forbidden') }
   const existing = await bankRepo.globalSources(prisma)
@@ -69,7 +71,7 @@ export async function importEnglishFlow(): Promise<{ imported: number; skipped: 
 // Generic pack importer (super-admin): paste a pack of three-part chunks, name it,
 // classify it, and auto-split into sets of `perSet` — imported as global official.
 // No per-pack code; idempotent by a name-derived source key.
-export async function importPackAction(prevState: unknown, formData: FormData): Promise<{ imported?: number; skipped?: number; error?: string }> {
+export async function importPackAction(prevState: unknown, formData: FormData): Promise<ImportState> {
   const { user, prisma, t } = await staffContext()
   if (!isSuper(user)) return { error: t('err.forbidden') }
   const parsed = parseForm(
