@@ -165,6 +165,27 @@ export interface ScoreExportRow {
   gradedAt: string
 }
 
+export interface GradebookRow {
+  studentNo: string
+  name: string
+  daily: number | null // 平时成绩
+  exam: number | null // 测试成绩
+  done: string // 完成度, e.g. "3/5"
+}
+
+export function buildGradebookWorkbook(className: string, rows: GradebookRow[]): Uint8Array {
+  const header = ['学号 ID', '姓名 Name', '平时成绩 Daily', '测试成绩 Test', '完成度 Done']
+  const aoa: (string | number | null)[][] = [
+    header,
+    ...rows.map((r) => [r.studentNo, r.name, r.daily, r.exam, r.done]),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, (className || '成绩单').slice(0, 31))
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
+}
+
 export function buildScoreWorkbook(className: string, rows: ScoreExportRow[]): Uint8Array {
   const header = ['学号 ID', '姓名 Name', '班级 Class', '状态 Status', 'AI 评分 AI', '最终得分 Final', '评语 Feedback', '评阅时间 Graded at']
   const aoa: (string | number | null)[][] = [

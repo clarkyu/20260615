@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react'
+import { ChevronLeft, AlertTriangle, TrendingUp, RefreshCw, FileSpreadsheet } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -178,6 +178,36 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
               </Card>
             </section>
           ) : null}
+
+          {/* Full-class gradebook */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">{t('insights.gradebook')}</h2>
+              <a href={`/dashboard/teaching/${offering.id}/gradebook`}>
+                <Button variant="outline" size="sm"><FileSpreadsheet className="h-3.5 w-3.5" />{t('insights.exportGrades')}</Button>
+              </a>
+            </div>
+            <Card>
+              <CardContent className="divide-y divide-border/60 p-0">
+                <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-muted-foreground">
+                  <span className="min-w-0 flex-1">{t('insights.student')}</span>
+                  <span className="w-12 shrink-0 text-center">{t('insights.daily')}</span>
+                  <span className="w-12 shrink-0 text-center">{t('insights.exam')}</span>
+                  <span className="w-12 shrink-0 text-center">{t('insights.completion')}</span>
+                </div>
+                {[...profiles].sort((a, b) => a.studentNo.localeCompare(b.studentNo)).map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 px-3 py-2.5 text-sm">
+                    <div className="min-w-0 flex-1 truncate">
+                      {p.name} <span className="text-xs text-muted-foreground">{p.studentNo}</span>
+                    </div>
+                    <span className="w-12 shrink-0 text-center tabular-nums">{p.dailyScore == null ? '—' : p.dailyScore}</span>
+                    <span className="w-12 shrink-0 text-center tabular-nums">{p.avgScore == null ? '—' : p.avgScore}</span>
+                    <span className="w-12 shrink-0 text-center text-xs text-muted-foreground tabular-nums">{p.submitted}/{p.totalAssignments}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </section>
 
           {/* Per-assignment table */}
           <section className="space-y-2">
