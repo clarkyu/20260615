@@ -93,6 +93,22 @@
   .animate-in-up {
     animation: inUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
+  /* Shimmer skeleton for media/loading placeholders. */
+  .skeleton {
+    @apply relative overflow-hidden bg-secondary;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(var(--foreground) / 0.06), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+  /* Celebratory pop for success / progress moments. */
+  .animate-pop {
+    animation: pop 0.45s cubic-bezier(0.22, 1.4, 0.4, 1) both;
+  }
 }
 
 @keyframes inUp {
@@ -103,5 +119,33 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in-up,
+  .animate-pop,
+  .skeleton::after {
+    animation: none;
   }
 }

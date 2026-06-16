@@ -153,7 +153,7 @@ export function SubmissionFlow(props: {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-          <div className="animate-in-up grid h-16 w-16 place-items-center rounded-full bg-success/15 text-success"><CheckCircle2 className="h-9 w-9" /></div>
+          <div className="animate-pop grid h-16 w-16 place-items-center rounded-full bg-success/15 text-success"><CheckCircle2 className="h-9 w-9" /></div>
           <p className="text-xl font-bold">{t('rec.success')}</p>
           <p className="text-sm text-muted-foreground">{t('rec.successDesc')}</p>
           <Link href="/student" className="mt-1 w-full"><Button className="w-full" size="lg">{t('sub.backToList')}</Button></Link>

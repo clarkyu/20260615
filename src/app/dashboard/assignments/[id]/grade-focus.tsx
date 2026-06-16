@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge, statusTone } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export interface FocusRow {
   id: number
@@ -137,17 +138,17 @@ export function GradeFocus({
           videoUrl ? (
             <video src={videoUrl} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
           ) : (
-            <div className="grid aspect-[3/4] w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+            <Skeleton className="aspect-[3/4] w-full" />
           )
         ) : null}
         {cur.hasAudio ? (
-          audioUrl ? <audio src={audioUrl} controls className="w-full" /> : <div className="grid h-16 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+          audioUrl ? <audio src={audioUrl} controls className="w-full" /> : <Skeleton className="h-16 w-full" />
         ) : null}
         {cur.hasImage ? (
           imageUrl
             // eslint-disable-next-line @next/next/no-img-element
             ? <img src={imageUrl} alt="" className="w-full rounded-2xl bg-secondary object-contain" />
-            : <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+            : <Skeleton className="h-28 w-full" />
         ) : null}
         {takes.length > 0 ? (
           <div className="space-y-1.5 rounded-xl border border-border/70 p-2.5">

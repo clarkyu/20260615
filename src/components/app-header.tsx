@@ -12,8 +12,8 @@ export async function AppHeader({ user }: { user: CurrentUser | null }) {
     <header className="safe-top sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
-          <span className="grid h-7 w-7 place-items-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-soft">
-            背
+          <span aria-hidden className="grid h-7 w-7 place-items-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-soft">
+            你
           </span>
           {t('appName')}
         </Link>
