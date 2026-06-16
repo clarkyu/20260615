@@ -1,10 +1,29 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { parsePerSentence } from '@/lib/domain/analytics'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
 import { ShadowSubmit } from './shadow-submit'
+
+// Parse the stored AI result for the learner-facing detail: transcript + per-sentence
+// (accuracy/completeness + what they actually said).
+function parseGraded(aiResult: string | null | undefined): {
+  transcript: string
+  perSentence: { order: number; accuracy: number; completeness: number; spokenText: string }[]
+} {
+  try {
+    const p = JSON.parse(aiResult ?? '') as { perception?: { transcript?: string; perSentence?: { order: number; spokenText?: string; accuracy: number; completeness: number }[] } }
+    const ps = p?.perception?.perSentence
+    return {
+      transcript: typeof p?.perception?.transcript === 'string' ? p.perception.transcript : '',
+      perSentence: Array.isArray(ps)
+        ? ps.map((s) => ({ order: s.order, accuracy: Number(s.accuracy) || 0, completeness: Number(s.completeness) || 0, spokenText: typeof s.spokenText === 'string' ? s.spokenText : '' }))
+        : [],
+    }
+  } catch {
+    return { transcript: '', perSentence: [] }
+  }
+}
 
 export default async function StudentAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -73,6 +92,8 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
     )
   }
 
+  const graded = parseGraded(latest?.aiResult)
+
   return (
     <SubmissionFlow
       assignmentId={assignment.id}
@@ -94,7 +115,8 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
       latestStatus={latest?.status ?? null}
       latestScore={latest?.finalScore ?? null}
       latestFeedback={latest?.feedback ?? null}
-      latestPerSentence={parsePerSentence(latest?.aiResult)}
+      latestPerSentence={graded.perSentence}
+      latestTranscript={graded.transcript}
     />
   )
 }
