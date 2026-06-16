@@ -20,6 +20,22 @@ function splitBilingual(line: string): { en: string; zh: string | null } {
 // is up to 3 bilingual lines in order — 中心句 / 解释句 / 情境例句 — every line
 // "English | 中文". Leading list numbers ("51.") and "Means:/Example:" style
 // prefixes are tolerated.
+// Reverse of parseChunks: render chunks back into the editable three-part paste
+// text (3 lines per item, blank line between), so a teacher can fix/extend them.
+export function serializeChunks(
+  chunks: { english: string; chinese: string | null; meaningEn: string | null; meaningZh: string | null; exampleEn: string | null; exampleZh: string | null }[],
+): string {
+  const line = (en: string, zh: string | null) => (zh ? `${en} | ${zh}` : en)
+  return chunks
+    .map((c) => {
+      const lines = [line(c.english, c.chinese)]
+      if (c.meaningEn) lines.push(line(c.meaningEn, c.meaningZh))
+      if (c.exampleEn) lines.push(line(c.exampleEn, c.exampleZh))
+      return lines.join('\n')
+    })
+    .join('\n\n')
+}
+
 export function parseChunks(raw: string): ChunkInput[] {
   const out: ChunkInput[] = []
   for (const block of raw.split(/\n\s*\n+/)) {
