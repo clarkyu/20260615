@@ -12,9 +12,10 @@ function env(key: string): string | undefined {
 }
 
 export const config = {
-  appName: (): string => env('APP_NAME') ?? '英语背诵作业',
+  appName: (): string => env('APP_NAME') ?? '你好！作业 Hi, Homework',
   appUrl: (): string | undefined => env('APP_URL'),
   sessionSecret: (): string | undefined => env('SESSION_SECRET'),
+  adminEmail: (): string | undefined => env('ADMIN_EMAIL'),
   isProd: (): boolean => process.env.NODE_ENV === 'production',
   email: () => ({ from: env('EMAIL_FROM') ?? 'onboarding@resend.dev', apiKey: env('RESEND_API_KEY') }),
   r2: () => ({

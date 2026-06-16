@@ -86,7 +86,7 @@ export function parseRoster(buffer: ArrayBuffer | Buffer): ParsedRoster {
     return parseRosterUnsafe(buffer)
   } catch (err) {
     console.error('[parseRoster] failed:', err)
-    return { rows: [], validCount: 0, errorCount: 0, headerError: '解析文件出错，请确认是有效的 .xls / .xlsx 名单。' }
+    return { rows: [], validCount: 0, errorCount: 0, headerError: 'roster.errParse' }
   }
 }
 
@@ -95,11 +95,11 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
   try {
     wb = XLSX.read(toUint8(buffer), { type: 'array' })
   } catch {
-    return { rows: [], validCount: 0, errorCount: 0, headerError: '无法读取该文件，请上传 .xls 或 .xlsx' }
+    return { rows: [], validCount: 0, errorCount: 0, headerError: 'roster.errRead' }
   }
   const sheetName = wb.SheetNames[0]
   const ws = sheetName ? wb.Sheets[sheetName] : undefined
-  if (!ws) return { rows: [], validCount: 0, errorCount: 0, headerError: '找不到工作表' }
+  if (!ws) return { rows: [], validCount: 0, errorCount: 0, headerError: 'roster.errSheet' }
 
   const grid = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '', blankrows: false })
 
@@ -115,7 +115,7 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
     }
   }
   if (headerIdx < 0) {
-    return { rows: [], validCount: 0, errorCount: 0, headerError: '缺少必需列：学号、姓名、班级 / Missing required columns: ID, Name, Class' }
+    return { rows: [], validCount: 0, errorCount: 0, headerError: 'roster.errColumns' }
   }
 
   const get = (row: string[], field: Field): string =>

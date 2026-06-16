@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import { presignDownload, storageConfigured } from '@/lib/storage'
-import { autoGradeSubmission, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
+import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
@@ -25,7 +25,7 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   )
   if (!parsed.ok) return { error: t(parsed.error) }
   const { submissionId, perceptionModel, judgeModel } = parsed.data
-  const rubric = parsed.data.rubric || '按完整度、准确度、发音、流利度综合评分。'
+  const rubric = parsed.data.rubric || DEFAULT_RUBRIC
 
   const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }

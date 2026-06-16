@@ -39,7 +39,7 @@ describe('feature flags', () => {
 
 describe('getters + defaults', () => {
   it('falls back to defaults when unset', () => {
-    expect(config.appName()).toBe('英语背诵作业')
+    expect(config.appName()).toBe('你好！作业 Hi, Homework')
     expect(config.email().from).toBe('onboarding@resend.dev')
     expect(config.geminiBaseUrl()).toBe('https://generativelanguage.googleapis.com')
     expect(config.appUrl()).toBeUndefined()
