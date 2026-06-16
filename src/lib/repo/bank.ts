@@ -39,11 +39,22 @@ export async function importedSources(prisma: PrismaClient, schoolId: number): P
   return new Set(rows.map((r) => r.source).filter((s): s is string => s !== null))
 }
 
+export interface BankFilters {
+  cefr?: string
+  strand?: string
+  domain?: string
+}
+
 // Set list for the bank index — name, video presence, chunk count, level/skill
-// for badges, newest first.
-export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+// for badges, newest first. Optional curriculum filters (each ANDed when present).
+export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined, filters?: BankFilters) {
   return prisma.chunkSet.findMany({
-    where: { schoolId: schoolId ?? -1 },
+    where: {
+      schoolId: schoolId ?? -1,
+      ...(filters?.cefr ? { cefr: filters.cefr } : {}),
+      ...(filters?.strand ? { strand: filters.strand } : {}),
+      ...(filters?.domain ? { domain: filters.domain } : {}),
+    },
     select: { id: true, name: true, shadowVideoKey: true, cefr: true, strand: true, _count: { select: { chunks: true } } },
     orderBy: { createdAt: 'desc' },
   })
