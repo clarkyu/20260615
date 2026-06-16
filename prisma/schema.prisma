@@ -49,13 +49,18 @@ model ChunkSet {
   @@index([schoolId])
 }
 
-// 句子（chunk）：英文 + 中文，按顺序属于某句集。
+// 句子（chunk）：三段式——中心句(english/chinese) + 解释句(meaning) + 情境例句(example)，
+// 各自中英对照，按顺序属于某句集。跟读视频按这三部分录制。
 model Chunk {
   id         Int      @id @default(autoincrement())
   chunkSetId Int
   order      Int
-  english    String
-  chinese    String?
+  english    String   // 中心句 EN
+  chinese    String?  // 中心句 中文
+  meaningEn  String?  // 解释句 EN
+  meaningZh  String?  // 解释句 中文
+  exampleEn  String?  // 情境例句 EN
+  exampleZh  String?  // 情境例句 中文
   chunkSet   ChunkSet @relation(fields: [chunkSetId], references: [id], onDelete: Cascade)
 
   @@index([chunkSetId])

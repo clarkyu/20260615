@@ -34,8 +34,8 @@ export function CreateSetForm() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="set-chunks">{t('bank.chunks')}</Label>
-            <p className="text-xs text-muted-foreground">{t('bank.chunksHint')}</p>
-            <Textarea id="set-chunks" name="chunks" rows={8} required placeholder={'How are you? | 你好吗？\nNice to meet you | 很高兴见到你'} />
+            <p className="whitespace-pre-line text-xs text-muted-foreground">{t('bank.chunksHint')}</p>
+            <Textarea id="set-chunks" name="chunks" rows={10} required placeholder={'Time flies. | 时光飞逝\nUsed to say that time passes very quickly. | 用来表示时间过得非常快。\nI can\'t believe it\'s already December. Time flies! | 真不敢相信已经十二月了，时光飞逝！\n\nLet\'s call it a day. | 今天到此为止\n...'} />
           </div>
           {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
           <div className="flex gap-2">
