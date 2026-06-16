@@ -188,12 +188,12 @@ export function Recorder(props: {
         setError(res.error ?? 'upload failed'); setPhase('recorded'); return
       }
       const put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type || (isAudio ? 'audio/webm' : 'video/webm') } })
-      if (!put.ok) { setError(t('rec.uploadFail')); setPhase('recorded'); return }
+      if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setPhase('recorded'); return }
       const fin = await recordMedia(res.submissionId, props.mode, blob.size, elapsed, JSON.stringify(violations))
       if ('error' in fin && fin.error) { setError(fin.error); setPhase('recorded'); return }
       props.onDone()
-    } catch {
-      setError(t('rec.uploadFail')); setPhase('recorded')
+    } catch (e) {
+      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`); setPhase('recorded')
     }
   }, [props, elapsed, violations, t, isAudio])
 

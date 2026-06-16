@@ -46,12 +46,12 @@ export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDo
       const res = await getUploadUrl(assignmentId, 'image', type, extFor(type))
       if ('error' in res || !res.url) { setError(res.error ?? 'upload failed'); setBusy(false); return }
       const put = await fetch(res.url, { method: 'PUT', body: file, headers: { 'Content-Type': type } })
-      if (!put.ok) { setError(t('rec.uploadFail')); setBusy(false); return }
+      if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setBusy(false); return }
       const fin = await recordMedia(res.submissionId, 'image', file.size, 0, '[]')
       if ('error' in fin && fin.error) { setError(fin.error); setBusy(false); return }
       onDone()
-    } catch {
-      setError(t('rec.uploadFail')); setBusy(false)
+    } catch (e) {
+      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`); setBusy(false)
     }
   }
 
