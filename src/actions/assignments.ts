@@ -2,10 +2,15 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { getDb } from '@/lib/db'
-import { requireStaff } from '@/lib/auth'
-import { getT } from '@/lib/i18n-server'
-import { weakSentences, parsePerSentence, type AnalyticsSubmission } from '@/lib/domain/analytics'
+import { staffContext, staffSchoolContext } from '@/lib/staff-action'
+import * as assignmentRepo from '@/lib/repo/assignments'
+import * as offeringRepo from '@/lib/repo/offerings'
+import {
+  createAssignments,
+  updateAssignment as updateAssignmentService,
+  buildReviewAssignment,
+  type AssignmentFields,
+} from '@/lib/domain/assignments'
 import { parseForm, reqText, optText, checkbox, intField, z, type ParseResult } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
@@ -34,201 +39,79 @@ const assignmentSchema = z.object({
   maxAttempts: intField(1, 1, 99),
 })
 
-type AssignmentFields = z.infer<typeof assignmentSchema> & {
-  sentences: string[]
-  openAt: Date | null
-  dueAt: Date | null
-}
-
-// Validate the form fields (zod), then add the derived sentences + dates.
-function readFields(formData: FormData): ParseResult<AssignmentFields> {
+// Validate the form (zod), then assemble the DB field shape + read-aloud sentences.
+function readFields(formData: FormData): ParseResult<{ fields: AssignmentFields; sentences: string[] }> {
   const parsed = parseForm(assignmentSchema, formData)
   if (!parsed.ok) return parsed
+  const d = parsed.data
   return {
     ok: true,
     data: {
-      ...parsed.data,
+      fields: {
+        title: d.title,
+        category: d.category,
+        monthLabel: d.monthLabel,
+        instructions: d.instructions,
+        openAt: parseDate(formData.get('openAt')),
+        dueAt: parseDate(formData.get('dueAt')),
+        requireEyesClosed: d.requireEyesClosed,
+        requireText: d.requireText,
+        requireAudio: d.requireAudio,
+        requireVideo: d.requireVideo,
+        requireHandwriting: d.requireHandwriting,
+        maxAttempts: d.maxAttempts,
+      },
       sentences: parseSentences((formData.get('sentences') as string) ?? ''),
-      openAt: parseDate(formData.get('openAt')),
-      dueAt: parseDate(formData.get('dueAt')),
     },
   }
 }
 
 export async function createAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
-  const schoolId = user.schoolId
-  const prisma = await getDb()
-
-  // One assignment per selected offering — the teacher may publish to several
-  // classes (offerings) of the same course at once.
-  const offeringIds = [...new Set(formData.getAll('offeringId').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))]
-  if (offeringIds.length === 0) return { error: t('err.needPublishTarget') }
-  const valid = await prisma.courseOffering.findMany({ where: { id: { in: offeringIds }, schoolId }, select: { id: true } })
-  if (valid.length === 0) return { error: t('err.offeringNotFound') }
-
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { error: cx.error }
   const fr = readFields(formData)
-  if (!fr.ok) return { error: t(fr.error) }
-  const f = fr.data
-  if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
+  if (!fr.ok) return { error: cx.t(fr.error) }
 
-  // Publishing from the item bank: pull the shadow video + sentences from the set.
-  let shadowVideoKey: string | null = null
-  let linkedSetId: number | null = null
-  let sentences = f.sentences.map((text, i) => ({ order: i + 1, text, translation: null as string | null }))
+  // The teacher may publish to several offerings (classes) of the same course.
+  const offeringIds = [...new Set(formData.getAll('offeringId').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))]
   const chunkSetId = Number(formData.get('chunkSetId')) || null
-  if (chunkSetId) {
-    const set = await prisma.chunkSet.findFirst({
-      where: { id: chunkSetId, schoolId },
-      include: { chunks: { orderBy: { order: 'asc' } } },
-    })
-    if (!set) return { error: t('err.setNotFound') }
-    shadowVideoKey = set.shadowVideoKey
-    linkedSetId = set.id
-    // The example sentence is what the student reads aloud / shadows.
-    sentences = set.chunks.map((c, i) => ({ order: i + 1, text: c.exampleEn || c.english, translation: c.exampleZh || c.chinese }))
-  }
+  const primaryOfferingId = Number(formData.get('primaryOfferingId')) || null
 
-  // One standalone create per offering. Don't wrap in $transaction: D1 has no
-  // interactive transactions, so a batched create can't resolve the new
-  // assignment's auto-increment id for its nested sentence inserts.
-  for (const o of valid) {
-    await prisma.assignment.create({
-      data: {
-        offeringId: o.id,
-        title: f.title,
-        category: f.category,
-        shadowVideoKey,
-        chunkSetId: linkedSetId,
-        monthLabel: f.monthLabel,
-        instructions: f.instructions,
-        openAt: f.openAt,
-        dueAt: f.dueAt,
-        requireEyesClosed: f.requireEyesClosed,
-        requireText: f.requireText,
-        requireAudio: f.requireAudio,
-        requireVideo: f.requireVideo,
-        requireHandwriting: f.requireHandwriting,
-        maxAttempts: f.maxAttempts,
-        sentences: { create: sentences },
-      },
-    })
-  }
+  const res = await createAssignments(cx.prisma, cx.schoolId, fr.data.fields, fr.data.sentences, offeringIds, chunkSetId, primaryOfferingId)
+  if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath('/dashboard/teaching')
-
-  // Return to the offering the teacher started from, if it was among the targets.
-  const primary = Number(formData.get('primaryOfferingId'))
-  const target = valid.some((o) => o.id === primary) ? primary : valid[0].id
-  redirect(`/dashboard/teaching/${target}`)
+  redirect(res.redirectTo)
 }
 
 export async function updateAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
-  const prisma = await getDb()
-
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { error: cx.error }
   const assignmentId = Number(formData.get('assignmentId'))
-  const existing = await prisma.assignment.findFirst({ where: { id: assignmentId, offering: { schoolId: user.schoolId } } })
-  if (!existing) return { error: t('err.assignNotFound') }
-
   const fr = readFields(formData)
-  if (!fr.ok) return { error: t(fr.error) }
-  const f = fr.data
-  if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
+  if (!fr.ok) return { error: cx.t(fr.error) }
 
-  await prisma.$transaction([
-    prisma.sentence.deleteMany({ where: { assignmentId } }),
-    prisma.assignment.update({
-      where: { id: assignmentId },
-      data: {
-        title: f.title,
-        category: f.category,
-        monthLabel: f.monthLabel,
-        instructions: f.instructions,
-        openAt: f.openAt,
-        dueAt: f.dueAt,
-        requireEyesClosed: f.requireEyesClosed,
-        requireText: f.requireText,
-        requireAudio: f.requireAudio,
-        requireVideo: f.requireVideo,
-        requireHandwriting: f.requireHandwriting,
-        maxAttempts: f.maxAttempts,
-        sentences: { create: f.sentences.map((text, i) => ({ order: i + 1, text })) },
-      },
-    }),
-  ])
+  const res = await updateAssignmentService(cx.prisma, cx.schoolId, assignmentId, fr.data.fields, fr.data.sentences)
+  if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   redirect(`/dashboard/assignments/${assignmentId}`)
 }
 
-// 学情 → 行动：把这个授课里"最弱的句子"一键生成一份复习作业（默认音频背诵、
-// 可多次），创建后跳到编辑页让老师设个截止时间再发。
+// 学情 → 行动：把这个授课里"最弱的句子"一键生成一份复习作业，跳到编辑页让老师
+// 设个截止时间再发。
 export async function createReviewAssignment(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  const prisma = await getDb()
+  const { user, prisma } = await staffContext()
   const offeringId = Number(formData.get('offeringId'))
-  const offering = await prisma.courseOffering.findFirst({ where: { id: offeringId, schoolId: user.schoolId ?? -1 } })
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId)
   if (!offering) redirect('/dashboard/teaching')
 
-  const assignments = await prisma.assignment.findMany({
-    where: { offeringId },
-    select: { id: true, sentences: { select: { order: true, text: true, translation: true } } },
-  })
-  const textByKey = new Map<string, { text: string; translation: string | null }>()
-  for (const a of assignments) for (const s of a.sentences) textByKey.set(`${a.id}:${s.order}`, { text: s.text, translation: s.translation })
-
-  const rawSubs = await prisma.submission.findMany({
-    where: { assignment: { offeringId } },
-    select: { studentId: true, assignmentId: true, status: true, finalScore: true, needsReview: true, aiResult: true },
-    orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
-  })
-  const seen = new Set<string>()
-  const subs: AnalyticsSubmission[] = []
-  for (const s of rawSubs) {
-    const k = `${s.studentId}:${s.assignmentId}`
-    if (seen.has(k)) continue
-    seen.add(k)
-    subs.push({ studentId: s.studentId, assignmentId: s.assignmentId, status: s.status, finalScore: s.finalScore, needsReview: s.needsReview, perSentence: parsePerSentence(s.aiResult) })
-  }
-
-  const picked: { text: string; translation: string | null }[] = []
-  const used = new Set<string>()
-  for (const w of weakSentences(subs, 12)) {
-    const e = textByKey.get(`${w.assignmentId}:${w.order}`)
-    if (e && !used.has(e.text)) { used.add(e.text); picked.push(e) }
-  }
-  if (picked.length === 0) redirect(`/dashboard/teaching/${offeringId}/insights`)
-
-  const d = new Date()
-  const created = await prisma.assignment.create({
-    data: {
-      offeringId,
-      title: `复习 · 薄弱句 ${d.getMonth() + 1}-${d.getDate()}`,
-      category: '复习作业',
-      requireAudio: true,
-      requireVideo: false,
-      requireText: false,
-      requireEyesClosed: false,
-      requireHandwriting: false,
-      maxAttempts: 3,
-      sentences: { create: picked.map((p, i) => ({ order: i + 1, text: p.text, translation: p.translation })) },
-    },
-  })
+  const res = await buildReviewAssignment(prisma, offeringId)
   revalidatePath(`/dashboard/teaching/${offeringId}`)
-  redirect(`/dashboard/assignments/${created.id}/edit`)
+  redirect(res.redirectTo)
 }
 
 export async function deleteAssignment(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  const prisma = await getDb()
+  const { user, prisma } = await staffContext()
   const assignmentId = Number(formData.get('assignmentId'))
-  const existing = await prisma.assignment.findFirst({
-    where: { id: assignmentId, offering: { schoolId: user.schoolId ?? -1 } },
-    select: { offeringId: true },
-  })
-  if (existing) await prisma.assignment.delete({ where: { id: assignmentId } })
-  redirect(existing ? `/dashboard/teaching/${existing.offeringId}` : '/dashboard/teaching')
+  const offeringId = await assignmentRepo.deleteForSchool(prisma, assignmentId, user.schoolId)
+  redirect(offeringId ? `/dashboard/teaching/${offeringId}` : '/dashboard/teaching')
 }

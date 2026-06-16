@@ -8,6 +8,12 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
 
+// Of the given offering ids, those that belong to the school (publish-target check).
+export async function findIdsForSchool(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined): Promise<number[]> {
+  const rows = await prisma.courseOffering.findMany({ where: { id: { in: ids }, schoolId: schoolId ?? -1 }, select: { id: true } })
+  return rows.map((o) => o.id)
+}
+
 export function findForSchoolWithCourse(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
   return prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 }, include: { course: true } })
 }
