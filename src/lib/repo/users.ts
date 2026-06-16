@@ -45,6 +45,20 @@ export function findEmailOwner(prisma: PrismaClient, email: string, exceptId?: n
   return prisma.user.findFirst({ where: { email, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })
 }
 
+// A user in the school holding this 工号 other than `exceptId` (staff-no uniqueness).
+export function findStaffNoDup(prisma: PrismaClient, schoolId: number, staffNo: string, exceptId?: number) {
+  return prisma.user.findFirst({ where: { schoolId, staffNo, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })
+}
+
+// Self-service profile edits (own row only).
+export function setStaffProfile(prisma: PrismaClient, id: number, data: { staffNo: string | null; departmentId: number | null }) {
+  return prisma.user.update({ where: { id }, data })
+}
+
+export function setContact(prisma: PrismaClient, id: number, data: { phone: string | null; email: string | null }) {
+  return prisma.user.update({ where: { id }, data })
+}
+
 export interface NewStudent {
   schoolId: number
   classId: number

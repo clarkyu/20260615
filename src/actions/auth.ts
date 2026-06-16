@@ -13,6 +13,8 @@ import { normalizeEmail } from '@/lib/utils'
 import { generateToken, hashToken } from '@/lib/tokens'
 import { validatePassword, validateName } from '@/lib/validation'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
+import * as departmentRepo from '@/lib/repo/departments'
 import { parseForm, optText, optId, z } from '@/lib/validate'
 import {
   rateLimitLogin,
@@ -265,15 +267,13 @@ export async function updateStaffProfile(prevState: unknown, formData: FormData)
   const { staffNo, departmentId } = parsed.data
 
   if (staffNo && current.schoolId) {
-    const dup = await prisma.user.findFirst({
-      where: { schoolId: current.schoolId, staffNo, NOT: { id: current.userId } },
-    })
+    const dup = await userRepo.findStaffNoDup(prisma, current.schoolId, staffNo, current.userId)
     if (dup) return { error: t('err.staffNoExists') }
   }
-  if (departmentId && current.schoolId && !(await prisma.department.findFirst({ where: { id: departmentId, schoolId: current.schoolId } }))) {
+  if (departmentId && current.schoolId && !(await departmentRepo.findForSchool(prisma, departmentId, current.schoolId))) {
     return { error: t('err.invalidCreds') }
   }
-  await prisma.user.update({ where: { id: current.userId }, data: { staffNo, departmentId } })
+  await userRepo.setStaffProfile(prisma, current.userId, { staffNo, departmentId })
   revalidatePath('/profile')
   return { success: true }
 }
@@ -288,10 +288,10 @@ export async function updateContact(prevState: unknown, formData: FormData): Pro
   const phone = parsed.data.phone
   const email = normalizeEmail(parsed.data.email ?? '') || null
   if (email) {
-    const dup = await prisma.user.findFirst({ where: { email, NOT: { id: current.userId } } })
+    const dup = await userRepo.findEmailOwner(prisma, email, current.userId)
     if (dup) return { error: t('err.emailTaken') }
   }
-  await prisma.user.update({ where: { id: current.userId }, data: { phone, email } })
+  await userRepo.setContact(prisma, current.userId, { phone, email })
   revalidatePath('/profile')
   return { success: true }
 }

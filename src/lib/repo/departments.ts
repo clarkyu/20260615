@@ -6,3 +6,7 @@ import type { PrismaClient } from '@prisma/client'
 export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
   return prisma.department.findMany({ where: { schoolId: schoolId ?? -1 }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
 }
+
+export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.department.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
+}
