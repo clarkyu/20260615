@@ -1,32 +1,27 @@
 import { AwsClient } from 'aws4fetch'
+import { config } from '@/lib/config'
 
 // Cloudflare R2 (S3-compatible). Phones upload directly via presigned URLs.
-// Configure: R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET.
-// aws4fetch is used instead of the AWS SDK because it's tiny and runs on Workers.
+// Credentials (R2_*) come from the centralised config. aws4fetch is used instead
+// of the AWS SDK because it's tiny and runs on Workers.
 
-export function storageConfigured(): boolean {
-  return Boolean(
-    process.env.R2_ENDPOINT &&
-      process.env.R2_ACCESS_KEY_ID &&
-      process.env.R2_SECRET_ACCESS_KEY &&
-      process.env.R2_BUCKET,
-  )
-}
+export { storageConfigured } from '@/lib/config'
 
 function client(): AwsClient {
+  const r = config.r2()
   return new AwsClient({
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    accessKeyId: r.accessKeyId!,
+    secretAccessKey: r.secretAccessKey!,
     service: 's3',
     region: 'auto',
   })
 }
 
 function objectUrl(key: string): string {
-  const base = process.env.R2_ENDPOINT!.replace(/\/$/, '')
-  const bucket = process.env.R2_BUCKET!
+  const r = config.r2()
+  const base = r.endpoint!.replace(/\/$/, '')
   const encodedKey = key.split('/').map(encodeURIComponent).join('/')
-  return `${base}/${bucket}/${encodedKey}`
+  return `${base}/${r.bucket}/${encodedKey}`
 }
 
 // SigV4 query-signed URL (signed query, not headers) so the browser can PUT/GET

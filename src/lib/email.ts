@@ -1,14 +1,16 @@
 // Email via the Resend HTTP API (SMTP/nodemailer can't run on Workers).
 // Configure RESEND_API_KEY and EMAIL_FROM.
 
+import { config } from '@/lib/config'
+
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 function appName(): string {
-  return process.env.APP_NAME || '英语背诵作业'
+  return config.appName()
 }
 
 function fromAddress(): string {
-  return process.env.EMAIL_FROM || 'onboarding@resend.dev'
+  return config.email().from
 }
 
 function escapeHtml(value: string): string {
@@ -16,7 +18,7 @@ function escapeHtml(value: string): string {
 }
 
 async function send(to: string, subject: string, html: string, text: string): Promise<void> {
-  const key = process.env.RESEND_API_KEY
+  const key = config.email().apiKey
   if (!key) throw new Error('RESEND_API_KEY is not configured')
   const res = await fetch(RESEND_ENDPOINT, {
     method: 'POST',

@@ -1,0 +1,84 @@
+// Single source of truth for environment configuration.
+//
+// OpenNext populates process.env from the Worker's vars + secrets (per request),
+// so the scattered `process.env.X` reads across storage / session / email / ai
+// are funnelled through here: typed getters, feature-presence flags, and a
+// redacted diagnostics report. SECURITY: this module never logs or returns a
+// secret VALUE — only the variable name and whether it is present.
+
+function env(key: string): string | undefined {
+  const v = process.env[key]
+  return v && v.trim() ? v : undefined
+}
+
+export const config = {
+  appName: (): string => env('APP_NAME') ?? '英语背诵作业',
+  appUrl: (): string | undefined => env('APP_URL'),
+  sessionSecret: (): string | undefined => env('SESSION_SECRET'),
+  isProd: (): boolean => process.env.NODE_ENV === 'production',
+  email: () => ({ from: env('EMAIL_FROM') ?? 'onboarding@resend.dev', apiKey: env('RESEND_API_KEY') }),
+  r2: () => ({
+    endpoint: env('R2_ENDPOINT'),
+    accessKeyId: env('R2_ACCESS_KEY_ID'),
+    secretAccessKey: env('R2_SECRET_ACCESS_KEY'),
+    bucket: env('R2_BUCKET'),
+  }),
+  geminiKey: (): string | undefined => env('GEMINI_API_KEY'),
+  geminiBaseUrl: (): string => env('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com',
+}
+
+// ── feature-presence flags (do we have what a feature needs?) ─────────────────
+
+export function storageConfigured(): boolean {
+  const r = config.r2()
+  return Boolean(r.endpoint && r.accessKeyId && r.secretAccessKey && r.bucket)
+}
+
+export function emailConfigured(): boolean {
+  return Boolean(config.email().apiKey)
+}
+
+export function aiConfigured(): boolean {
+  return Boolean(config.geminiKey())
+}
+
+// ── startup diagnostics (redacted — names + present/absent only) ──────────────
+
+export interface ConfigReport {
+  ok: boolean
+  missingRequired: string[]
+  features: Record<string, boolean>
+}
+
+// Required to even boot safely; everything else degrades to a disabled feature.
+const REQUIRED = ['SESSION_SECRET', 'APP_URL']
+
+export function configReport(): ConfigReport {
+  const missingRequired = REQUIRED.filter((k) => !env(k))
+  return {
+    ok: missingRequired.length === 0,
+    missingRequired,
+    features: {
+      storage: storageConfigured(),
+      email: emailConfigured(),
+      ai: aiConfigured(),
+    },
+  }
+}
+
+let validated = false
+
+// Log a one-time redacted summary so a misconfigured deploy is visible ("why is AI
+// grading not running?" → ai feature off). Never throws, never prints values.
+export function validateConfigOnce(): void {
+  if (validated) return
+  validated = true
+  const report = configReport()
+  if (report.missingRequired.length > 0) {
+    console.error('[config] missing required env:', report.missingRequired.join(', '))
+  }
+  const disabled = Object.entries(report.features).filter(([, on]) => !on).map(([name]) => name)
+  if (disabled.length > 0) {
+    console.warn('[config] optional features disabled (env not set):', disabled.join(', '))
+  }
+}

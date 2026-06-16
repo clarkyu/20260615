@@ -1,5 +1,7 @@
+import { config } from '@/lib/config'
+
 export async function getAppUrl(): Promise<string> {
-  const url = process.env.APP_URL
+  const url = config.appUrl()
   if (!url) throw new Error('APP_URL environment variable is required')
   return url.replace(/\/$/, '')
 }
