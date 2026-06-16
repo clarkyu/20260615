@@ -5,16 +5,15 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
+import { parseForm, reqText, reqId, idList, z } from '@/lib/validate'
 
 type State = { error?: string; success?: boolean }
 
-async function readForm(formData: FormData) {
-  return {
-    courseName: (formData.get('courseName') as string)?.trim(),
-    courseCode: (formData.get('courseCode') as string)?.trim().toUpperCase(),
-    year: (formData.get('year') as string)?.trim(),
-    semester: (formData.get('semester') as string)?.trim(),
-  }
+const courseFields = {
+  courseName: reqText('err.needCourse', 100),
+  courseCode: reqText('err.needCourse', 50),
+  year: reqText('err.needTerm', 20),
+  semester: reqText('err.needTerm', 10),
 }
 
 export async function createOffering(prevState: unknown, formData: FormData): Promise<State> {
@@ -23,12 +22,12 @@ export async function createOffering(prevState: unknown, formData: FormData): Pr
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
   const schoolId = user.schoolId
   const prisma = await getDb()
-  const f = await readForm(formData)
+  const parsed = parseForm(z.object({ ...courseFields, classId: idList }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const f = { ...parsed.data, courseCode: parsed.data.courseCode.toUpperCase() }
   // One offering per class — the teacher may pick several classes at once.
-  const classIds = [...new Set(formData.getAll('classId').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))]
-  if (!f.courseName || !f.courseCode) return { error: t('err.needCourse') }
+  const classIds = [...new Set(parsed.data.classId)]
   if (classIds.length === 0) return { error: t('err.needClass') }
-  if (!f.year || !f.semester) return { error: t('err.needTerm') }
 
   const validClasses = await prisma.classGroup.findMany({
     where: { id: { in: classIds }, schoolId },
@@ -81,15 +80,14 @@ export async function updateOffering(prevState: unknown, formData: FormData): Pr
   const { t } = await getT()
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
   const prisma = await getDb()
-  const offeringId = Number(formData.get('offeringId'))
+  const parsed = parseForm(z.object({ ...courseFields, offeringId: reqId, classId: reqId }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const offeringId = parsed.data.offeringId
   const offering = await prisma.courseOffering.findFirst({ where: { id: offeringId, schoolId: user.schoolId }, include: { course: true } })
   if (!offering) return { error: t('err.offeringNotFound') }
 
-  const f = await readForm(formData)
-  const classId = Number(formData.get('classId'))
-  if (!f.courseName || !f.courseCode) return { error: t('err.needCourse') }
-  if (!classId) return { error: t('err.needClass') }
-  if (!f.year || !f.semester) return { error: t('err.needTerm') }
+  const f = { ...parsed.data, courseCode: parsed.data.courseCode.toUpperCase() }
+  const classId = parsed.data.classId
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId } })
   if (!cls) return { error: t('err.classNotFound') }
 
