@@ -7,6 +7,7 @@ import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { autoGradeById, hasAntiCheatViolation } from '@/lib/domain/grading'
+import { gradeShadowSubmission } from '@/lib/domain/shadow'
 import { runAfterResponse } from '@/lib/cf'
 
 type MediaKind = 'video' | 'audio' | 'image'
@@ -197,11 +198,18 @@ export async function finishShadowing(assignmentId: number) {
   const sentenceCount = await prisma.sentence.count({ where: { assignmentId } })
   if (sentenceCount === 0 || submission._count.shadowTakes < sentenceCount) return { error: t('err.shadowIncomplete') }
 
-  // Idempotent flip; per-sentence AI grading is a follow-up — for now the teacher reviews.
-  await prisma.submission.updateMany({
+  // Idempotent flip; only the call that submits schedules per-sentence grading.
+  const flipped = await prisma.submission.updateMany({
     where: { id: submission.id, status: 'DRAFT' },
     data: { status: 'UPLOADED', needsReview: true },
   })
+  if (flipped.count > 0) {
+    const sid = submission.id
+    await runAfterResponse(async () => {
+      const bg = await getDb()
+      await gradeShadowSubmission(bg, sid)
+    })
+  }
   revalidatePath('/student')
   return { success: true }
 }
