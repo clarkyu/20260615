@@ -39,12 +39,13 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
   const streamRef = useRef<MediaStream | null>(null)
   const recRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const unmountedRef = useRef(false)
 
   const cleanup = useCallback(() => {
     streamRef.current?.getTracks().forEach((tr) => tr.stop())
     streamRef.current = null
   }, [])
-  useEffect(() => () => cleanup(), [cleanup])
+  useEffect(() => () => { unmountedRef.current = true; cleanup() }, [cleanup])
 
   const upload = useCallback(async (blob: Blob, ext: string) => {
     setPhase('uploading')
@@ -64,8 +65,10 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
   const start = useCallback(async () => {
     setError(null)
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) { setError(t('rec.noSupport')); return }
+    cleanup() // stop any prior take's stream before acquiring a new mic
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (unmountedRef.current) { stream.getTracks().forEach((tr) => tr.stop()); return }
       streamRef.current = stream
       const { mime, ext } = pickAudioMime()
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)

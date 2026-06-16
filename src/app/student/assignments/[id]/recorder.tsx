@@ -63,6 +63,8 @@ export function Recorder(props: {
   const blobRef = useRef<Blob | null>(null)
   const startedAtRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const playbackUrlRef = useRef<string | null>(null)
+  const unmountedRef = useRef(false)
 
   const addViolation = useCallback((type: string) => {
     setViolations((v) => [...v, { type, at: Date.now() }])
@@ -84,9 +86,18 @@ export function Recorder(props: {
     streamRef.current?.getTracks().forEach((tr) => tr.stop())
     streamRef.current = null
     if (timerRef.current) clearInterval(timerRef.current)
+    // Exit fullscreen from every teardown path (not just an explicit stop), so an
+    // error/unmount/cancel mid-recording can't strand the user in fullscreen.
+    if (typeof document !== 'undefined' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
   }, [])
 
-  useEffect(() => () => cleanupStream(), [cleanupStream])
+  // On unmount: stop tracks, mark unmounted (so an in-flight getUserMedia bails),
+  // and revoke the playback object URL so re-records don't leak blobs.
+  useEffect(() => () => {
+    unmountedRef.current = true
+    cleanupStream()
+    if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
+  }, [cleanupStream])
 
   const beginRecord = useCallback(() => {
     const stream = streamRef.current
@@ -99,7 +110,9 @@ export function Recorder(props: {
       blobRef.current = new Blob(chunksRef.current, { type: chunksRef.current[0]?.type || (isAudio ? 'audio/webm' : 'video/webm') })
       setPhase('recorded')
       cleanupStream()
+      if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
       const playbackUrl = URL.createObjectURL(blobRef.current)
+      playbackUrlRef.current = playbackUrl
       if (isAudio) {
         if (audioRef.current) { audioRef.current.src = playbackUrl; audioRef.current.controls = true }
       } else if (videoRef.current) {
@@ -132,12 +145,17 @@ export function Recorder(props: {
       setError(t('rec.noSupport'))
       return
     }
+    // Defensively stop any prior stream before acquiring a new one (re-record).
+    cleanupStream()
     try {
       const stream = await navigator.mediaDevices.getUserMedia(
         isAudio
           ? { audio: true }
           : { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
       )
+      // The component may have unmounted during the permission await — don't leak
+      // the just-granted camera/mic.
+      if (unmountedRef.current) { stream.getTracks().forEach((tr) => tr.stop()); return }
       streamRef.current = stream
       if (!isAudio && videoRef.current) {
         videoRef.current.srcObject = stream
@@ -150,7 +168,7 @@ export function Recorder(props: {
     } catch {
       setError(t('rec.noPermission'))
     }
-  }, [t, isAudio])
+  }, [t, isAudio, cleanupStream])
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop()
@@ -259,7 +277,7 @@ export function Recorder(props: {
           ) : phase === 'review' ? (
             <Button className="w-full" size="lg" onClick={arm}>{isAudio ? t('rec.startAudio') : t('rec.start')}</Button>
           ) : phase === 'countdown' ? (
-            <Button className="w-full" size="lg" variant="outline" onClick={() => { cleanupStream(); setPhase('review') }}>{t('rec.getReady')}</Button>
+            <Button className="w-full" size="lg" variant="outline" onClick={() => { cleanupStream(); setPhase('review') }}>{t('rec.cancel')}</Button>
           ) : phase === 'recording' ? (
             <Button className="w-full" size="lg" variant="destructive" onClick={stopRecording}>{t('rec.stop')}</Button>
           ) : phase === 'recorded' ? (
