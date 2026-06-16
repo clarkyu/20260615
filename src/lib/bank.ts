@@ -1,28 +1,42 @@
 // Item-bank helpers. Pure + unit-tested; the server action only does I/O.
 
-export interface ParsedChunk {
-  english: string
+export interface ChunkInput {
+  english: string // 中心句 EN (required)
   chinese: string | null
+  meaningEn: string | null // 解释句
+  meaningZh: string | null
+  exampleEn: string | null // 情境例句
+  exampleZh: string | null
 }
 
-// Parses pasted bilingual text into chunks. Each non-empty line is one sentence;
-// English and Chinese are separated by a tab or a vertical bar ("EN | 中文").
-// A leading list number ("1.", "2、", "3)") on the English side is stripped.
-export function parseBilingual(raw: string): ParsedChunk[] {
-  return raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const sep = line.search(/\t|\|/)
-      let english = line
-      let chinese = ''
-      if (sep >= 0) {
-        english = line.slice(0, sep).trim()
-        chinese = line.slice(sep + 1).replace(/\|/g, ' ').trim()
-      }
-      english = english.replace(/^\s*\d+\s*[.、)）]\s*/, '').trim()
-      return { english, chinese: chinese || null }
+// One bilingual line: "English | 中文" (or a tab). Chinese is optional.
+function splitBilingual(line: string): { en: string; zh: string | null } {
+  const sep = line.search(/\t|\|/)
+  if (sep < 0) return { en: line.trim(), zh: null }
+  return { en: line.slice(0, sep).trim(), zh: line.slice(sep + 1).replace(/\|/g, ' ').trim() || null }
+}
+
+// Parses pasted three-part chunks. Items are separated by a blank line; each item
+// is up to 3 bilingual lines in order — 中心句 / 解释句 / 情境例句 — every line
+// "English | 中文". Leading list numbers ("51.") and "Means:/Example:" style
+// prefixes are tolerated.
+export function parseChunks(raw: string): ChunkInput[] {
+  const out: ChunkInput[] = []
+  for (const block of raw.split(/\n\s*\n+/)) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean)
+    if (lines.length === 0) continue
+    const core = splitBilingual(lines[0].replace(/^\s*\d+\s*[.、)）]\s*/, ''))
+    if (!core.en) continue
+    const meaning = lines[1] ? splitBilingual(lines[1].replace(/^(means|解释|释义)\s*[:：]\s*/i, '')) : { en: '', zh: null }
+    const example = lines[2] ? splitBilingual(lines[2].replace(/^(example|例句|例|情境例句)\s*[:：]\s*/i, '')) : { en: '', zh: null }
+    out.push({
+      english: core.en,
+      chinese: core.zh,
+      meaningEn: meaning.en || null,
+      meaningZh: meaning.zh,
+      exampleEn: example.en || null,
+      exampleZh: example.zh,
     })
-    .filter((c) => c.english.length > 0)
+  }
+  return out
 }

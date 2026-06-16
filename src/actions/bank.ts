@@ -6,7 +6,7 @@ import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
-import { parseBilingual } from '@/lib/bank'
+import { parseChunks } from '@/lib/bank'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -18,14 +18,23 @@ export async function createChunkSet(prevState: unknown, formData: FormData): Pr
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
 
   const name = (formData.get('name') as string)?.trim()
-  const chunks = parseBilingual((formData.get('chunks') as string) ?? '')
+  const chunks = parseChunks((formData.get('chunks') as string) ?? '')
   if (!name) return { error: t('err.needSetName') }
   if (chunks.length === 0) return { error: t('err.needChunks') }
 
   // Standalone create (not nested in $transaction) so D1 can resolve the new id.
   const set = await prisma.chunkSet.create({ data: { schoolId: user.schoolId, name } })
   await prisma.chunk.createMany({
-    data: chunks.map((c, i) => ({ chunkSetId: set.id, order: i + 1, english: c.english, chinese: c.chinese })),
+    data: chunks.map((c, i) => ({
+      chunkSetId: set.id,
+      order: i + 1,
+      english: c.english,
+      chinese: c.chinese,
+      meaningEn: c.meaningEn,
+      meaningZh: c.meaningZh,
+      exampleEn: c.exampleEn,
+      exampleZh: c.exampleZh,
+    })),
   })
   revalidatePath('/dashboard/bank')
   redirect(`/dashboard/bank/${set.id}`)

@@ -42,9 +42,23 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
           {set.chunks.map((c) => (
             <div key={c.id} className="flex gap-3 p-3.5 text-sm">
               <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{c.order}</span>
-              <div className="min-w-0">
-                <div className="font-medium">{c.english}</div>
-                {c.chinese ? <div className="mt-0.5 text-muted-foreground">{c.chinese}</div> : null}
+              <div className="min-w-0 space-y-1.5">
+                <div>
+                  <div className="font-semibold">{c.english}</div>
+                  {c.chinese ? <div className="text-xs text-muted-foreground">{c.chinese}</div> : null}
+                </div>
+                {c.meaningEn ? (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">{t('bank.meaning')}：</span>{c.meaningEn}
+                    {c.meaningZh ? <span className="text-muted-foreground"> / {c.meaningZh}</span> : null}
+                  </div>
+                ) : null}
+                {c.exampleEn ? (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">{t('bank.example')}：</span>{c.exampleEn}
+                    {c.exampleZh ? <span className="text-muted-foreground"> / {c.exampleZh}</span> : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
