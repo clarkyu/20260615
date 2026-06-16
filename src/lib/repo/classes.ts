@@ -24,6 +24,23 @@ export function listForSchool(prisma: PrismaClient, schoolId: number | null | un
   return prisma.classGroup.findMany({ where: { schoolId: schoolId ?? -1 }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
 }
 
+// Classes with member counts + major/department — the roster index list.
+export function listWithCountsForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+  return prisma.classGroup.findMany({
+    where: { schoolId: schoolId ?? -1 },
+    orderBy: { name: 'asc' },
+    include: { _count: { select: { members: true } }, major: { include: { department: { select: { name: true } } } } },
+  })
+}
+
+// One class with its major + department — the class-manager header.
+export function findDetailForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.classGroup.findFirst({
+    where: { id, schoolId: schoolId ?? -1 },
+    include: { major: { include: { department: { select: { name: true } } } } },
+  })
+}
+
 // A class with this name in the school other than `exceptId` (uniqueness check).
 export function findDupName(prisma: PrismaClient, schoolId: number, name: string, exceptId?: number) {
   return prisma.classGroup.findFirst({ where: { schoolId, name, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })

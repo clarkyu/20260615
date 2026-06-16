@@ -74,3 +74,40 @@ export function remove(prisma: PrismaClient, id: number) {
 export function setStudentPassword(prisma: PrismaClient, id: number, passwordHash: string) {
   return prisma.user.update({ where: { id }, data: { passwordHash, mustChangePassword: true } })
 }
+
+// ── page reads ───────────────────────────────────────────────────────────────
+
+// The signed-in user plus their school (the dashboard/roster "do I have a school?").
+export function findWithSchool(prisma: PrismaClient, id: number) {
+  return prisma.user.findUnique({ where: { id }, include: { school: true } })
+}
+
+// The signed-in user with everything the profile screen shows.
+export function findProfile(prisma: PrismaClient, id: number) {
+  return prisma.user.findUnique({
+    where: { id },
+    include: {
+      school: true,
+      class: { include: { major: { include: { department: { select: { name: true } } } } } },
+      department: { select: { name: true } },
+    },
+  })
+}
+
+// Colleague teachers/admins in a school, with how many offerings each teaches.
+export function listStaffForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+  return prisma.user.findMany({
+    where: { schoolId: schoolId ?? -1, role: { in: ['TEACHER', 'SCHOOL_ADMIN'] } },
+    select: { id: true, name: true, staffNo: true, email: true, _count: { select: { taughtOfferings: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+// Students in one class (the class roster table).
+export function listStudentsInClass(prisma: PrismaClient, classId: number) {
+  return prisma.user.findMany({
+    where: { classId, role: 'STUDENT' },
+    orderBy: { studentNo: 'asc' },
+    select: { id: true, studentNo: true, name: true, phone: true, email: true },
+  })
+}

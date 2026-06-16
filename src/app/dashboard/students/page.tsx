@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
+import * as classRepo from '@/lib/repo/classes'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ImportClient } from './import-client'
 import { ClassList } from './class-list'
@@ -11,17 +13,10 @@ export default async function StudentsPage() {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
-  const me = await prisma.user.findUnique({ where: { id: user.userId }, include: { school: true } })
+  const me = await userRepo.findWithSchool(prisma, user.userId)
   if (!me?.school) redirect('/dashboard')
 
-  const classes = await prisma.classGroup.findMany({
-    where: { schoolId: me.school.id },
-    orderBy: { name: 'asc' },
-    include: {
-      _count: { select: { members: true } },
-      major: { include: { department: { select: { name: true } } } },
-    },
-  })
+  const classes = await classRepo.listWithCountsForSchool(prisma, me.school.id)
 
   return (
     <div className="space-y-4 py-2">
