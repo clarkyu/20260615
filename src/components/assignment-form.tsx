@@ -167,22 +167,22 @@ export function AssignmentForm({
             <div className="space-y-2">
               <Label>{t('asg.submitKinds')}</Label>
               <div className="space-y-2.5 rounded-xl border border-input p-3 text-sm">
-                {/* Default = audio recitation: lighter, less surveillance-y, covers 背诵/口语. */}
+                {/* Default = eyes-closed video recitation of the sentences. */}
                 <label className="flex items-center gap-2.5">
-                  <input type="checkbox" name="requireAudio" defaultChecked={initial?.requireAudio ?? true} className="h-4 w-4 accent-primary" />
+                  <input type="checkbox" name="requireVideo" defaultChecked={initial?.requireVideo ?? true} className="h-4 w-4 accent-primary" />
+                  {t('asg.kindVideo')}
+                </label>
+                <label className="flex items-center gap-2.5 pl-6 text-muted-foreground">
+                  <input type="checkbox" name="requireEyesClosed" defaultChecked={initial?.requireEyesClosed ?? true} className="h-4 w-4 accent-primary" />
+                  {t('asg.fEyes')}
+                </label>
+                <label className="flex items-center gap-2.5">
+                  <input type="checkbox" name="requireAudio" defaultChecked={initial?.requireAudio ?? false} className="h-4 w-4 accent-primary" />
                   {t('asg.kindAudio')}
                 </label>
                 <label className="flex items-center gap-2.5">
                   <input type="checkbox" name="requireText" defaultChecked={initial?.requireText ?? false} className="h-4 w-4 accent-primary" />
                   {t('asg.kindText')}
-                </label>
-                <label className="flex items-center gap-2.5">
-                  <input type="checkbox" name="requireVideo" defaultChecked={initial?.requireVideo ?? false} className="h-4 w-4 accent-primary" />
-                  {t('asg.kindVideo')}
-                </label>
-                <label className="flex items-center gap-2.5 pl-6 text-muted-foreground">
-                  <input type="checkbox" name="requireEyesClosed" defaultChecked={initial?.requireEyesClosed ?? false} className="h-4 w-4 accent-primary" />
-                  {t('asg.fEyes')}
                 </label>
                 <label className="flex items-center gap-2.5">
                   <input type="checkbox" name="requireHandwriting" defaultChecked={initial?.requireHandwriting ?? false} className="h-4 w-4 accent-primary" />
