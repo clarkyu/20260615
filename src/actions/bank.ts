@@ -10,16 +10,21 @@ import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
+const metaShape = { cefr: optText(20), strand: optText(60), domain: optText(30), tags: optText(300), source: optText(120) }
+function metaFrom(d: { cefr?: string | null; strand?: string | null; domain?: string | null; tags?: string | null; source?: string | null }) {
+  return { cefr: d.cefr ?? null, strand: d.strand ?? null, domain: d.domain ?? null, tags: d.tags ?? null, source: d.source ?? null }
+}
+
 // Create a chunk set from a name + pasted bilingual text (one sentence per line).
 export async function createChunkSet(prevState: unknown, formData: FormData): Promise<ActionState> {
   const cx = await staffSchoolContext()
   if (!cx.ok) return { error: cx.error }
-  const parsed = parseForm(z.object({ name: reqText('err.needSetName', 100), chunks: optText(200000) }), formData)
+  const parsed = parseForm(z.object({ name: reqText('err.needSetName', 100), chunks: optText(200000), ...metaShape }), formData)
   if (!parsed.ok) return { error: cx.t(parsed.error) }
   const chunks = parseChunks(parsed.data.chunks ?? '')
   if (chunks.length === 0) return { error: cx.t('err.needChunks') }
 
-  const id = await bankRepo.createWithChunks(cx.prisma, cx.schoolId, parsed.data.name, chunks)
+  const id = await bankRepo.createWithChunks(cx.prisma, cx.schoolId, parsed.data.name, chunks, metaFrom(parsed.data))
   revalidatePath('/dashboard/bank')
   redirect(`/dashboard/bank/${id}`)
 }
@@ -45,7 +50,7 @@ export async function getChunkSetVideoUrl(chunkSetId: number, contentType: strin
 // Edit a set: rename + replace all chunks from the re-pasted three-part text.
 export async function updateChunkSet(prevState: unknown, formData: FormData): Promise<ActionState> {
   const { user, prisma, t } = await staffContext()
-  const parsed = parseForm(z.object({ chunkSetId: reqId, name: reqText('err.needSetName', 100), chunks: optText(200000) }), formData)
+  const parsed = parseForm(z.object({ chunkSetId: reqId, name: reqText('err.needSetName', 100), chunks: optText(200000), ...metaShape }), formData)
   if (!parsed.ok) return { error: t(parsed.error) }
   const { chunkSetId: id, name } = parsed.data
   const set = await bankRepo.findForSchool(prisma, id, user.schoolId)
@@ -54,7 +59,7 @@ export async function updateChunkSet(prevState: unknown, formData: FormData): Pr
   const chunks = parseChunks(parsed.data.chunks ?? '')
   if (chunks.length === 0) return { error: t('err.needChunks') }
 
-  await bankRepo.replaceChunks(prisma, id, name, chunks)
+  await bankRepo.replaceChunks(prisma, id, name, chunks, metaFrom(parsed.data))
   revalidatePath(`/dashboard/bank/${id}`)
   return { success: true }
 }

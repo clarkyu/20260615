@@ -10,10 +10,16 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { BankMetaFields } from '../bank-meta-fields'
 
 // Edit a set by re-pasting the three-part text — matches how teachers input it,
 // and fixing a typo is just editing the text and saving.
-export function EditSetForm({ setId, name, chunksText }: { setId: number; name: string; chunksText: string }) {
+export function EditSetForm({ setId, name, chunksText, meta }: {
+  setId: number
+  name: string
+  chunksText: string
+  meta?: { cefr: string | null; strand: string | null; domain: string | null; tags: string | null; source: string | null }
+}) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(updateChunkSet, null)
@@ -43,6 +49,7 @@ export function EditSetForm({ setId, name, chunksText }: { setId: number; name: 
             <p className="whitespace-pre-line text-xs text-muted-foreground">{t('bank.chunksHint')}</p>
             <Textarea id="edit-chunks" name="chunks" rows={16} required defaultValue={chunksText} />
           </div>
+          <BankMetaFields cefr={meta?.cefr} strand={meta?.strand} domain={meta?.domain} tags={meta?.tags} source={meta?.source} />
           {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>{pending ? t('bank.saving') : t('bank.save')}</Button>

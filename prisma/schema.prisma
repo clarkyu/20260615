@@ -42,6 +42,13 @@ model ChunkSet {
   schoolId       Int
   name           String
   shadowVideoKey String?
+  // Curriculum metadata (see lib/curriculum/taxonomy). All optional so existing
+  // sets stay valid; new/edited sets can classify themselves.
+  cefr           String?  // CEFR band: pre-a1 … c2-plus
+  strand         String?  // e.g. english.speaking.shadowing
+  domain         String?  // general / academic / industry / occupational
+  tags           String?  // comma-separated feature/topic tags
+  source         String?
   createdAt      DateTime @default(now())
   school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   chunks         Chunk[]
