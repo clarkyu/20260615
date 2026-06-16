@@ -64,6 +64,26 @@ export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' 
   }
 }
 
+// Per-sentence shadowing takes for teacher review (ordered, presigned for playback).
+export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?: { order: number; url: string }[]; error?: string }> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
+  const prisma = await getDb()
+  const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
+  if (!submission) return { error: t('err.subNoAccess') }
+  const takes = await prisma.shadowTake.findMany({ where: { submissionId }, orderBy: { order: 'asc' }, select: { order: true, audioKey: true } })
+  const out: { order: number; url: string }[] = []
+  for (const tk of takes) {
+    try {
+      out.push({ order: tk.order, url: await presignDownload(tk.audioKey) })
+    } catch {
+      // skip a take whose URL can't be signed
+    }
+  }
+  return { takes: out }
+}
+
 // Teacher manual override — the AI score is advisory, the teacher's is final.
 export async function overrideScore(prevState: unknown, formData: FormData): Promise<ActionState> {
   const user = await requireStaff()

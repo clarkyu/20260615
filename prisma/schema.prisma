@@ -292,10 +292,25 @@ model Submission {
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   gradedBy   User?      @relation("SubmissionGradedBy", fields: [gradedById], references: [id], onDelete: SetNull)
+  shadowTakes ShadowTake[]
 
   @@unique([assignmentId, studentId, attempt])
   @@index([assignmentId])
   @@index([studentId])
+}
+
+// 逐句跟读录音：跟读作业里，学生为每个句子单独录一条音频（一句一条）。
+model ShadowTake {
+  id           Int      @id @default(autoincrement())
+  submissionId Int
+  order        Int
+  audioKey     String
+  durationSec  Int?
+  createdAt    DateTime @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, order])
+  @@index([submissionId])
 }
 
 model EmailVerificationToken {

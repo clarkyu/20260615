@@ -49,6 +49,11 @@ export function submissionMediaKey(assignmentId: number, studentId: number, atte
   return `submissions/${assignmentId}/${studentId}/attempt-${attempt}-${kind}.${ext}`
 }
 
+// One per-sentence shadowing take.
+export function shadowTakeKey(assignmentId: number, studentId: number, attempt: number, order: number, ext: string): string {
+  return `submissions/${assignmentId}/${studentId}/attempt-${attempt}-shadow-${order}.${ext}`
+}
+
 // Practice recordings live under their own prefix and are timestamped, since a
 // student may practice many times before a formal submission.
 export function practiceMediaKey(assignmentId: number, studentId: number, kind: 'audio' | 'video', ext: string): string {

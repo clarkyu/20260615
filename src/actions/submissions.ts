@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
-import { presignUpload, presignDownload, storageConfigured, submissionMediaKey } from '@/lib/storage'
+import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { autoGradeById, hasAntiCheatViolation } from '@/lib/domain/grading'
 import { runAfterResponse } from '@/lib/cf'
 
@@ -151,6 +151,59 @@ export async function getShadowVideoUrl(assignmentId: number): Promise<{ url?: s
   } catch {
     return { error: t('err.videoUrlFail') }
   }
+}
+
+// Per-sentence shadowing: presigned URL for one sentence's take; records it on the
+// (draft) submission so progress survives a reload.
+export async function getShadowTakeUploadUrl(assignmentId: number, order: number, contentType: string, ext: string) {
+  const user = await requireRole('STUDENT')
+  const { t } = await getT()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
+  const prisma = await getDb()
+  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  if ('error' in resolved) return { error: t(resolved.error) }
+
+  const key = shadowTakeKey(assignmentId, user.userId, resolved.attempt, order, ext || 'webm')
+  const submission = await prisma.submission.upsert({
+    where: { assignmentId_studentId_attempt: { assignmentId, studentId: user.userId, attempt: resolved.attempt } },
+    update: { status: 'DRAFT' },
+    create: { assignmentId, studentId: user.userId, attempt: resolved.attempt, status: 'DRAFT' },
+  })
+  await prisma.shadowTake.upsert({
+    where: { submissionId_order: { submissionId: submission.id, order } },
+    update: { audioKey: key },
+    create: { submissionId: submission.id, order, audioKey: key },
+  })
+  try {
+    return { url: await presignUpload(key, contentType), key, order }
+  } catch (err) {
+    console.error('[getShadowTakeUploadUrl] presign failed:', err)
+    return { error: t('err.uploadUrlFail') }
+  }
+}
+
+// Finish a per-sentence shadowing submission once every sentence has a take.
+export async function finishShadowing(assignmentId: number) {
+  const user = await requireRole('STUDENT')
+  const { t } = await getT()
+  const prisma = await getDb()
+  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  if ('error' in resolved) return { error: t(resolved.error) }
+  const submission = await prisma.submission.findFirst({
+    where: { assignmentId, studentId: user.userId, attempt: resolved.attempt },
+    include: { _count: { select: { shadowTakes: true } } },
+  })
+  if (!submission) return { error: t('err.subNotFound') }
+  const sentenceCount = await prisma.sentence.count({ where: { assignmentId } })
+  if (sentenceCount === 0 || submission._count.shadowTakes < sentenceCount) return { error: t('err.shadowIncomplete') }
+
+  // Idempotent flip; per-sentence AI grading is a follow-up — for now the teacher reviews.
+  await prisma.submission.updateMany({
+    where: { id: submission.id, status: 'DRAFT' },
+    data: { status: 'UPLOADED', needsReview: true },
+  })
+  revalidatePath('/student')
+  return { success: true }
 }
 
 // Step 1: the student's recited text (from memory).
