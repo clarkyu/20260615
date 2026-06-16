@@ -293,10 +293,30 @@ model Submission {
   student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   gradedBy   User?      @relation("SubmissionGradedBy", fields: [gradedById], references: [id], onDelete: SetNull)
   shadowTakes ShadowTake[]
+  gradingJob  GradingJob?
 
   @@unique([assignmentId, studentId, attempt])
   @@index([assignmentId])
   @@index([studentId])
+}
+
+// 批改任务：把"提交后自动批改"从尽力而为（waitUntil 跑一次，丢了就丢了）升级为
+// 持久 + 有界重试 + 自愈的工作流。一份提交对应一条任务（submissionId 唯一）：入队
+// 即落库；后台 drain 认领（PENDING→PROCESSING）并执行；失败按指数退避重排，超过
+// 上限进死信（FAILED）。教师面板加载时顺带自愈重扫，捞起卡住/到期的任务。
+model GradingJob {
+  id            Int      @id @default(autoincrement())
+  submissionId  Int      @unique
+  kind          String   // 'submission'（整段录像/音频）| 'shadow'（逐句跟读）
+  status        String   @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  lastError     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
 }
 
 // 逐句跟读录音：跟读作业里，学生为每个句子单独录一条音频（一句一条）。

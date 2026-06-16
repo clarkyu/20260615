@@ -3,6 +3,8 @@ import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, Check
 import type { SubmissionStatus } from '@prisma/client'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import { runAfterResponse } from '@/lib/cf'
+import { drainGradingJobs } from '@/lib/domain/jobs'
 import { getT } from '@/lib/i18n-server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +35,9 @@ export default async function DashboardPage() {
   }
 
   const schoolId = me.school.id
+  // Self-heal: drain due/stuck grading jobs in the background so transient AI
+  // failures recover even without new submissions. Cheap when the queue is empty.
+  await runAfterResponse(() => drainGradingJobs(prisma))
   // A teacher only sees their own offerings; admins see the whole school.
   const offeringWhere = { schoolId, ...(user.role === 'TEACHER' ? { teacherId: user.userId } : {}) }
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
