@@ -101,20 +101,22 @@ export interface Preset {
 // One-click combinations surfaced in the grading UI; teachers can still pick
 // the two stages independently in "advanced" mode.
 export const PRESETS: Preset[] = [
-  { id: 'gemini-allinone', label: 'Gemini 一把梭', perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash' },
-  { id: 'gemini35-allinone', label: 'Gemini 3.5 一把梭（最新）', perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash' },
+  { id: 'gemini35-allinone', label: 'Gemini 3.5 一把梭（默认·最新）', perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash' },
+  { id: 'gemini-allinone', label: 'Gemini 2.5 一把梭（更省）', perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash' },
   { id: 'qwen-allinone', label: 'Qwen 一把梭', perceptionModel: 'qwen-omni-turbo', judgeModel: 'qwen-omni-turbo' },
   { id: 'qwen-minimax', label: 'Qwen 感知 + MiniMax 评分', perceptionModel: 'qwen-omni-turbo', judgeModel: 'MiniMax-Text-01' },
   { id: 'whisper-deepseek', label: 'Whisper 感知 + DeepSeek 评分', perceptionModel: 'whisper-1', judgeModel: 'deepseek-chat' },
   { id: 'gemini-claude', label: 'Gemini 感知 + Claude 评分', perceptionModel: 'gemini-2.5-flash', judgeModel: 'claude-opus-4-8' },
 ]
 
-// Sensible default pairing when an assignment hasn't pinned its own models —
-// Gemini Flash natively handles audio/video and can both perceive and judge.
-export const DEFAULT_PERCEPTION_MODEL = 'gemini-2.5-flash'
-export const DEFAULT_JUDGE_MODEL = 'gemini-2.5-flash'
-// Authoring (备课出题) is Gemini-only today; keep its default independent of the
-// judge default so changing one never silently breaks the other.
+// Sensible default pairing when an assignment hasn't pinned its own models.
+// Default grading model: Gemini 3.5 Flash (latest stable, natively handles
+// audio/video and both perceives + judges). Teachers can still pick another model
+// per assignment on the grading screen.
+export const DEFAULT_PERCEPTION_MODEL = 'gemini-3.5-flash'
+export const DEFAULT_JUDGE_MODEL = 'gemini-3.5-flash'
+// Authoring (备课出题) keeps the cheaper 2.5 Flash by default (occasional, low-stakes
+// text task); independent of the judge default so changing one never breaks the other.
 export const DEFAULT_AUTHOR_MODEL = 'gemini-2.5-flash'
 
 // ── teacher-facing catalogue metadata (用户中心：各家·使用范围·价格) ──
