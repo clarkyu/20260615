@@ -18,3 +18,25 @@ export async function findClassIdsForSchool(
 export function findClassForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
   return prisma.classGroup.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
+
+// A class with this name in the school other than `exceptId` (uniqueness check).
+export function findDupName(prisma: PrismaClient, schoolId: number, name: string, exceptId?: number) {
+  return prisma.classGroup.findFirst({ where: { schoolId, name, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })
+}
+
+export function createForSchool(prisma: PrismaClient, data: { schoolId: number; name: string; grade?: string | null; majorId?: number | null }) {
+  return prisma.classGroup.create({ data })
+}
+
+export function update(prisma: PrismaClient, id: number, data: { name?: string; grade?: string | null; majorId?: number | null }) {
+  return prisma.classGroup.update({ where: { id }, data })
+}
+
+// Delete a class and its students iff it belongs to the school; returns success.
+export async function deleteWithStudents(prisma: PrismaClient, id: number, schoolId: number | null | undefined): Promise<boolean> {
+  const cls = await prisma.classGroup.findFirst({ where: { id, schoolId: schoolId ?? -1 }, select: { id: true } })
+  if (!cls) return false
+  await prisma.user.deleteMany({ where: { classId: id, role: 'STUDENT' } })
+  await prisma.classGroup.delete({ where: { id } })
+  return true
+}
