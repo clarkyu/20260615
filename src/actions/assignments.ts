@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
+import { weakSentences, parsePerSentence, type AnalyticsSubmission } from '@/lib/domain/analytics'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -142,6 +143,63 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
   ])
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   redirect(`/dashboard/assignments/${assignmentId}`)
+}
+
+// 学情 → 行动：把这个授课里"最弱的句子"一键生成一份复习作业（默认音频背诵、
+// 可多次），创建后跳到编辑页让老师设个截止时间再发。
+export async function createReviewAssignment(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  const prisma = await getDb()
+  const offeringId = Number(formData.get('offeringId'))
+  const offering = await prisma.courseOffering.findFirst({ where: { id: offeringId, schoolId: user.schoolId ?? -1 } })
+  if (!offering) redirect('/dashboard/teaching')
+
+  const assignments = await prisma.assignment.findMany({
+    where: { offeringId },
+    select: { id: true, sentences: { select: { order: true, text: true, translation: true } } },
+  })
+  const textByKey = new Map<string, { text: string; translation: string | null }>()
+  for (const a of assignments) for (const s of a.sentences) textByKey.set(`${a.id}:${s.order}`, { text: s.text, translation: s.translation })
+
+  const rawSubs = await prisma.submission.findMany({
+    where: { assignment: { offeringId } },
+    select: { studentId: true, assignmentId: true, status: true, finalScore: true, needsReview: true, aiResult: true },
+    orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
+  })
+  const seen = new Set<string>()
+  const subs: AnalyticsSubmission[] = []
+  for (const s of rawSubs) {
+    const k = `${s.studentId}:${s.assignmentId}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    subs.push({ studentId: s.studentId, assignmentId: s.assignmentId, status: s.status, finalScore: s.finalScore, needsReview: s.needsReview, perSentence: parsePerSentence(s.aiResult) })
+  }
+
+  const picked: { text: string; translation: string | null }[] = []
+  const used = new Set<string>()
+  for (const w of weakSentences(subs, 12)) {
+    const e = textByKey.get(`${w.assignmentId}:${w.order}`)
+    if (e && !used.has(e.text)) { used.add(e.text); picked.push(e) }
+  }
+  if (picked.length === 0) redirect(`/dashboard/teaching/${offeringId}/insights`)
+
+  const d = new Date()
+  const created = await prisma.assignment.create({
+    data: {
+      offeringId,
+      title: `复习 · 薄弱句 ${d.getMonth() + 1}-${d.getDate()}`,
+      category: '复习作业',
+      requireAudio: true,
+      requireVideo: false,
+      requireText: false,
+      requireEyesClosed: false,
+      requireHandwriting: false,
+      maxAttempts: 3,
+      sentences: { create: picked.map((p, i) => ({ order: i + 1, text: p.text, translation: p.translation })) },
+    },
+  })
+  revalidatePath(`/dashboard/teaching/${offeringId}`)
+  redirect(`/dashboard/assignments/${created.id}/edit`)
 }
 
 export async function deleteAssignment(formData: FormData): Promise<void> {
