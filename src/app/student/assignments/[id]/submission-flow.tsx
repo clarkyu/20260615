@@ -117,7 +117,10 @@ export function SubmissionFlow(props: {
     return s
   }, [props.requireText, props.requireVideo, props.requireAudio, props.requireHandwriting])
 
-  const [idx, setIdx] = useState(steps[0] === 'text' && props.initialHasText ? 1 : 0)
+  // Skip the text step when it's already submitted — but clamp so a text-only
+  // assignment (steps === ['text']) can't start out of range and render a wrong
+  // (recorder) branch.
+  const [idx, setIdx] = useState(Math.min(steps[0] === 'text' && props.initialHasText ? 1 : 0, Math.max(0, steps.length - 1)))
   const [phase, setPhase] = useState<'doing' | 'finishing' | 'done' | 'error'>('doing')
   const [error, setError] = useState<string | null>(null)
   const [redo, setRedo] = useState(false)

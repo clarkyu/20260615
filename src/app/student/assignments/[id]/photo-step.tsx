@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Camera, ImageUp } from 'lucide-react'
 import { getUploadUrl, recordMedia } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
@@ -18,16 +18,23 @@ function extFor(type: string): string {
 export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDone: () => void }) {
   const t = useT()
   const inputRef = useRef<HTMLInputElement>(null)
+  const previewUrlRef = useRef<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Revoke the preview object URL on unmount (re-picks revoke the prior one inline).
+  useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current) }, [])
+
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     if (!f) return
     setFile(f)
-    setPreview(URL.createObjectURL(f))
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    const url = URL.createObjectURL(f)
+    previewUrlRef.current = url
+    setPreview(url)
     setError(null)
   }
 
