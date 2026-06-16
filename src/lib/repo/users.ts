@@ -116,3 +116,17 @@ export function listStudentsInClass(prisma: PrismaClient, classId: number) {
 export function listClassStudents(prisma: PrismaClient, schoolId: number | null | undefined, classId: number) {
   return prisma.user.findMany({ where: { schoolId: schoolId ?? -1, classId, role: 'STUDENT' }, orderBy: { studentNo: 'asc' } })
 }
+
+// Lightweight roster {id, name, studentNo} for a class (school-scoped) — analytics.
+export function listClassRoster(prisma: PrismaClient, schoolId: number | null | undefined, classId: number) {
+  return prisma.user.findMany({
+    where: { schoolId: schoolId ?? -1, classId, role: 'STUDENT' },
+    select: { id: true, name: true, studentNo: true },
+    orderBy: { studentNo: 'asc' },
+  })
+}
+
+// The signed-in user, no relations (auth gate checks: mustChangePassword/classId).
+export function findById(prisma: PrismaClient, id: number) {
+  return prisma.user.findUnique({ where: { id } })
+}

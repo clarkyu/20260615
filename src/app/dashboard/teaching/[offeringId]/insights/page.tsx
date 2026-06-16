@@ -8,6 +8,11 @@ import { createReviewAssignment } from '@/actions/assignments'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import * as offeringRepo from '@/lib/repo/offerings'
+import * as userRepo from '@/lib/repo/users'
+import * as assignmentRepo from '@/lib/repo/assignments'
+import * as submissionRepo from '@/lib/repo/submissions'
+import * as practiceRepo from '@/lib/repo/practice'
 import {
   assignmentStats,
   studentProfiles,
@@ -27,33 +32,14 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const offering = await prisma.courseOffering.findFirst({
-    where: { id: offeringId, schoolId: user.schoolId },
-    include: { course: true, class: { select: { id: true, name: true } } },
-  })
+  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId)
   if (!offering) notFound()
 
   const [students, assignments, rawSubs, rawPractice] = await Promise.all([
-    prisma.user.findMany({
-      where: { schoolId: user.schoolId, classId: offering.classId, role: 'STUDENT' },
-      select: { id: true, name: true, studentNo: true },
-      orderBy: { studentNo: 'asc' },
-    }),
-    prisma.assignment.findMany({
-      where: { offeringId },
-      select: { id: true, title: true, sentences: { select: { order: true, text: true } } },
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.submission.findMany({
-      where: { assignment: { offeringId } },
-      select: { studentId: true, assignmentId: true, attempt: true, status: true, finalScore: true, needsReview: true, aiResult: true },
-      orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
-    }),
-    // Practice rounds (训练) → 平时成绩, separate from graded submissions (测试).
-    prisma.practiceAttempt.findMany({
-      where: { assignment: { offeringId }, aiScore: { not: null } },
-      select: { studentId: true, assignmentId: true, aiScore: true },
-    }),
+    userRepo.listClassRoster(prisma, user.schoolId, offering.classId),
+    assignmentRepo.listForOfferingTitled(prisma, offeringId),
+    submissionRepo.listForOfferingLatestFirst(prisma, offeringId),
+    practiceRepo.listScoredForOffering(prisma, offeringId),
   ])
 
   // Keep only the latest attempt per (student, assignment).

@@ -70,6 +70,14 @@ export function findForSchoolWithCourse(prisma: PrismaClient, id: number, school
   return prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 }, include: { course: true } })
 }
 
+// One offering with course + class (no assignments) — the analytics/gradebook header.
+export function findForSchoolWithCourseClass(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.courseOffering.findFirst({
+    where: { id, schoolId: schoolId ?? -1 },
+    include: { course: true, class: { select: { id: true, name: true } } },
+  })
+}
+
 // Of the given classes, which already have this exact offering (course + term)?
 export async function existingClassIds(
   prisma: PrismaClient,

@@ -1,24 +1,21 @@
 import Link from 'next/link'
 import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library } from 'lucide-react'
-import type { SubmissionStatus } from '@prisma/client'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { runAfterResponse } from '@/lib/cf'
 import { drainGradingJobs } from '@/lib/domain/jobs'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
+import * as dashboardRepo from '@/lib/repo/dashboard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
-
-// Submitted work the teacher still needs to look at — AI either hasn't handled it
-// or wasn't confident enough to auto-approve (needsReview).
-const NEEDS_TEACHER_STATUS: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
 export default async function DashboardPage() {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
-  const me = await prisma.user.findUnique({ where: { id: user.userId }, include: { school: true } })
+  const me = await userRepo.findWithSchool(prisma, user.userId)
 
   if (!me?.school) {
     return (
@@ -38,32 +35,9 @@ export default async function DashboardPage() {
   // Self-heal: drain due/stuck grading jobs in the background so transient AI
   // failures recover even without new submissions. Cheap when the queue is empty.
   await runAfterResponse(() => drainGradingJobs(prisma))
-  // A teacher only sees their own offerings; admins see the whole school.
-  const offeringWhere = { schoolId, ...(user.role === 'TEACHER' ? { teacherId: user.userId } : {}) }
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1)
 
-  const [students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups] = await Promise.all([
-    prisma.user.count({ where: { schoolId, role: 'STUDENT' } }),
-    prisma.classGroup.count({ where: { schoolId } }),
-    prisma.assignment.count({ where: { offering: offeringWhere } }),
-    prisma.courseOffering.count({ where: offeringWhere }),
-    prisma.submission.count({ where: { needsReview: true, status: { in: NEEDS_TEACHER_STATUS }, assignment: { offering: offeringWhere } } }),
-    prisma.assignment.count({ where: { offering: offeringWhere, dueAt: { gte: todayStart, lt: todayEnd } } }),
-    prisma.submission.groupBy({
-      by: ['assignmentId'],
-      where: { needsReview: true, status: { in: NEEDS_TEACHER_STATUS }, assignment: { offering: offeringWhere } },
-      _count: { _all: true },
-    }),
-  ])
-
-  const ids = pendingGroups.map((g) => g.assignmentId)
-  const needRows = ids.length
-    ? await prisma.assignment.findMany({
-        where: { id: { in: ids } },
-        select: { id: true, title: true, category: true, offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } } },
-      })
-    : []
+  const { students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups, needRows } =
+    await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.role)
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows
     .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, pending: countById.get(a.id) ?? 0 }))
