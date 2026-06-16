@@ -1,10 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getDb } from '@/lib/db'
-import { requireStaff } from '@/lib/auth'
+import { staffContext, staffSchoolContext } from '@/lib/staff-action'
 import { getSession } from '@/lib/session'
-import { getT } from '@/lib/i18n-server'
+import { createSchool as createSchoolService, renameSchool as renameSchoolService } from '@/lib/domain/schools'
 import { parseForm, reqText, optText, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
@@ -14,23 +13,19 @@ function normalizeCode(raw: string): string {
 }
 
 export async function createSchool(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  const prisma = await getDb()
+  const { user, prisma, t } = await staffContext()
   const parsed = parseForm(z.object({ name: reqText('err.needSchoolName', 100), code: optText(20) }), formData)
   if (!parsed.ok) return { error: t(parsed.error) }
   const name = parsed.data.name
   const code = normalizeCode(parsed.data.code ?? '')
   if (code.length < 3 || code.length > 12) return { error: t('err.codeFormat') }
 
-  if (await prisma.school.findUnique({ where: { name } })) return { error: t('err.schoolNameExists') }
-  if (await prisma.school.findUnique({ where: { code } })) return { error: t('err.codeTaken') }
+  const res = await createSchoolService(prisma, user.userId, name, code)
+  if (!res.ok) return { error: t(res.error) }
 
-  const school = await prisma.school.create({ data: { name, code } })
-  await prisma.user.update({ where: { id: user.userId }, data: { schoolId: school.id } })
-
+  // Reflect the new school in the session so subsequent requests are scoped to it.
   const session = await getSession()
-  session.schoolId = school.id
+  session.schoolId = res.schoolId
   await session.save()
 
   revalidatePath('/dashboard')
@@ -39,18 +34,13 @@ export async function createSchool(prevState: unknown, formData: FormData): Prom
 
 // Rename the staff member's school (the code is kept).
 export async function renameSchool(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  const prisma = await getDb()
-  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { error: cx.error }
   const parsed = parseForm(z.object({ name: reqText('err.needSchoolName', 100) }), formData)
-  if (!parsed.ok) return { error: t(parsed.error) }
-  const name = parsed.data.name
+  if (!parsed.ok) return { error: cx.t(parsed.error) }
 
-  const dup = await prisma.school.findFirst({ where: { name, NOT: { id: user.schoolId } } })
-  if (dup) return { error: t('err.schoolNameExists') }
-
-  await prisma.school.update({ where: { id: user.schoolId }, data: { name } })
+  const res = await renameSchoolService(cx.prisma, cx.schoolId, parsed.data.name)
+  if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath('/profile')
   revalidatePath('/dashboard')
   return { success: true }

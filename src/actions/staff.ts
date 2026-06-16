@@ -1,23 +1,18 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getDb } from '@/lib/db'
-import { requireStaff } from '@/lib/auth'
-import { getT } from '@/lib/i18n-server'
-import { hashPassword, BULK_HASH_ITERATIONS } from '@/lib/password'
+import { staffSchoolContext } from '@/lib/staff-action'
+import { addTeacher as addTeacherService } from '@/lib/domain/staff'
 import { parseForm, reqText, optText, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
 // Adds a colleague teacher to the caller's own school. The initial password equals
-// the work number and must be changed on first login (mustChangePassword). This is
-// the only in-app path to provision a teacher account.
+// the work number and must be changed on first login. This is the only in-app path
+// to provision a teacher account.
 export async function addTeacher(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  const prisma = await getDb()
-  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
-
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { error: cx.error }
   const parsed = parseForm(
     z.object({
       staffNo: reqText('err.needNoAndName', 50),
@@ -27,26 +22,15 @@ export async function addTeacher(prevState: unknown, formData: FormData): Promis
     }),
     formData,
   )
-  if (!parsed.ok) return { error: t(parsed.error) }
-  const { staffNo, name, phone } = parsed.data
-  const email = parsed.data.email?.toLowerCase() ?? null
+  if (!parsed.ok) return { error: cx.t(parsed.error) }
 
-  const dup = await prisma.user.findFirst({ where: { schoolId: user.schoolId, staffNo } })
-  if (dup) return { error: t('err.staffNoExists') }
-  if (email && (await prisma.user.findFirst({ where: { email } }))) return { error: t('err.emailTaken') }
-
-  await prisma.user.create({
-    data: {
-      role: 'TEACHER',
-      schoolId: user.schoolId,
-      staffNo,
-      name,
-      phone,
-      email,
-      passwordHash: await hashPassword(staffNo, BULK_HASH_ITERATIONS),
-      mustChangePassword: true,
-    },
+  const res = await addTeacherService(cx.prisma, cx.schoolId, {
+    staffNo: parsed.data.staffNo,
+    name: parsed.data.name,
+    phone: parsed.data.phone,
+    email: parsed.data.email?.toLowerCase() ?? null,
   })
+  if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath('/dashboard/teachers')
   return { success: true }
 }
