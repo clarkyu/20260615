@@ -10,14 +10,17 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { CreateSetForm } from './create-set-form'
 import { ImportStarter } from './import-starter'
+import { BankFilters } from './bank-filters'
 
-export default async function BankPage() {
+export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string }> }) {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const sets = await bankRepo.listForSchool(prisma, user.schoolId)
+  const { cefr, strand, domain } = await searchParams
+  const filtered = Boolean(cefr || strand || domain)
+  const sets = await bankRepo.listForSchool(prisma, user.schoolId, { cefr, strand, domain })
 
   return (
     <div className="space-y-4 py-2">
@@ -34,8 +37,10 @@ export default async function BankPage() {
         <ImportStarter />
       </div>
 
+      <BankFilters cefr={cefr} strand={strand} domain={domain} />
+
       {sets.length === 0 ? (
-        <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">{t('bank.empty')}</CardContent></Card>
+        <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">{filtered ? t('bank.noMatch') : t('bank.empty')}</CardContent></Card>
       ) : (
         sets.map((s) => (
           <Link key={s.id} href={`/dashboard/bank/${s.id}`}>
