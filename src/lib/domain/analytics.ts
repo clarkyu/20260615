@@ -23,6 +23,25 @@ export interface AnalyticsSubmission {
   perSentence: { order: number; accuracy: number; completeness: number }[]
 }
 
+// One practice round (训练). Feeds the 平时成绩, separate from the graded submission.
+export interface AnalyticsPractice {
+  studentId: number
+  assignmentId: number
+  aiScore: number | null
+}
+
+// Best scored practice per (student, assignment) — rewards practicing to mastery.
+function bestPracticeByPair(practice: AnalyticsPractice[]): Map<string, number> {
+  const best = new Map<string, number>()
+  for (const p of practice) {
+    if (p.aiScore == null) continue
+    const key = `${p.studentId}:${p.assignmentId}`
+    const cur = best.get(key)
+    if (cur == null || p.aiScore > cur) best.set(key, p.aiScore)
+  }
+  return best
+}
+
 export const RISK_SCORE = 60
 export const RISK_SUBMIT_RATE = 0.5
 
@@ -74,7 +93,8 @@ export interface StudentProfile {
   studentNo: string
   submitted: number
   totalAssignments: number
-  avgScore: number | null
+  avgScore: number | null // 测试成绩: average of graded submissions
+  dailyScore: number | null // 平时成绩: average of best practice scores
   atRisk: boolean
   riskReasons: string[] // i18n keys
 }
@@ -83,13 +103,19 @@ export function studentProfiles(
   students: AnalyticsStudent[],
   assignments: AnalyticsAssignment[],
   submissions: AnalyticsSubmission[],
+  practice: AnalyticsPractice[] = [],
 ): StudentProfile[] {
   const total = assignments.length
+  const best = bestPracticeByPair(practice)
   return students
     .map((st) => {
       const subs = submissions.filter((s) => s.studentId === st.id && isSubmitted(s.status))
       const submitted = new Set(subs.map((s) => s.assignmentId)).size
       const avg = mean(subs.map((s) => s.finalScore).filter((v): v is number => v != null))
+      // 平时成绩: mean over assignments the student actually practiced (best per assignment).
+      const daily = mean(
+        assignments.map((a) => best.get(`${st.id}:${a.id}`)).filter((v): v is number => v != null),
+      )
       const rate = total ? submitted / total : 1
       const riskReasons: string[] = []
       if (total > 0 && rate < RISK_SUBMIT_RATE) riskReasons.push('risk.lowSubmit')
@@ -101,6 +127,7 @@ export function studentProfiles(
         submitted,
         totalAssignments: total,
         avgScore: avg == null ? null : round1(avg),
+        dailyScore: daily == null ? null : round1(daily),
         atRisk: riskReasons.length > 0,
         riskReasons,
       }
@@ -145,7 +172,8 @@ export interface OfferingSummary {
   students: number
   assignments: number
   submissionRate: number // 0..1 across all student×assignment slots
-  avgScore: number | null
+  avgScore: number | null // 测试成绩 (submissions)
+  dailyAvg: number | null // 平时成绩 (practice)
   needsReview: number
   atRisk: number
 }
@@ -159,11 +187,13 @@ export function offeringSummary(
   const submitted = stats.reduce((x, s) => x + s.submitted, 0)
   const avgs = stats.map((s) => s.avgScore).filter((v): v is number => v != null)
   const avg = mean(avgs)
+  const dailyAvg = mean(profiles.map((p) => p.dailyScore).filter((v): v is number => v != null))
   return {
     students: totalStudents,
     assignments: stats.length,
     submissionRate: slots ? submitted / slots : 0,
     avgScore: avg == null ? null : round1(avg),
+    dailyAvg: dailyAvg == null ? null : round1(dailyAvg),
     needsReview: stats.reduce((x, s) => x + s.needsReview, 0),
     atRisk: profiles.filter((p) => p.atRisk).length,
   }
