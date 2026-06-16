@@ -24,7 +24,12 @@ export type GradingKind = 'submission' | 'shadow'
 // After this many tries a job dead-letters instead of retrying forever.
 export const MAX_ATTEMPTS = 4
 // A PROCESSING row older than this is assumed orphaned (worker died) and reclaimed.
-const STALE_MS = 5 * 60 * 1000
+// `updatedAt` is stamped at claim and not heartbeat during the run, so this must
+// sit above the realistic max single-job runtime — a per-sentence shadow grade of
+// a large set runs in sequential batches and can take several minutes — otherwise
+// a slow-but-alive job gets reclaimed and double-run. 15 min is comfortably above
+// that while still recovering a genuinely dead worker reasonably soon.
+const STALE_MS = 15 * 60 * 1000
 const BASE_BACKOFF_MS = 60 * 1000
 
 // Exponential backoff keyed on the new attempt count (1-based): 1→1m, 2→2m, 3→4m.
