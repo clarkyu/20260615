@@ -20,6 +20,22 @@ export const MODELS: ModelDescriptor[] = [
     modalities: ['video', 'audio', 'image', 'text'],
   },
   {
+    id: 'gemini-3.5-flash',
+    label: 'Gemini 3.5 Flash（最新·视频+音频·跑量首选）',
+    provider: 'gemini',
+    capabilities: ['perception', 'judge'],
+    modalities: ['video', 'audio', 'image', 'text'],
+    note: '最新稳定版 Flash，原生吃视频+音频；日常批改首选。',
+  },
+  {
+    id: 'gemini-3.1-pro-preview',
+    label: 'Gemini 3.1 Pro（预览·难例复核）',
+    provider: 'gemini',
+    capabilities: ['perception', 'judge'],
+    modalities: ['video', 'audio', 'image', 'text'],
+    note: '预览版，能力最强；留给难例复核。',
+  },
+  {
     id: 'qwen-omni-turbo',
     label: '通义千问 Qwen-Omni（音频/视频+文本）',
     provider: 'qwen',
@@ -78,6 +94,7 @@ export interface Preset {
 // the two stages independently in "advanced" mode.
 export const PRESETS: Preset[] = [
   { id: 'gemini-allinone', label: 'Gemini 一把梭', perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash' },
+  { id: 'gemini35-allinone', label: 'Gemini 3.5 一把梭（最新）', perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash' },
   { id: 'qwen-allinone', label: 'Qwen 一把梭', perceptionModel: 'qwen-omni-turbo', judgeModel: 'qwen-omni-turbo' },
   { id: 'qwen-minimax', label: 'Qwen 感知 + MiniMax 评分', perceptionModel: 'qwen-omni-turbo', judgeModel: 'MiniMax-Text-01' },
   { id: 'whisper-deepseek', label: 'Whisper 感知 + DeepSeek 评分', perceptionModel: 'whisper-1', judgeModel: 'deepseek-chat' },
