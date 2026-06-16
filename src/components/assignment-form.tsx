@@ -1,7 +1,9 @@
 'use client'
 
-import { useActionState, useMemo, useState } from 'react'
+import { useActionState, useMemo, useRef, useState } from 'react'
+import { Sparkles, ImageUp } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
+import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -46,6 +48,18 @@ export function AssignmentForm({
   const t = useT()
   const editing = Boolean(initial)
   const [state, action, isPending] = useActionState(editing ? updateAssignment : createAssignment, null)
+
+  // Core text fields are controlled so the AI draft can fill them.
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [category, setCategory] = useState(initial?.category ?? '')
+  const [instructions, setInstructions] = useState(initial?.instructions ?? '')
+  const [sentences, setSentences] = useState(initial?.sentences ?? '')
+  function applyDraft(d: DraftFields) {
+    if (d.title) setTitle(d.title)
+    if (d.category) setCategory(d.category)
+    if (d.instructions) setInstructions(d.instructions)
+    if (d.sentences) setSentences(d.sentences)
+  }
   const multi = !editing && (targets?.length ?? 0) > 1
   // When not multi, publish to the pre-selected offering, or the only candidate.
   const singleOfferingId = offeringId ?? targets?.[0]?.offeringId
@@ -77,6 +91,7 @@ export function AssignmentForm({
 
   return (
     <div className="space-y-4">
+      {!editing ? <AiDraftPanel onApply={applyDraft} /> : null}
       <Card>
         <CardHeader>
           <CardTitle>{editing ? t('asg.editTitle') : t('asg.newTitle')}</CardTitle>
@@ -122,11 +137,11 @@ export function AssignmentForm({
 
             <div className="space-y-1.5">
               <Label htmlFor="title">{t('asg.fTitle')}</Label>
-              <Input id="title" name="title" required defaultValue={initial?.title} />
+              <Input id="title" name="title" required value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="category">{t('asg.fCategory')}</Label>
-              <Input id="category" name="category" list="category-presets" defaultValue={initial?.category} placeholder={t('asg.fCategoryPh')} />
+              <Input id="category" name="category" list="category-presets" value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('asg.fCategoryPh')} />
               <datalist id="category-presets">
                 {CATEGORY_PRESETS.map((c) => <option key={c} value={c} />)}
               </datalist>
@@ -142,12 +157,12 @@ export function AssignmentForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="instructions">{t('asg.fInstructions')}</Label>
-              <Textarea id="instructions" name="instructions" rows={3} defaultValue={initial?.instructions} placeholder={t('asg.fInstructionsPh')} />
+              <Textarea id="instructions" name="instructions" rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder={t('asg.fInstructionsPh')} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sentences">{t('asg.fSentences')}</Label>
               <p className="text-xs text-muted-foreground">{t('asg.fSentencesHint')}</p>
-              <Textarea id="sentences" name="sentences" rows={6} defaultValue={initial?.sentences} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
+              <Textarea id="sentences" name="sentences" rows={6} value={sentences} onChange={(e) => setSentences(e.target.value)} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
             </div>
             <div className="space-y-2">
               <Label>{t('asg.submitKinds')}</Label>
@@ -207,5 +222,76 @@ export function AssignmentForm({
         </Card>
       ) : null}
     </div>
+  )
+}
+
+// AI 备课出题：老师给主题/课文，或拍张课本照片，AI 起草整份作业，回填到表单。
+function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const [topic, setTopic] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function generate() {
+    setBusy(true); setMsg(null)
+    try {
+      const fd = new FormData()
+      fd.set('topic', topic)
+      if (file) fd.set('image', file)
+      const res = await draftAssignmentAction(fd)
+      if (res.status === 'ok') { onApply(res.draft); setMsg(t('author.applied')) }
+      else if (res.status === 'unavailable') setMsg(t('author.unavailable'))
+      else setMsg(res.message)
+    } catch {
+      setMsg(t('author.failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <Card className="tap border-primary/30 bg-primary/5 hover:shadow-card" onClick={() => setOpen(true)}>
+        <CardContent className="flex items-center gap-3 p-4">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-snug">{t('author.cardTitle')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t('author.cardDesc')}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="border-primary/30">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="font-semibold">{t('author.cardTitle')}</span>
+        </div>
+        <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} placeholder={t('author.topicPh')} />
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+            <ImageUp className="h-4 w-4" />{file ? t('author.photoChosen') : t('author.addPhoto')}
+          </Button>
+          {file ? <button type="button" onClick={() => setFile(null)} className="text-xs text-muted-foreground hover:text-foreground">{t('author.removePhoto')}</button> : null}
+        </div>
+        {msg ? <FormMessage>{msg}</FormMessage> : null}
+        <div className="flex gap-2">
+          <Button type="button" disabled={busy || (!topic.trim() && !file)} onClick={generate}>
+            <Sparkles className="h-4 w-4" />{busy ? t('author.generating') : t('author.generate')}
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('author.collapse')}</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{t('author.tip')}</p>
+      </CardContent>
+    </Card>
   )
 }
