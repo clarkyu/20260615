@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { Bot, ChevronRight } from 'lucide-react'
 import { requireAuth } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -58,6 +60,24 @@ export default async function ProfilePage() {
           schoolName={user.school?.name ?? ''}
           hasSchool={Boolean(user.school)}
         />
+      ) : null}
+      {isStaff ? (
+        <Link href="/profile/ai">
+          <Card className="tap hover:shadow-card">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+                <Bot className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold leading-snug">{locale === 'zh' ? 'AI 模型目录' : 'AI Models'}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {locale === 'zh' ? '各家各模型的使用范围与价格（密钥自配即将上线）' : 'Scope & pricing of every model'}
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
       ) : null}
       <ProfileClient />
     </div>
