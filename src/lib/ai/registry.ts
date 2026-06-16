@@ -20,6 +20,14 @@ export const MODELS: ModelDescriptor[] = [
     modalities: ['video', 'audio', 'image', 'text'],
   },
   {
+    id: 'gemini-3-flash-preview',
+    label: 'Gemini 3 Flash（预览·中间价位）',
+    provider: 'gemini',
+    capabilities: ['perception', 'judge'],
+    modalities: ['video', 'audio', 'image', 'text'],
+    note: '预览版，比 3.5 Flash 便宜（约 $0.50/$3）；想升级又想控成本时用。',
+  },
+  {
     id: 'gemini-3.5-flash',
     label: 'Gemini 3.5 Flash（最新·视频+音频·跑量首选）',
     provider: 'gemini',
