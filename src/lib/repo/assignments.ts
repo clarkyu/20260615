@@ -109,6 +109,20 @@ export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId
   return found.offeringId
 }
 
+// Assignments of an offering as {id, title}, oldest first — the gradebook columns.
+export function listForOfferingBrief(prisma: PrismaClient, offeringId: number) {
+  return prisma.assignment.findMany({ where: { offeringId }, select: { id: true, title: true }, orderBy: { createdAt: 'asc' } })
+}
+
+// Same with each assignment's sentences {order, text} — the insights weak-line map.
+export function listForOfferingTitled(prisma: PrismaClient, offeringId: number) {
+  return prisma.assignment.findMany({
+    where: { offeringId },
+    select: { id: true, title: true, sentences: { select: { order: true, text: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
 // Sentences of every assignment in an offering (for the "weakest sentence" review).
 export function listWithSentencesForOffering(prisma: PrismaClient, offeringId: number) {
   return prisma.assignment.findMany({
