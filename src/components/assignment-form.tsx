@@ -7,6 +7,7 @@ import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -240,7 +241,7 @@ export function AssignmentForm({
           <CardContent className="p-4">
             <form action={deleteAssignment} onSubmit={(e) => { if (!confirm(t('asg.deleteConfirm'))) e.preventDefault() }}>
               <input type="hidden" name="assignmentId" value={initial!.id} />
-              <Button type="submit" variant="destructive" className="w-full">{t('asg.delete')}</Button>
+              <SubmitButton variant="destructive" className="w-full">{t('asg.delete')}</SubmitButton>
             </form>
           </CardContent>
         </Card>

@@ -7,6 +7,7 @@ import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
 import { serializeChunks } from '@/lib/bank'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent } from '@/components/ui/card'
 import { deleteChunkSet } from '@/actions/bank'
 import { VideoUpload } from './video-upload'
@@ -74,7 +75,7 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
 
       <form action={deleteChunkSet} className="pt-2">
         <input type="hidden" name="chunkSetId" value={set.id} />
-        <Button type="submit" variant="outline" size="sm" className="text-destructive">{t('bank.delete')}</Button>
+        <SubmitButton variant="outline" size="sm" className="text-destructive">{t('bank.delete')}</SubmitButton>
       </form>
     </div>
   )
