@@ -70,20 +70,31 @@ async function checkRateLimitD1(prisma: PrismaClient, key: string, limit: number
 }
 
 // Use the shared D1 limiter; fall back to the in-memory store when there's no D1
-// (local dev / tests) so behaviour degrades gracefully rather than throwing.
+// binding (local dev / tests). A D1 *query* failure (a real outage) is distinct:
+// it's logged, because falling back to per-isolate counting silently degrades the
+// limiter to near-off — exactly the condition the shared store exists to prevent.
 async function limit(store: RateLimitStore, key: string, max: number, windowMs: number): Promise<boolean> {
+  let prisma
   try {
-    const prisma = await getDb()
-    return await checkRateLimitD1(prisma, key, max, windowMs)
+    prisma = await getDb()
   } catch {
+    return checkRateLimit(store, key, max, windowMs) // no D1 binding (dev/test)
+  }
+  try {
+    return await checkRateLimitD1(prisma, key, max, windowMs)
+  } catch (err) {
+    console.error('[rate-limit] D1 limiter failed — degrading to per-isolate in-memory:', err)
     return checkRateLimit(store, key, max, windowMs)
   }
 }
 
-// Behind a single trusted reverse proxy, the real client IP is the LAST value
-// appended to X-Forwarded-For. Taking the first entry would let a client spoof
-// the header and rotate fake IPs to defeat the limiter.
-export function extractClientIp(forwardedFor: string | null, realIp: string | null): string {
+// On Cloudflare the trustworthy client IP is `CF-Connecting-IP` (set by the edge,
+// not client-spoofable) — prefer it. Otherwise fall back to the LAST X-Forwarded-For
+// hop (the value the trusted proxy appended; the first entry is client-controlled),
+// then x-real-ip.
+export function extractClientIp(cfConnectingIp: string | null, forwardedFor: string | null, realIp: string | null): string {
+  const cf = cfConnectingIp?.trim()
+  if (cf) return cf
   if (forwardedFor) {
     const parts = forwardedFor.split(',').map((part) => part.trim()).filter(Boolean)
     if (parts.length > 0) return parts[parts.length - 1]
@@ -101,7 +112,7 @@ const resetExecuteStore = new RateLimitStore()
 
 async function getClientIp(): Promise<string> {
   const h = await headers()
-  return extractClientIp(h.get('x-forwarded-for'), h.get('x-real-ip'))
+  return extractClientIp(h.get('cf-connecting-ip'), h.get('x-forwarded-for'), h.get('x-real-ip'))
 }
 
 // Keys are prefixed per limiter so they share one table without colliding.
