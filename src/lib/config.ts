@@ -26,6 +26,9 @@ export const config = {
   }),
   geminiKey: (): string | undefined => env('GEMINI_API_KEY'),
   geminiBaseUrl: (): string => env('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com',
+  // Generic read for dynamically-named provider vars (per-provider apiKey /
+  // baseUrl / groupId env names), so config stays the single source of truth.
+  env: (name: string): string | undefined => env(name),
 }
 
 // ── feature-presence flags (do we have what a feature needs?) ─────────────────

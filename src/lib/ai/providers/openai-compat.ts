@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import { buildJudgePrompt, buildPerceptionPrompt, normalizeJudge, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
+import { config } from '@/lib/config'
 
 // Shared adapter for OpenAI-compatible chat APIs: Qwen (DashScope compatible
 // mode), MiniMax, DeepSeek, OpenAI. They differ only in base URL + path + auth,
@@ -57,7 +58,7 @@ export const COMPAT: Record<'qwen' | 'minimax' | 'deepseek' | 'openai', CompatCo
 
 function apiKey(cfg: CompatConfig): string {
   // The grading teacher's own key (BYOK) wins; otherwise the platform key.
-  const key = overrideKey(cfg.provider) ?? process.env[cfg.apiKeyEnv]
+  const key = overrideKey(cfg.provider) ?? config.env(cfg.apiKeyEnv)
   if (!key) throw new Error(`${cfg.apiKeyEnv} 未配置`)
   return key
 }
@@ -80,8 +81,8 @@ export function parseChatJson(data: unknown): unknown {
 type Content = string | Array<Record<string, unknown>>
 
 async function chat(cfg: CompatConfig, model: string, messages: { role: string; content: Content }[]): Promise<unknown> {
-  const base = (process.env[cfg.baseUrlEnv] || cfg.baseUrl).replace(/\/$/, '')
-  const groupId = cfg.groupIdEnv ? process.env[cfg.groupIdEnv] : undefined
+  const base = (config.env(cfg.baseUrlEnv) || cfg.baseUrl).replace(/\/$/, '')
+  const groupId = cfg.groupIdEnv ? config.env(cfg.groupIdEnv) : undefined
   const url = `${base}${cfg.chatPath}` + (groupId ? `?GroupId=${encodeURIComponent(groupId)}` : '')
   const res = await fetch(url, {
     method: 'POST',
