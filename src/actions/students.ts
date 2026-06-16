@@ -37,7 +37,7 @@ export async function previewRoster(prevState: unknown, formData: FormData): Pro
   const buf = await readFile(formData)
   if (!buf) return { error: t('err.pickExcel') }
   const parsed = parseRoster(buf)
-  if (parsed.headerError) return { error: parsed.headerError }
+  if (parsed.headerError) return { error: t(parsed.headerError) }
   return { rows: parsed.rows, validCount: parsed.validCount, errorCount: parsed.errorCount }
 }
 
@@ -49,7 +49,7 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
   if (!buf) return { error: cx.t('err.pickExcel') }
 
   const parsed = parseRoster(buf)
-  if (parsed.headerError) return { error: parsed.headerError }
+  if (parsed.headerError) return { error: cx.t(parsed.headerError) }
 
   const result = await importRoster(cx.prisma, cx.schoolId, parsed)
   revalidatePath('/dashboard/students')
@@ -180,10 +180,10 @@ export async function deleteStudent(formData: FormData): Promise<MutState> {
 }
 
 export async function resetStudentPassword(formData: FormData): Promise<MutState> {
-  const { user, prisma } = await staffContext()
+  const { user, prisma, t } = await staffContext()
   const studentId = Number(formData.get('studentId'))
   const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
-  if (!stu?.studentNo) return { error: 'not found' }
+  if (!stu?.studentNo) return { error: t('err.studentNotFound') }
   await userRepo.setStudentPassword(prisma, studentId, await hashPassword(stu.studentNo, BULK_HASH_ITERATIONS))
   return { success: true }
 }

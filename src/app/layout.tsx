@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
-import { validateConfigOnce } from '@/lib/config'
+import { config, validateConfigOnce } from '@/lib/config'
 import { getLocale } from '@/lib/i18n-server'
 import { I18nProvider } from '@/components/i18n-provider'
 import { AppHeader } from '@/components/app-header'
@@ -10,7 +10,7 @@ import { BottomNav } from '@/components/bottom-nav'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
-const APP_NAME = process.env.APP_NAME || '你好！作业 Hi, Homework'
+const APP_NAME = config.appName()
 
 export const metadata: Metadata = {
   title: APP_NAME,

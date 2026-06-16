@@ -13,6 +13,7 @@ import { normalizeEmail } from '@/lib/utils'
 import { generateToken, hashToken } from '@/lib/tokens'
 import { validatePassword, validateName } from '@/lib/validation'
 import { getT } from '@/lib/i18n-server'
+import { config } from '@/lib/config'
 import * as userRepo from '@/lib/repo/users'
 import * as departmentRepo from '@/lib/repo/departments'
 import { parseForm, optText, optId, z } from '@/lib/validate'
@@ -80,7 +81,7 @@ export async function register(prevState: unknown, formData: FormData): Promise<
   if (existing?.emailVerified) return { error: t('err.emailTaken') }
 
   const passwordHash = await hashPassword((formData.get('password') as string) ?? '')
-  const isSuperAdmin = email === normalizeEmail(process.env.ADMIN_EMAIL ?? '')
+  const isSuperAdmin = email === normalizeEmail(config.adminEmail() ?? '')
   const role = isSuperAdmin ? 'SUPER_ADMIN' : 'TEACHER'
 
   const userId = existing

@@ -3,11 +3,10 @@
 import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } from '@/lib/storage'
 import { gradePractice } from '@/lib/domain/practice'
+import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as practiceRepo from '@/lib/repo/practice'
-
-const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综合评分。'
 
 // Presigned URL for a practice audio recording (separate prefix; never counts as a submission).
 export async function getPracticeUploadUrl(assignmentId: number, contentType: string, ext: string) {
