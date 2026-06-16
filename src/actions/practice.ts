@@ -1,35 +1,20 @@
 'use server'
 
-import { getDb } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
-import { getT } from '@/lib/i18n-server'
+import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } from '@/lib/storage'
 import { gradePractice } from '@/lib/domain/practice'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
+import * as assignmentRepo from '@/lib/repo/assignments'
+import * as practiceRepo from '@/lib/repo/practice'
 
 const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综合评分。'
 
-// Confirms the student is in the class this assignment targets; returns the
-// assignment (with sentences) or an i18n error key.
-async function loadForStudent(assignmentId: number, classId: number | null) {
-  if (!classId) return { ok: false as const, error: 'err.noClassAssigned' as const }
-  const prisma = await getDb()
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, offering: { classId } },
-    include: { sentences: { orderBy: { order: 'asc' } } },
-  })
-  if (!assignment) return { ok: false as const, error: 'err.assignNotFound' as const }
-  return { ok: true as const, assignment }
-}
-
 // Presigned URL for a practice audio recording (separate prefix; never counts as a submission).
 export async function getPracticeUploadUrl(assignmentId: number, contentType: string, ext: string) {
-  const user = await requireRole('STUDENT')
-  const { t } = await getT()
+  const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-
-  const loaded = await loadForStudent(assignmentId, user.classId ?? null)
-  if (!loaded.ok) return { error: t(loaded.error) }
+  if (!user.classId) return { error: t('err.noClassAssigned') }
+  if (!(await assignmentRepo.findForClass(prisma, assignmentId, user.classId))) return { error: t('err.assignNotFound') }
 
   const key = practiceMediaKey(assignmentId, user.userId, 'audio', ext || 'webm')
   try {
@@ -66,13 +51,10 @@ export async function gradePracticeAttempt(
   assignmentId: number,
   payload: { kind: 'audio' | 'text'; mediaKey?: string; recitedText?: string },
 ): Promise<PracticeFeedback> {
-  const user = await requireRole('STUDENT')
-  const { t } = await getT()
-  const prisma = await getDb()
-
-  const loaded = await loadForStudent(assignmentId, user.classId ?? null)
-  if (!loaded.ok) return { status: 'error', message: t(loaded.error) }
-  const { assignment } = loaded
+  const { user, prisma, t } = await studentContext()
+  if (!user.classId) return { status: 'error', message: t('err.noClassAssigned') }
+  const assignment = await assignmentRepo.findForClassWithSentences(prisma, assignmentId, user.classId)
+  if (!assignment) return { status: 'error', message: t('err.assignNotFound') }
 
   // Security: only presign a key that demonstrably belongs to THIS student under
   // THIS assignment's practice prefix — never trust an arbitrary client-supplied key.
@@ -100,18 +82,16 @@ export async function gradePracticeAttempt(
   })
 
   // Persist every practice round (even unavailable/error) for later analytics.
-  await prisma.practiceAttempt.create({
-    data: {
-      assignmentId,
-      studentId: user.userId,
-      kind: payload.kind,
-      mediaKey: payload.mediaKey ?? null,
-      recitedText: payload.recitedText?.trim() || null,
-      aiScore: outcome.status === 'graded' ? outcome.result.judge.score : null,
-      confidence: outcome.status === 'graded' ? outcome.result.judge.confidence ?? null : null,
-      feedback: outcome.status === 'graded' ? outcome.result.judge.feedback : null,
-      feedbackJson: outcome.status === 'graded' ? JSON.stringify(outcome.result) : null,
-    },
+  await practiceRepo.createAttempt(prisma, {
+    assignmentId,
+    studentId: user.userId,
+    kind: payload.kind,
+    mediaKey: payload.mediaKey ?? null,
+    recitedText: payload.recitedText?.trim() || null,
+    aiScore: outcome.status === 'graded' ? outcome.result.judge.score : null,
+    confidence: outcome.status === 'graded' ? outcome.result.judge.confidence ?? null : null,
+    feedback: outcome.status === 'graded' ? outcome.result.judge.feedback : null,
+    feedbackJson: outcome.status === 'graded' ? JSON.stringify(outcome.result) : null,
   })
 
   if (outcome.status === 'unavailable') return { status: 'unavailable' }

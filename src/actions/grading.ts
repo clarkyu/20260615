@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { staffContext } from '@/lib/staff-action'
+import { staffContext } from '@/lib/action-context'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import * as submissionRepo from '@/lib/repo/submissions'

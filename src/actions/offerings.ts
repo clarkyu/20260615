@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { staffContext, staffSchoolContext } from '@/lib/staff-action'
+import { staffContext, staffSchoolContext } from '@/lib/action-context'
 import * as offeringRepo from '@/lib/repo/offerings'
 import { createOfferings, updateOffering as updateOfferingService, type OfferingInput } from '@/lib/domain/offerings'
 import { parseForm, reqText, reqId, idList, z } from '@/lib/validate'

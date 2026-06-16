@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, SubmissionStatus } from '@prisma/client'
 
 // Submission data access. A submission belongs to a school through
 // assignment.offering.schoolId; staff reads/writes are scoped that way.
@@ -53,8 +53,6 @@ export function acceptAiForAssignment(prisma: PrismaClient, assignmentId: number
        AND "status" <> 'FLAGGED'`
 }
 
-// ── reads used outside the staff-grading flow ────────────────────────────────
-
 // Every submission in an offering, ordered so the latest attempt per
 // (student, assignment) comes first — the caller keeps the first of each pair.
 export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number) {
@@ -62,5 +60,75 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
     where: { assignment: { offeringId } },
     select: { studentId: true, assignmentId: true, status: true, finalScore: true, needsReview: true, aiResult: true },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
+  })
+}
+
+// ── student-facing reads/writes (a student only ever touches their own rows) ──
+
+const ACTIVE_STATUSES: SubmissionStatus[] = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
+const byAttempt = (assignmentId: number, studentId: number, attempt: number) => ({ assignmentId_studentId_attempt: { assignmentId, studentId, attempt } })
+export type MediaKeyField = { videoKey?: string; audioKey?: string; imageKey?: string }
+
+// Attempts already used (anything past DRAFT) — drives the maxAttempts gate.
+export function countActiveAttempts(prisma: PrismaClient, assignmentId: number, studentId: number) {
+  return prisma.submission.count({ where: { assignmentId, studentId, status: { in: ACTIVE_STATUSES } } })
+}
+
+// Upsert the draft for an attempt, stamping a media key (re-recording overwrites it).
+export function upsertDraftWithMedia(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number, keyField: MediaKeyField) {
+  return prisma.submission.upsert({
+    where: byAttempt(assignmentId, studentId, attempt),
+    update: { ...keyField, status: 'DRAFT' },
+    create: { assignmentId, studentId, attempt, ...keyField, status: 'DRAFT' },
+  })
+}
+
+// Ensure a draft row exists for the attempt (no media yet — used by shadowing).
+export function upsertDraft(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number) {
+  return prisma.submission.upsert({
+    where: byAttempt(assignmentId, studentId, attempt),
+    update: { status: 'DRAFT' },
+    create: { assignmentId, studentId, attempt, status: 'DRAFT' },
+  })
+}
+
+export function findOwn(prisma: PrismaClient, id: number, studentId: number) {
+  return prisma.submission.findFirst({ where: { id, studentId } })
+}
+
+export function findOwnAttempt(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number) {
+  return prisma.submission.findFirst({ where: { assignmentId, studentId, attempt } })
+}
+
+export function findOwnAttemptWithTakeCount(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number) {
+  return prisma.submission.findFirst({
+    where: { assignmentId, studentId, attempt },
+    include: { _count: { select: { shadowTakes: true } } },
+  })
+}
+
+export function updateMediaMeta(prisma: PrismaClient, id: number, data: { sizeBytes: number | null; durationSec: number | null; violations?: string | null }) {
+  return prisma.submission.update({ where: { id }, data })
+}
+
+// Idempotent submit: only the call that moves DRAFT→submitted matches, so
+// concurrent/duplicate finishes can't double-grade or reset a finalized row.
+export function flipDraft(prisma: PrismaClient, id: number, status: SubmissionStatus) {
+  return prisma.submission.updateMany({ where: { id, status: 'DRAFT' }, data: { status, needsReview: true } })
+}
+
+export function upsertShadowTake(prisma: PrismaClient, submissionId: number, order: number, audioKey: string) {
+  return prisma.shadowTake.upsert({
+    where: { submissionId_order: { submissionId, order } },
+    update: { audioKey },
+    create: { submissionId, order, audioKey },
+  })
+}
+
+export function upsertRecitedText(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number, text: string) {
+  return prisma.submission.upsert({
+    where: byAttempt(assignmentId, studentId, attempt),
+    update: { recitedText: text, textSubmittedAt: new Date() },
+    create: { assignmentId, studentId, attempt, recitedText: text, textSubmittedAt: new Date(), status: 'DRAFT' },
   })
 }
