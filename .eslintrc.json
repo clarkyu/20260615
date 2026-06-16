@@ -1,3 +1,39 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "overrides": [
+    {
+      "files": ["src/actions/**/*.ts"],
+      "excludedFiles": ["src/actions/auth.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@/lib/db",
+                "message": "Actions must stay thin. Get prisma from @/lib/action-context (staffContext/studentContext) and delegate data access to lib/repo or lib/domain. See .claude/skills/system-architecture."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@prisma/client", "@prisma/client/*"],
+                "message": "Actions must not import prisma. Pass cx.prisma to a lib/repo or lib/domain function; keep prisma types out of the action layer. See .claude/skills/system-architecture."
+              }
+            ]
+          }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "MemberExpression[object.name='prisma']",
+            "message": "Actions must not run prisma queries directly — pass prisma to a lib/repo or lib/domain function instead. See .claude/skills/system-architecture."
+          },
+          {
+            "selector": "MemberExpression[object.property.name='prisma']",
+            "message": "Actions must not run prisma queries directly — pass cx.prisma to a lib/repo or lib/domain function instead. See .claude/skills/system-architecture."
+          }
+        ]
+      }
+    }
+  ]
 }

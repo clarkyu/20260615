@@ -22,7 +22,9 @@ The canonical reference is `docs/ARCHITECTURE.md`; this skill is the actionable 
 ## Decision: where does my code go?
 
 - **Reading/writing the DB?** → a function in `lib/repo/<aggregate>.ts`, signature
-  `(prisma, …args)`. Never write a prisma query directly in an action.
+  `(prisma, …args)`. Never write a prisma query directly in an action — **this is
+  lint-enforced** (`src/actions/**` may not import `@/lib/db` / `@prisma/client`, nor
+  call `prisma.x` / `cx.prisma.x`; only `src/actions/auth.ts` is exempt, by design).
 - **Multi-step business logic / a policy decision?** → `lib/domain/<thing>.ts`.
 - **A single-step CRUD?** → the action may call the repo directly (no pointless service).
 - **Rendering + a read-only stat query on a page?** → page Server Component may call

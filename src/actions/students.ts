@@ -73,14 +73,17 @@ export async function addClassGroup(prevState: unknown, formData: FormData): Pro
   return { success: true }
 }
 
+// A select that may carry "no major": anything non-positive/blank → null (lenient).
+const optMajorId = z.preprocess((v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null }, z.number().int().positive().nullable())
+
 export async function updateClass(prevState: unknown, formData: FormData): Promise<MutState> {
   const { user, prisma, t } = await staffContext()
-  const classId = Number(formData.get('classId'))
-  const name = (formData.get('name') as string)?.trim()
-  const grade = (formData.get('grade') as string)?.trim() || null
-  const majorIdRaw = Number(formData.get('majorId'))
-  const majorId = Number.isInteger(majorIdRaw) && majorIdRaw > 0 ? majorIdRaw : null
-  if (!name) return { error: t('err.needClassName') }
+  const parsed = parseForm(
+    z.object({ classId: reqId, name: reqText('err.needClassName', 50), grade: optText(20), majorId: optMajorId }),
+    formData,
+  )
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { classId, name, grade, majorId } = parsed.data
 
   const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
   if (!cls) return { error: t('err.classNotFound') }
@@ -137,13 +140,20 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
 
 export async function updateStudent(formData: FormData): Promise<MutState> {
   const { user, prisma, t } = await staffContext()
-  const studentId = Number(formData.get('studentId'))
-  const name = (formData.get('name') as string)?.trim()
-  const studentNo = (formData.get('studentNo') as string)?.trim()
-  const newClassId = Number(formData.get('classId'))
-  const phone = (formData.get('phone') as string)?.trim() || null
-  const email = (formData.get('email') as string)?.trim().toLowerCase() || null
-  if (!studentNo || !name) return { error: t('err.needNoAndName') }
+  const parsed = parseForm(
+    z.object({
+      studentId: reqId,
+      name: reqText('err.needNoAndName', 50),
+      studentNo: reqText('err.needNoAndName', 50),
+      classId: reqId,
+      phone: optText(50),
+      email: optText(120),
+    }),
+    formData,
+  )
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { studentId, name, studentNo, classId: newClassId, phone } = parsed.data
+  const email = parsed.data.email?.toLowerCase() ?? null
 
   const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
   if (!stu || stu.schoolId == null) return { error: t('err.studentNotFound') }

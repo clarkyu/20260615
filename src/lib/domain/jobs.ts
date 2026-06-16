@@ -16,6 +16,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { autoGradeById } from './grading'
 import { gradeShadowSubmission } from './shadow'
+import { runAfterResponse } from '@/lib/cf'
+import { getDb } from '@/lib/db'
 
 export type GradingKind = 'submission' | 'shadow'
 
@@ -144,4 +146,16 @@ export async function drainGradingJobs(prisma: PrismaClient, limit = 5): Promise
   } catch (err) {
     console.error('[jobs] drain failed:', err)
   }
+}
+
+// Post-submit hook: persist the grading job, then kick a background drain so the
+// teacher usually only sees exceptions. The drain runs after the response on a
+// fresh client; if it's lost (worker eviction) the PENDING job is picked up by a
+// later drain or the dashboard self-heal. Keeps actions out of @/lib/db.
+export async function scheduleGrading(prisma: PrismaClient, submissionId: number, kind: GradingKind): Promise<void> {
+  await enqueueGrading(prisma, submissionId, kind)
+  await runAfterResponse(async () => {
+    const bg = await getDb()
+    await drainGradingJobs(bg)
+  })
 }
