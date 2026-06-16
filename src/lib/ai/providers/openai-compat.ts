@@ -8,6 +8,7 @@ import type {
   Provider,
 } from '../types'
 import { buildJudgePrompt, buildPerceptionPrompt, normalizeJudge, stripCodeFence } from './gemini'
+import { overrideKey } from '../key-context'
 
 // Shared adapter for OpenAI-compatible chat APIs: Qwen (DashScope compatible
 // mode), MiniMax, DeepSeek, OpenAI. They differ only in base URL + path + auth,
@@ -55,7 +56,8 @@ export const COMPAT: Record<'qwen' | 'minimax' | 'deepseek' | 'openai', CompatCo
 }
 
 function apiKey(cfg: CompatConfig): string {
-  const key = process.env[cfg.apiKeyEnv]
+  // The grading teacher's own key (BYOK) wins; otherwise the platform key.
+  const key = overrideKey(cfg.provider) ?? process.env[cfg.apiKeyEnv]
   if (!key) throw new Error(`${cfg.apiKeyEnv} 未配置`)
   return key
 }

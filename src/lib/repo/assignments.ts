@@ -30,6 +30,11 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.assignment.findFirst({ where: { id, ...inSchool(schoolId) } })
 }
 
+// The teacher who owns this assignment's offering — used to resolve BYOK keys.
+export function offeringTeacherId(prisma: PrismaClient, assignmentId: number) {
+  return prisma.assignment.findUnique({ where: { id: assignmentId }, select: { offering: { select: { teacherId: true } } } })
+}
+
 // The grading screen: assignment + offering(course/class) + every submission with
 // its student, ordered so the latest attempt per student comes first.
 export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {

@@ -15,6 +15,11 @@ export function findSecret(prisma: PrismaClient, userId: number, provider: strin
   })
 }
 
+// All of a teacher's encrypted keys (grading decrypts these to use the right key).
+export function listSecretsForUser(prisma: PrismaClient, userId: number) {
+  return prisma.aiKey.findMany({ where: { userId }, select: { provider: true, ciphertext: true, iv: true } })
+}
+
 // Insert-or-update without an interactive transaction (D1-safe): update first,
 // create only if nothing was there.
 export async function upsert(prisma: PrismaClient, userId: number, provider: string, data: { ciphertext: string; iv: string; last4: string }) {
