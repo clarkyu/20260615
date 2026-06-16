@@ -9,6 +9,7 @@ import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export interface ShadowChunk {
   english: string
@@ -159,7 +160,7 @@ export function ShadowSubmit(props: {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-          <div className="animate-in-up grid h-16 w-16 place-items-center rounded-full bg-success/15 text-success"><CheckCircle2 className="h-9 w-9" /></div>
+          <div className="animate-pop grid h-16 w-16 place-items-center rounded-full bg-success/15 text-success"><CheckCircle2 className="h-9 w-9" /></div>
           <p className="text-xl font-bold">{t('rec.success')}</p>
           <p className="text-sm text-muted-foreground">{t('rec.successDesc')}</p>
           <Link href="/student" className="mt-1 w-full"><Button className="w-full" size="lg">{t('sub.backToList')}</Button></Link>
@@ -204,14 +205,14 @@ export function ShadowSubmit(props: {
         <CardContent className="space-y-3 p-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-sm font-semibold"><Video className="h-4 w-4 text-primary" />{t('shadow.title')}</span>
-            <button type="button" onClick={() => setShowZh((v) => !v)} className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+            <button type="button" aria-pressed={showZh} onClick={() => setShowZh((v) => !v)} className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               <Languages className="h-3.5 w-3.5" />{showZh ? t('shadow.hideZh') : t('shadow.showZh')}
             </button>
           </div>
           {url ? (
             <video src={url} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
           ) : (
-            <div className="grid aspect-[3/4] w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
+            <Skeleton className="aspect-[3/4] w-full" />
           )}
           <p className="text-xs text-muted-foreground">{t('shadow.recordHint')}</p>
         </CardContent>

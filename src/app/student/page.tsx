@@ -81,7 +81,7 @@ export default async function StudentHome() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">{improved ? `🎉 ${t('shome.improved')}` : t('shome.cheerUp')}</p>
+            <p className={improved ? 'animate-pop text-sm font-semibold text-success' : 'text-xs text-muted-foreground'}>{improved ? `🎉 ${t('shome.improved')}` : t('shome.cheerUp')}</p>
           </CardContent>
         </Card>
       ) : null}

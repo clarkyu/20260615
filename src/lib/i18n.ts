@@ -518,6 +518,7 @@ const zh: Dict = {
   'cls.manage': '班级管理',
   // courses / teaching offerings
   'nav.teaching': '授课',
+  'nav.bank': '题库',
   'teach.title': '我的授课',
   'teach.new': '新建授课',
   'teach.empty': '还没有授课，点「新建授课」添加：在某学年某学期、某个班、教某门课。',
@@ -1055,6 +1056,7 @@ const en: Dict = {
   'cls.empty': 'No students in this class yet.',
   'cls.manage': 'Class',
   'nav.teaching': 'Teaching',
+  'nav.bank': 'Bank',
   'teach.title': 'My teaching',
   'teach.new': 'New offering',
   'teach.empty': 'No offerings yet. Add one: teach a course to a class in a given year/semester.',
