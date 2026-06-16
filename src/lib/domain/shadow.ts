@@ -30,6 +30,27 @@ export async function gradeShadowTake(audioUrl: string, sentenceText: string, pe
 const AUTO_PASS_OVERALL = 85
 const AUTO_PASS_MIN = 60
 
+export interface ShadowSummary {
+  overall: number
+  minScore: number
+  weakestOrder: number
+  weakestScore: number
+  needsReview: boolean
+}
+
+// Pure aggregation of the per-sentence scores → overall + weakest + the auto-pass
+// decision. Returns null when nothing scored. Extracted so the thresholds are
+// unit-testable in isolation.
+export function summarizeShadow(scoreByOrder: Map<number, number>): ShadowSummary | null {
+  const scores = [...scoreByOrder.values()]
+  if (scores.length === 0) return null
+  const overall = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+  const minScore = Math.min(...scores)
+  const weakest = [...scoreByOrder.entries()].sort((a, b) => a[1] - b[1])[0]
+  const needsReview = !(overall >= AUTO_PASS_OVERALL && minScore >= AUTO_PASS_MIN)
+  return { overall, minScore, weakestOrder: weakest[0], weakestScore: weakest[1], needsReview }
+}
+
 export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: number): Promise<void> {
   if (!storageConfigured()) return
   const submission = await submissionRepo.findGradableShadow(prisma, submissionId)
@@ -67,14 +88,11 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       }
     }
 
-    const scores = [...scoreByOrder.values()]
-    if (scores.length === 0) { await revert(); return }
-    const overall = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-    const minScore = Math.min(...scores)
-    const weakest = [...scoreByOrder.entries()].sort((a, b) => a[1] - b[1])[0]
-    const needsReview = !(overall >= AUTO_PASS_OVERALL && minScore >= AUTO_PASS_MIN)
+    const summary = summarizeShadow(scoreByOrder)
+    if (!summary) { await revert(); return }
+    const { overall, minScore, weakestOrder, weakestScore, needsReview } = summary
     const feedback = minScore < AUTO_PASS_MIN
-      ? `逐句平均 ${overall} 分；最弱第 ${weakest[0]} 句仅 ${weakest[1]} 分，注意发音与完整度。`
+      ? `逐句平均 ${overall} 分；最弱第 ${weakestOrder} 句仅 ${weakestScore} 分，注意发音与完整度。`
       : `逐句平均 ${overall} 分，整体不错，继续保持。`
 
     await submissionRepo.applyShadowResult(prisma, submissionId, {
