@@ -306,6 +306,8 @@ model ShadowTake {
   order        Int
   audioKey     String
   durationSec  Int?
+  aiScore      Float?   // 逐句 AI 评分（0~100）
+  spokenText   String?  // 识别到的内容
   createdAt    DateTime @default(now())
   submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 

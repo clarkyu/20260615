@@ -65,18 +65,18 @@ export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' 
 }
 
 // Per-sentence shadowing takes for teacher review (ordered, presigned for playback).
-export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?: { order: number; url: string }[]; error?: string }> {
+export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?: { order: number; url: string; score: number | null; spokenText: string | null }[]; error?: string }> {
   const user = await requireStaff()
   const { t } = await getT()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const prisma = await getDb()
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }
-  const takes = await prisma.shadowTake.findMany({ where: { submissionId }, orderBy: { order: 'asc' }, select: { order: true, audioKey: true } })
-  const out: { order: number; url: string }[] = []
+  const takes = await prisma.shadowTake.findMany({ where: { submissionId }, orderBy: { order: 'asc' }, select: { order: true, audioKey: true, aiScore: true, spokenText: true } })
+  const out: { order: number; url: string; score: number | null; spokenText: string | null }[] = []
   for (const tk of takes) {
     try {
-      out.push({ order: tk.order, url: await presignDownload(tk.audioKey) })
+      out.push({ order: tk.order, url: await presignDownload(tk.audioKey), score: tk.aiScore, spokenText: tk.spokenText })
     } catch {
       // skip a take whose URL can't be signed
     }

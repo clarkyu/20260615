@@ -52,7 +52,7 @@ export function GradeFocus({
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [takes, setTakes] = useState<{ order: number; url: string }[]>([])
+  const [takes, setTakes] = useState<{ order: number; url: string; score: number | null; spokenText: string | null }[]>([])
   const [score, setScore] = useState('')
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
@@ -155,7 +155,10 @@ export function GradeFocus({
             {takes.map((tk) => (
               <div key={tk.order} className="flex items-center gap-2">
                 <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{tk.order}</span>
-                <audio src={tk.url} controls className="h-8 w-full" />
+                {tk.score != null ? (
+                  <span className={'w-8 shrink-0 text-center text-xs font-bold tabular-nums ' + (tk.score < 60 ? 'text-[hsl(var(--warning))]' : 'text-success')}>{tk.score}</span>
+                ) : null}
+                <audio src={tk.url} controls className="h-8 min-w-0 flex-1" />
               </div>
             ))}
           </div>
