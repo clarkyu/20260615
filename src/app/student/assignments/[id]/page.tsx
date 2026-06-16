@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import { parsePerSentence } from '@/lib/domain/analytics'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
 
@@ -59,6 +60,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
       latestStatus={latest?.status ?? null}
       latestScore={latest?.finalScore ?? null}
       latestFeedback={latest?.feedback ?? null}
+      latestPerSentence={parsePerSentence(latest?.aiResult)}
     />
   )
 }
