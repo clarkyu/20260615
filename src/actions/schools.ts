@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { staffContext, staffSchoolContext } from '@/lib/staff-action'
+import { staffContext, staffSchoolContext } from '@/lib/action-context'
 import { getSession } from '@/lib/session'
 import { createSchool as createSchoolService, renameSchool as renameSchoolService } from '@/lib/domain/schools'
 import { parseForm, reqText, optText, z } from '@/lib/validate'

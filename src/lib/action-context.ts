@@ -1,25 +1,35 @@
 import type { PrismaClient } from '@prisma/client'
-import { requireStaff, type CurrentUser } from '@/lib/auth'
+import { requireStaff, requireRole, type CurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 
-// The thin-action prelude. Every staff (teacher/admin) action used to repeat the
-// same three awaits — requireStaff / getT / getDb — and then re-derive the
-// school scope inline. These helpers centralise that so actions can stay at the
-// "auth → validate → delegate → revalidate" altitude.
+// The thin-action prelude. Every action used to repeat the same three awaits —
+// require{Staff,Role} / getT / getDb — and then re-derive the scope inline. These
+// helpers centralise that so actions stay at the "auth → validate → delegate →
+// revalidate" altitude.
 
 export type Translate = (key: string, vars?: Record<string, string | number>) => string
 
-export interface StaffCtx {
+export interface ActionCtx {
   user: CurrentUser
   prisma: PrismaClient
   t: Translate
 }
 
+export type StaffCtx = ActionCtx
+
 // Authenticated staff + a db client + a translator. Use for actions that don't
 // need a school scope (or that handle the missing-school case themselves).
 export async function staffContext(): Promise<StaffCtx> {
   const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  return { user, prisma, t }
+}
+
+// Authenticated student + a db client + a translator.
+export async function studentContext(): Promise<ActionCtx> {
+  const user = await requireRole('STUDENT')
   const { t } = await getT()
   const prisma = await getDb()
   return { user, prisma, t }

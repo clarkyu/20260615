@@ -92,3 +92,26 @@ export function listWithSentencesForOffering(prisma: PrismaClient, offeringId: n
     select: { id: true, sentences: { select: { order: true, text: true, translation: true } } },
   })
 }
+
+// ── student-facing reads (scoped to the student's class, not their school) ────
+
+// The assignment iff it targets the student's class (the submission gate).
+export function findForClass(prisma: PrismaClient, id: number, classId: number | null | undefined) {
+  return prisma.assignment.findFirst({ where: { id, offering: { classId: classId ?? -1 } } })
+}
+
+// Same, with ordered reference sentences (the practice gate needs them).
+export function findForClassWithSentences(prisma: PrismaClient, id: number, classId: number | null | undefined) {
+  return prisma.assignment.findFirst({
+    where: { id, offering: { classId: classId ?? -1 } },
+    include: { sentences: { orderBy: { order: 'asc' } } },
+  })
+}
+
+export function findShadowVideoForClass(prisma: PrismaClient, id: number, classId: number | null | undefined) {
+  return prisma.assignment.findFirst({ where: { id, offering: { classId: classId ?? -1 } }, select: { shadowVideoKey: true } })
+}
+
+export function countSentences(prisma: PrismaClient, assignmentId: number) {
+  return prisma.sentence.count({ where: { assignmentId } })
+}
