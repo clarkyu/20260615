@@ -1,6 +1,7 @@
 import { getIronSession, type IronSession } from 'iron-session'
 import { cookies } from 'next/headers'
 import type { Role } from '@prisma/client'
+import { config } from '@/lib/config'
 
 export interface SessionData {
   userId?: number
@@ -15,13 +16,13 @@ export interface SessionData {
 }
 
 export async function getSession(): Promise<IronSession<SessionData>> {
-  const secret = process.env.SESSION_SECRET
+  const secret = config.sessionSecret()
   if (!secret) throw new Error('SESSION_SECRET environment variable is required')
   return getIronSession<SessionData>(await cookies(), {
     password: secret,
     cookieName: 'app-session',
     cookieOptions: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: config.isProd(),
       httpOnly: true,
       sameSite: 'lax' as const,
       maxAge: 60 * 60 * 24 * 7,

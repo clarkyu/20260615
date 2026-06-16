@@ -7,6 +7,7 @@ import type {
   JudgeProvider,
   ReferenceSentence,
 } from '../types'
+import { config } from '@/lib/config'
 
 // Real Gemini adapter (REST API via fetch — Workers-compatible, no SDK).
 // Perception (multimodal: video/audio) and judging (text) both go to Gemini
@@ -14,11 +15,11 @@ import type {
 // GEMINI_BASE_URL to route through a proxy).
 
 function baseUrl(): string {
-  return (process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/$/, '')
+  return config.geminiBaseUrl().replace(/\/$/, '')
 }
 
 function apiKey(): string {
-  const key = process.env.GEMINI_API_KEY
+  const key = config.geminiKey()
   if (!key) throw new Error('GEMINI_API_KEY 未配置')
   return key
 }

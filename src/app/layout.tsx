@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
+import { validateConfigOnce } from '@/lib/config'
 import { getLocale } from '@/lib/i18n-server'
 import { I18nProvider } from '@/components/i18n-provider'
 import { AppHeader } from '@/components/app-header'
@@ -32,6 +33,8 @@ export const viewport: Viewport = {
 const themeInit = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]+)/);var t=m?m[1]:'system';if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}})()`
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // One-time redacted config check so a misconfigured deploy is visible in logs.
+  validateConfigOnce()
   const [locale, user] = await Promise.all([getLocale(), getCurrentUser()])
 
   return (
