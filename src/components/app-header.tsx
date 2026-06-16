@@ -4,6 +4,7 @@ import { logout } from '@/actions/auth'
 import { getT } from '@/lib/i18n-server'
 import type { CurrentUser } from '@/lib/auth'
 import { LocaleToggle } from './locale-toggle'
+import { ThemeToggle } from './theme-toggle'
 
 export async function AppHeader({ user }: { user: CurrentUser | null }) {
   const { t } = await getT()
@@ -17,6 +18,7 @@ export async function AppHeader({ user }: { user: CurrentUser | null }) {
           {t('appName')}
         </Link>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <LocaleToggle />
           {user ? (
             <form action={logout}>
