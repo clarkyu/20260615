@@ -23,8 +23,9 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
     monthLabel: a.monthLabel ?? '',
     instructions: a.instructions ?? '',
     sentences: a.sentences.map((s) => s.text).join('\n'),
-    openAt: a.openAt ? a.openAt.toISOString().slice(0, 16) : '',
-    dueAt: a.dueAt ? a.dueAt.toISOString().slice(0, 16) : '',
+    // Full UTC ISO; the form converts to the teacher's local time for the input.
+    openAt: a.openAt ? a.openAt.toISOString() : '',
+    dueAt: a.dueAt ? a.dueAt.toISOString() : '',
     maxAttempts: a.maxAttempts,
     requireEyesClosed: a.requireEyesClosed,
     requireText: a.requireText,
