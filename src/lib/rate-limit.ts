@@ -1,4 +1,6 @@
 import { headers } from 'next/headers'
+import type { PrismaClient } from '@prisma/client'
+import { getDb } from '@/lib/db'
 
 interface BucketEntry {
   count: number
@@ -45,6 +47,39 @@ export function checkRateLimit(
   return true
 }
 
+// D1-backed shared limiter. One atomic statement does the whole windowed counter:
+// insert-or, on conflict, reset the count when the window has elapsed else
+// increment — and RETURNING hands back the resulting count to decide allow/deny.
+// Shared across isolates, unlike the in-memory store (which only counts per
+// isolate, so the effective limit was limit × isolate-count ≈ no limit at all).
+async function checkRateLimitD1(prisma: PrismaClient, key: string, limit: number, windowMs: number): Promise<boolean> {
+  const now = new Date()
+  const newResetAt = new Date(now.getTime() + windowMs)
+  const rows = await prisma.$queryRaw<{ count: number | bigint }[]>`
+    INSERT INTO "RateLimit" ("key", "count", "resetAt") VALUES (${key}, 1, ${newResetAt})
+    ON CONFLICT("key") DO UPDATE SET
+      "count"   = CASE WHEN "RateLimit"."resetAt" <= ${now} THEN 1 ELSE "RateLimit"."count" + 1 END,
+      "resetAt" = CASE WHEN "RateLimit"."resetAt" <= ${now} THEN ${newResetAt} ELSE "RateLimit"."resetAt" END
+    RETURNING "count"
+  `
+  // Opportunistically drop expired rows so the table can't grow unbounded.
+  if (Math.random() < 0.02) {
+    try { await prisma.rateLimit.deleteMany({ where: { resetAt: { lt: now } } }) } catch { /* best-effort */ }
+  }
+  return Number(rows[0]?.count ?? 1) <= limit
+}
+
+// Use the shared D1 limiter; fall back to the in-memory store when there's no D1
+// (local dev / tests) so behaviour degrades gracefully rather than throwing.
+async function limit(store: RateLimitStore, key: string, max: number, windowMs: number): Promise<boolean> {
+  try {
+    const prisma = await getDb()
+    return await checkRateLimitD1(prisma, key, max, windowMs)
+  } catch {
+    return checkRateLimit(store, key, max, windowMs)
+  }
+}
+
 // Behind a single trusted reverse proxy, the real client IP is the LAST value
 // appended to X-Forwarded-For. Taking the first entry would let a client spoof
 // the header and rotate fake IPs to defeat the limiter.
@@ -69,26 +104,27 @@ async function getClientIp(): Promise<string> {
   return extractClientIp(h.get('x-forwarded-for'), h.get('x-real-ip'))
 }
 
+// Keys are prefixed per limiter so they share one table without colliding.
 export async function rateLimitLogin(): Promise<boolean> {
-  return checkRateLimit(loginStore, await getClientIp(), 5, 5 * 60_000)
+  return limit(loginStore, `login:${await getClientIp()}`, 5, 5 * 60_000)
 }
 
 export async function rateLimitRegister(): Promise<boolean> {
-  return checkRateLimit(registerStore, await getClientIp(), 5, 60 * 60_000)
+  return limit(registerStore, `register:${await getClientIp()}`, 5, 60 * 60_000)
 }
 
 export async function rateLimitVerify(): Promise<boolean> {
-  return checkRateLimit(verifyStore, await getClientIp(), 10, 60 * 60_000)
+  return limit(verifyStore, `verify:${await getClientIp()}`, 10, 60 * 60_000)
 }
 
 export async function rateLimitResend(): Promise<boolean> {
-  return checkRateLimit(resendStore, await getClientIp(), 3, 60 * 60_000)
+  return limit(resendStore, `resend:${await getClientIp()}`, 3, 60 * 60_000)
 }
 
 export async function rateLimitResetRequest(): Promise<boolean> {
-  return checkRateLimit(resetRequestStore, await getClientIp(), 3, 60 * 60_000)
+  return limit(resetRequestStore, `reset-req:${await getClientIp()}`, 3, 60 * 60_000)
 }
 
 export async function rateLimitResetExecute(): Promise<boolean> {
-  return checkRateLimit(resetExecuteStore, await getClientIp(), 5, 60 * 60_000)
+  return limit(resetExecuteStore, `reset-exec:${await getClientIp()}`, 5, 60 * 60_000)
 }

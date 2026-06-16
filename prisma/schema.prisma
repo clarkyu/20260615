@@ -358,3 +358,13 @@ model PasswordResetToken {
 
   @@index([userId])
 }
+
+// 限流计数：按 key（如 "login:<ip>"）做窗口计数。落在 D1 上，让限流跨 isolate 共享——
+// 内存版每个 isolate 各算各的，有效上限 = 设定值 × isolate 数，等于形同虚设。
+model RateLimit {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+
+  @@index([resetAt])
+}
