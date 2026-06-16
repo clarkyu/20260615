@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { staffContext, staffSchoolContext } from '@/lib/action-context'
 import { getSession } from '@/lib/session'
-import { createSchool as createSchoolService, renameSchool as renameSchoolService } from '@/lib/domain/schools'
+import { createSchool as createSchoolService, createSchoolForPlatform as createPlatformSchoolService, renameSchool as renameSchoolService } from '@/lib/domain/schools'
 import { parseForm, reqText, optText, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
@@ -27,6 +27,24 @@ export async function createSchool(prevState: unknown, formData: FormData): Prom
   const session = await getSession()
   session.schoolId = res.schoolId
   await session.save()
+
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+// Super-admin provisions a school for the platform — does NOT bind the creator to
+// it (a super-admin stays school-independent). Gated to SUPER_ADMIN.
+export async function createPlatformSchool(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const { user, prisma, t } = await staffContext()
+  if (user.role !== 'SUPER_ADMIN') return { error: t('err.forbidden') }
+  const parsed = parseForm(z.object({ name: reqText('err.needSchoolName', 100), code: optText(20) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const name = parsed.data.name
+  const code = normalizeCode(parsed.data.code ?? '')
+  if (code.length < 3 || code.length > 12) return { error: t('err.codeFormat') }
+
+  const res = await createPlatformSchoolService(prisma, name, code)
+  if (!res.ok) return { error: t(res.error) }
 
   revalidatePath('/dashboard')
   return { success: true }

@@ -7,14 +7,24 @@ import { drainGradingJobs } from '@/lib/domain/jobs'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as dashboardRepo from '@/lib/repo/dashboard'
+import * as schoolRepo from '@/lib/repo/schools'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
+import { PlatformHome } from './platform-home'
 
 export default async function DashboardPage() {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
+
+  // A super-admin is platform-level (no school of their own) — show the platform
+  // console, never the "create your school" funnel.
+  if (user.role === 'SUPER_ADMIN') {
+    const schools = await schoolRepo.listAllWithCounts(prisma)
+    return <PlatformHome name={user.name || user.email || ''} schools={schools} />
+  }
+
   const me = await userRepo.findWithSchool(prisma, user.userId)
 
   if (!me?.school) {
