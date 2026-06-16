@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { Sparkles, ImageUp } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
@@ -102,27 +102,30 @@ export function AssignmentForm({
       return next
     })
 
-  // Month dropdown: previous month through next 11, plus the existing value.
-  const months = useMemo(() => {
+  // Date-derived values (the month list + default, and the open/due times) are
+  // computed in an effect rather than during render, so a UTC server and the
+  // teacher's local-TZ browser can't disagree at hydration — React 19 escalates
+  // such a mismatch (e.g. a `<select>` default not in its options near a month
+  // boundary) into a "client-side exception".
+  const [monthOptions, setMonthOptions] = useState<string[]>([])
+  const [month, setMonth] = useState('')
+  const [openAt, setOpenAt] = useState('')
+  const [dueAt, setDueAt] = useState('')
+  useEffect(() => {
+    const base = new Date()
+    const cur = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}`
     const out: string[] = []
-    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1)
+    const d = new Date(base); d.setDate(1); d.setMonth(d.getMonth() - 1)
     for (let i = 0; i < 13; i++) {
       out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
       d.setMonth(d.getMonth() + 1)
     }
-    return out
-  }, [])
-  const monthOptions = initial?.monthLabel && !months.includes(initial.monthLabel) ? [initial.monthLabel, ...months] : months
-  const now = new Date()
-  const defaultMonth = initial?.monthLabel ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-
-  // Open/due as local-time input values; the hidden fields submit the UTC instant.
-  const [openAt, setOpenAt] = useState('')
-  const [dueAt, setDueAt] = useState('')
-  useEffect(() => {
+    const label = initial?.monthLabel
+    setMonthOptions(label && !out.includes(label) ? [label, ...out] : out)
+    setMonth(label ?? cur)
     setOpenAt(initial?.openAt ? toLocalInput(initial.openAt) : '')
     setDueAt(initial?.dueAt ? toLocalInput(initial.dueAt) : '')
-  }, [initial?.openAt, initial?.dueAt])
+  }, [initial?.monthLabel, initial?.openAt, initial?.dueAt])
 
   return (
     <div className="space-y-4">
@@ -183,7 +186,7 @@ export function AssignmentForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>
-              <select id="monthLabel" name="monthLabel" defaultValue={defaultMonth} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
+              <select id="monthLabel" name="monthLabel" value={month} onChange={(e) => setMonth(e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
                 <option value="">{t('asg.monthNone')}</option>
                 {monthOptions.map((m) => (
                   <option key={m} value={m}>{m}</option>
