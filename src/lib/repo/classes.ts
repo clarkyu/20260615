@@ -19,6 +19,11 @@ export function findClassForSchool(prisma: PrismaClient, id: number, schoolId: n
   return prisma.classGroup.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
 
+// All classes in a school as {id, name}, alphabetical — for offering form selects.
+export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+  return prisma.classGroup.findMany({ where: { schoolId: schoolId ?? -1 }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
+}
+
 // A class with this name in the school other than `exceptId` (uniqueness check).
 export function findDupName(prisma: PrismaClient, schoolId: number, name: string, exceptId?: number) {
   return prisma.classGroup.findFirst({ where: { schoolId, name, ...(exceptId ? { NOT: { id: exceptId } } : {}) } })
