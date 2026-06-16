@@ -109,7 +109,27 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
         mustChangePassword: true,
       })),
     )
-    created = (await prisma.user.createMany({ data })).count
+    try {
+      created = (await prisma.user.createMany({ data })).count
+    } catch {
+      // A unique collision (concurrent/retried import, or a TOCTOU race on email)
+      // aborts the whole single-statement createMany on D1 — so fall back to
+      // per-row inserts. Drop a colliding email but keep the student; only a
+      // 学号 collision skips the row entirely.
+      for (const row of data) {
+        try {
+          await prisma.user.create({ data: row })
+          created++
+        } catch {
+          if (row.email) {
+            try {
+              await prisma.user.create({ data: { ...row, email: null } })
+              created++
+            } catch { /* 学号 collision — skip this row */ }
+          }
+        }
+      }
+    }
   }
 
   // 6) Update existing students (name / class / phone-if-provided) in one batch.

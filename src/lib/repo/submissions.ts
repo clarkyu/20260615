@@ -54,16 +54,22 @@ export function acceptAiForAssignment(prisma: PrismaClient, assignmentId: number
 }
 
 // Submissions for an assignment by a set of students, newest attempt first — the
-// caller keeps the latest per student (score export).
+// caller keeps the latest per student (score export). Excludes DRAFT so an
+// in-progress retry can't hide the student's already-submitted/graded attempt.
 export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: number, studentIds: number[]) {
-  return prisma.submission.findMany({ where: { assignmentId, studentId: { in: studentIds } }, orderBy: { attempt: 'desc' } })
+  return prisma.submission.findMany({
+    where: { assignmentId, studentId: { in: studentIds }, status: { not: 'DRAFT' } },
+    orderBy: { attempt: 'desc' },
+  })
 }
 
-// Every submission in an offering, ordered so the latest attempt per
+// Every submitted attempt in an offering, ordered so the latest per
 // (student, assignment) comes first — the caller keeps the first of each pair.
+// Excludes DRAFT so a started-but-unfinished retry doesn't shadow a graded attempt
+// in the gradebook / insights / weak-sentence review.
 export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number) {
   return prisma.submission.findMany({
-    where: { assignment: { offeringId } },
+    where: { assignment: { offeringId }, status: { not: 'DRAFT' } },
     select: { studentId: true, assignmentId: true, status: true, finalScore: true, needsReview: true, aiResult: true },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
   })
@@ -71,7 +77,10 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
 
 // ── student-facing reads/writes (a student only ever touches their own rows) ──
 
-const ACTIVE_STATUSES: SubmissionStatus[] = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
+// Anything past DRAFT counts as an attempt used — including FAILED (a genuine
+// grading error after submit still consumed the attempt), else a student would
+// get a free extra try whenever AI grading errored.
+const ACTIVE_STATUSES: SubmissionStatus[] = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED', 'FAILED']
 const byAttempt = (assignmentId: number, studentId: number, attempt: number) => ({ assignmentId_studentId_attempt: { assignmentId, studentId, attempt } })
 export type MediaKeyField = { videoKey?: string; audioKey?: string; imageKey?: string }
 

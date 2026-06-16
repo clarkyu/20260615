@@ -112,7 +112,7 @@ describe('claimAndRunDue', () => {
   })
 
   it('reclaims a stale PROCESSING job and runs it', async () => {
-    const jobs = [job({ status: 'PROCESSING', updatedAt: new Date(Date.now() - 10 * 60_000) })]
+    const jobs = [job({ status: 'PROCESSING', updatedAt: new Date(Date.now() - 20 * 60_000) })]
     const db = fakePrisma(jobs)
     const { ran } = await claimAndRunDue(db, 5, ok)
     expect(ran).toBe(1)
