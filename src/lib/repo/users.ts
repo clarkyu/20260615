@@ -111,3 +111,8 @@ export function listStudentsInClass(prisma: PrismaClient, classId: number) {
     select: { id: true, studentNo: true, name: true, phone: true, email: true },
   })
 }
+
+// Full student rows for a class (school-scoped) — the score-export builder.
+export function listClassStudents(prisma: PrismaClient, schoolId: number | null | undefined, classId: number) {
+  return prisma.user.findMany({ where: { schoolId: schoolId ?? -1, classId, role: 'STUDENT' }, orderBy: { studentNo: 'asc' } })
+}

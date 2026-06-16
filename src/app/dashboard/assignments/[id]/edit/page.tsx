@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import * as assignmentRepo from '@/lib/repo/assignments'
 import { AssignmentForm, type AssignmentInitial } from '@/components/assignment-form'
 
 export default async function EditAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,10 +13,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const a = await prisma.assignment.findFirst({
-    where: { id: assignmentId, offering: { schoolId: user.schoolId } },
-    include: { sentences: { orderBy: { order: 'asc' } } },
-  })
+  const a = await assignmentRepo.findForStaffWithSentences(prisma, assignmentId, user.schoolId)
   if (!a) notFound()
 
   const initial: AssignmentInitial = {
