@@ -141,6 +141,18 @@ export const PROVIDER_KEY_ENV: Record<Provider, string> = {
   whisper: 'OPENAI_API_KEY',
 }
 
+// BYOK credential slots a teacher can fill (deduped — OpenAI + Whisper share one
+// key). `id` is stored in the AiKey table; `models` lists which providers it powers.
+export const CREDENTIAL_SLOTS: { id: string; label: string; providers: Provider[]; help: string }[] = [
+  { id: 'gemini', label: 'Google · Gemini', providers: ['gemini'], help: '用于 Gemini 各款（推荐，吃视频+音频）' },
+  { id: 'qwen', label: '阿里 · 通义千问', providers: ['qwen'], help: 'DashScope key，用于 Qwen-Omni 等' },
+  { id: 'openai', label: 'OpenAI', providers: ['openai', 'whisper'], help: '用于 GPT-4o 与 Whisper 转写' },
+  { id: 'claude', label: 'Anthropic · Claude', providers: ['claude'], help: '纯文本评分' },
+  { id: 'deepseek', label: 'DeepSeek', providers: ['deepseek'], help: '纯文本评分' },
+  { id: 'minimax', label: 'MiniMax', providers: ['minimax'], help: '纯文本评分' },
+]
+export const CREDENTIAL_SLOT_IDS = CREDENTIAL_SLOTS.map((s) => s.id)
+
 // Rough list price (per 1M tokens unless noted) — display only; prices change, so
 // verify on each provider's site. Mixed USD/¥ matching each provider's native unit.
 export const MODEL_PRICING: Record<string, string> = {
