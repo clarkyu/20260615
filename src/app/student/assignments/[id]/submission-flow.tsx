@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { PenLine, Video, Mic, Camera, Check, CheckCircle2 } from 'lucide-react'
+import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { submitRecitedText, finishSubmission } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -102,6 +102,7 @@ export function SubmissionFlow(props: {
   latestStatus: string | null
   latestScore: number | null
   latestFeedback: string | null
+  latestPerSentence: { order: number; accuracy: number; completeness: number }[]
 }) {
   const t = useT()
   const completed = props.latestStatus !== null && DONE_STATUSES.includes(props.latestStatus)
@@ -160,6 +161,8 @@ export function SubmissionFlow(props: {
   }
 
   if (completed && !redo) {
+    const byOrder = new Map(props.latestPerSentence.map((p) => [p.order, p]))
+    const hasPerSentence = props.latestPerSentence.length > 0 && props.sentences.length > 0
     return (
       <Card>
         <CardHeader><CardTitle>{props.title}</CardTitle></CardHeader>
@@ -170,6 +173,26 @@ export function SubmissionFlow(props: {
               <span className="text-muted-foreground">{t('sub.score')}: </span>
               <span className="text-lg font-bold">{props.latestScore}</span>
               {props.latestFeedback ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{props.latestFeedback}</p> : null}
+            </div>
+          ) : null}
+          {hasPerSentence ? (
+            <div className="space-y-1.5">
+              <div className="text-xs font-medium text-muted-foreground">{t('sub.perSentence')}</div>
+              <ul className="space-y-1.5">
+                {props.sentences.map((s) => {
+                  const p = byOrder.get(s.order)
+                  const weak = p ? p.accuracy < 0.6 || p.completeness < 0.6 : false
+                  return (
+                    <li key={s.order} className="flex items-start gap-2">
+                      {weak
+                        ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
+                        : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
+                      <span className={weak ? 'text-foreground' : 'text-muted-foreground'}>{s.text}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="text-xs text-muted-foreground">{t('sub.perSentenceHint')}</p>
             </div>
           ) : null}
           {props.attemptsLeft > 0 ? (
