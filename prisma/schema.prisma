@@ -39,7 +39,9 @@ model School {
 // 题库：一套跟读句集 = 一个整套跟读视频 + 若干双语句子，可复用来发布作业。
 model ChunkSet {
   id             Int      @id @default(autoincrement())
-  schoolId       Int
+  // null → platform-global "official" set, visible to (and publishable by) every
+  // school but editable only by a SUPER_ADMIN. A number → owned by that school.
+  schoolId       Int?
   name           String
   shadowVideoKey String?
   // Curriculum metadata (see lib/curriculum/taxonomy). All optional so existing
@@ -50,7 +52,7 @@ model ChunkSet {
   tags           String?  // comma-separated feature/topic tags
   source         String?
   createdAt      DateTime @default(now())
-  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school         School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   chunks         Chunk[]
   assignments    Assignment[]
 

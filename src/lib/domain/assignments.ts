@@ -37,7 +37,7 @@ export async function createAssignments(
   let link = { shadowVideoKey: null as string | null, chunkSetId: null as number | null }
   let sentences: SentenceRow[] = typedSentences.map((text, i) => ({ order: i + 1, text, translation: null }))
   if (chunkSetId) {
-    const set = await bank.findWithChunksForSchool(prisma, chunkSetId, schoolId)
+    const set = await bank.findWithChunksVisible(prisma, chunkSetId, schoolId)
     if (!set) return { ok: false, error: 'err.setNotFound' }
     link = { shadowVideoKey: set.shadowVideoKey, chunkSetId: set.id }
     // The example sentence is what the student reads aloud / shadows.

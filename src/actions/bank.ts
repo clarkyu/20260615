@@ -2,12 +2,13 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { staffContext, staffSchoolContext } from '@/lib/action-context'
+import { staffContext } from '@/lib/action-context'
+import type { CurrentUser } from '@/lib/auth'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
 import { parseChunks } from '@/lib/bank'
 import { starterSets } from '@/lib/curriculum/starter-bank'
 import * as bankRepo from '@/lib/repo/bank'
-import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
+import { parseForm, reqText, optText, reqId, checkbox, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -16,27 +17,37 @@ function metaFrom(d: { cefr?: string | null; strand?: string | null; domain?: st
   return { cefr: d.cefr ?? null, strand: d.strand ?? null, domain: d.domain ?? null, tags: d.tags ?? null, source: d.source ?? null }
 }
 
-// Create a chunk set from a name + pasted bilingual text (one sentence per line).
-export async function createChunkSet(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const cx = await staffSchoolContext()
-  if (!cx.ok) return { error: cx.error }
-  const parsed = parseForm(z.object({ name: reqText('err.needSetName', 100), chunks: optText(200000), ...metaShape }), formData)
-  if (!parsed.ok) return { error: cx.t(parsed.error) }
-  const chunks = parseChunks(parsed.data.chunks ?? '')
-  if (chunks.length === 0) return { error: cx.t('err.needChunks') }
+const isSuper = (user: CurrentUser) => user.role === 'SUPER_ADMIN'
 
-  const id = await bankRepo.createWithChunks(cx.prisma, cx.schoolId, parsed.data.name, chunks, metaFrom(parsed.data))
+// Create a chunk set from a name + pasted bilingual text (one sentence per line).
+// A super-admin may publish it to the platform-global pool via the `global` flag;
+// everyone else writes to their own school.
+export async function createChunkSet(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const { user, prisma, t } = await staffContext()
+  const parsed = parseForm(z.object({ name: reqText('err.needSetName', 100), chunks: optText(200000), global: checkbox, ...metaShape }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const toGlobal = parsed.data.global && isSuper(user)
+  if (!toGlobal && !user.schoolId) return { error: t('err.createSchoolFirst') }
+  const chunks = parseChunks(parsed.data.chunks ?? '')
+  if (chunks.length === 0) return { error: t('err.needChunks') }
+
+  const scope: number | null = toGlobal ? null : (user.schoolId ?? null)
+  const id = await bankRepo.createWithChunks(prisma, scope, parsed.data.name, chunks, metaFrom(parsed.data))
   revalidatePath('/dashboard/bank')
   redirect(`/dashboard/bank/${id}`)
 }
 
-// One-click starter pack: import the curated curriculum seed sets into this
-// school's bank. Idempotent — sets already imported (matched by source) are
-// skipped, so it is safe to click again. Returns how many were newly added.
+// One-click starter pack import. A super-admin imports into the platform-global
+// pool (one official copy visible to every school); an ordinary teacher imports
+// into their own school. Idempotent — a source already present in the target's
+// scope is skipped, so it never duplicates official content. Returns counts.
 export async function importStarterBank(): Promise<{ imported: number; skipped: number; error?: string }> {
-  const cx = await staffSchoolContext()
-  if (!cx.ok) return { imported: 0, skipped: 0, error: cx.error }
-  const existing = await bankRepo.importedSources(cx.prisma, cx.schoolId)
+  const { user, prisma, t } = await staffContext()
+  const toGlobal = isSuper(user)
+  if (!toGlobal && !user.schoolId) return { imported: 0, skipped: 0, error: t('err.createSchoolFirst') }
+  const scope: number | null = toGlobal ? null : (user.schoolId ?? null)
+  const existing = toGlobal ? await bankRepo.globalSources(prisma) : await bankRepo.visibleSources(prisma, user.schoolId)
+
   let imported = 0
   let skipped = 0
   for (const set of starterSets()) {
@@ -44,7 +55,7 @@ export async function importStarterBank(): Promise<{ imported: number; skipped: 
       skipped++
       continue
     }
-    await bankRepo.createWithChunks(cx.prisma, cx.schoolId, set.name, set.chunks, set.meta)
+    await bankRepo.createWithChunks(prisma, scope, set.name, set.chunks, set.meta)
     imported++
   }
   revalidatePath('/dashboard/bank')
@@ -55,7 +66,7 @@ export async function importStarterBank(): Promise<{ imported: number; skipped: 
 export async function getChunkSetVideoUrl(chunkSetId: number, contentType: string, ext: string) {
   const { user, prisma, t } = await staffContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const set = await bankRepo.findForSchool(prisma, chunkSetId, user.schoolId)
+  const set = await bankRepo.findOwned(prisma, chunkSetId, user.schoolId, isSuper(user))
   if (!set) return { error: t('err.setNotFound') }
 
   const key = chunkSetVideoKey(chunkSetId, ext || 'mp4')
@@ -70,12 +81,13 @@ export async function getChunkSetVideoUrl(chunkSetId: number, contentType: strin
 }
 
 // Edit a set: rename + replace all chunks from the re-pasted three-part text.
+// Scope is fixed at creation; editing never moves a set between pools.
 export async function updateChunkSet(prevState: unknown, formData: FormData): Promise<ActionState> {
   const { user, prisma, t } = await staffContext()
   const parsed = parseForm(z.object({ chunkSetId: reqId, name: reqText('err.needSetName', 100), chunks: optText(200000), ...metaShape }), formData)
   if (!parsed.ok) return { error: t(parsed.error) }
   const { chunkSetId: id, name } = parsed.data
-  const set = await bankRepo.findForSchool(prisma, id, user.schoolId)
+  const set = await bankRepo.findOwned(prisma, id, user.schoolId, isSuper(user))
   if (!set) return { error: t('err.setNotFound') }
 
   const chunks = parseChunks(parsed.data.chunks ?? '')
@@ -89,7 +101,7 @@ export async function updateChunkSet(prevState: unknown, formData: FormData): Pr
 export async function deleteChunkSet(formData: FormData): Promise<void> {
   const { user, prisma } = await staffContext()
   const id = Number(formData.get('chunkSetId'))
-  await bankRepo.deleteForSchool(prisma, id, user.schoolId)
+  await bankRepo.deleteOwned(prisma, id, user.schoolId, isSuper(user))
   revalidatePath('/dashboard/bank')
   redirect('/dashboard/bank')
 }

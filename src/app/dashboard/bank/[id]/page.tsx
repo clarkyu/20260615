@@ -23,10 +23,16 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
-  if (!user.schoolId) redirect('/dashboard')
+  const isSuperAdmin = user.role === 'SUPER_ADMIN'
+  if (!user.schoolId && !isSuperAdmin) redirect('/dashboard')
 
-  const set = await bankRepo.findWithChunksForSchool(prisma, setId, user.schoolId)
+  const set = await bankRepo.findWithChunksVisible(prisma, setId, user.schoolId)
   if (!set) notFound()
+
+  // Official (global) sets are read-only to ordinary teachers — they can publish
+  // from them but not edit/delete/replace the video. A super-admin owns the global pool.
+  const isGlobal = set.schoolId === null
+  const canEdit = isGlobal ? isSuperAdmin : set.schoolId === user.schoolId
 
   return (
     <div className="space-y-4 py-2">
@@ -38,6 +44,7 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
           <h1 className="text-2xl font-bold tracking-tight">{set.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{set.chunks.length} {t('bank.chunkUnit')}</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {isGlobal ? <Badge tone="success">{t('bank.official')}</Badge> : null}
             {set.cefr ? <Badge tone="primary">{CEFR_LEVELS.find((l) => l.band === set.cefr)?.label ?? set.cefr}</Badge> : null}
             {set.strand ? <Badge>{STRANDS.find((s) => s.id === set.strand)?.label ?? set.strand}</Badge> : null}
             {(set.tags ?? '').split(',').map((x) => x.trim()).filter(Boolean).map((tag) => (
@@ -45,15 +52,17 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
             ))}
           </div>
         </div>
-        <EditSetForm
-          setId={set.id}
-          name={set.name}
-          chunksText={serializeChunks(set.chunks)}
-          meta={{ cefr: set.cefr, strand: set.strand, domain: set.domain, tags: set.tags, source: set.source }}
-        />
+        {canEdit ? (
+          <EditSetForm
+            setId={set.id}
+            name={set.name}
+            chunksText={serializeChunks(set.chunks)}
+            meta={{ cefr: set.cefr, strand: set.strand, domain: set.domain, tags: set.tags, source: set.source }}
+          />
+        ) : null}
       </div>
 
-      <VideoUpload chunkSetId={set.id} hasVideo={Boolean(set.shadowVideoKey)} />
+      {canEdit ? <VideoUpload chunkSetId={set.id} hasVideo={Boolean(set.shadowVideoKey)} /> : null}
 
       <Link href={`/dashboard/bank/${set.id}/publish`}>
         <Button className="w-full" size="lg"><ClipboardPen className="h-4 w-4" />{t('bank.publish')}</Button>
@@ -87,10 +96,12 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
         </CardContent>
       </Card>
 
-      <form action={deleteChunkSet} className="pt-2">
-        <input type="hidden" name="chunkSetId" value={set.id} />
-        <SubmitButton variant="outline" size="sm" className="text-destructive">{t('bank.delete')}</SubmitButton>
-      </form>
+      {canEdit ? (
+        <form action={deleteChunkSet} className="pt-2">
+          <input type="hidden" name="chunkSetId" value={set.id} />
+          <SubmitButton variant="outline" size="sm" className="text-destructive">{t('bank.delete')}</SubmitButton>
+        </form>
+      ) : null}
     </div>
   )
 }

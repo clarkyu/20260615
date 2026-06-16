@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { BankMetaFields } from './bank-meta-fields'
 
-export function CreateSetForm() {
+export function CreateSetForm({ canPublishGlobal = false }: { canPublishGlobal?: boolean }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(createChunkSet, null)
@@ -39,6 +39,15 @@ export function CreateSetForm() {
             <Textarea id="set-chunks" name="chunks" rows={10} required placeholder={'Time flies. | 时光飞逝\nUsed to say that time passes very quickly. | 用来表示时间过得非常快。\nI can\'t believe it\'s already December. Time flies! | 真不敢相信已经十二月了，时光飞逝！\n\nLet\'s call it a day. | 今天到此为止\n...'} />
           </div>
           <BankMetaFields />
+          {canPublishGlobal ? (
+            <label className="flex items-start gap-2 rounded-xl border border-input p-3 text-sm">
+              <input type="checkbox" name="global" className="mt-0.5 h-4 w-4" />
+              <span>
+                <span className="font-medium">{t('bank.makeGlobal')}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{t('bank.makeGlobalHint')}</span>
+              </span>
+            </label>
+          ) : null}
           {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>{pending ? t('bank.creating') : t('bank.create')}</Button>
