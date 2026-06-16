@@ -1,10 +1,12 @@
 import type { ItemMeta } from './taxonomy'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// First content batch (Phase 1 vertical slice): English · Speaking ·
-// Pronunciation + Shadowing · Pre-A1 → A2 · with Chinese (zh) + Spanish (es) L1
-// overlays. Hand-authored to set the quality bar + lock the typed format before
-// scaling. Payloads are polymorphic by itemType; metadata is shared (ItemMeta).
+// Content batch: English · Speaking · Pronunciation + Shadowing · Pre-A1 → C1 ·
+// with Chinese (zh) + Spanish (es) L1 overlays. Hand-authored to set the quality
+// bar + lock the typed format before scaling. Payloads are polymorphic by
+// itemType; metadata is shared (ItemMeta). Higher bands (B1+) shift from segmental
+// drills to suprasegmentals (stress, rhythm, intonation, connected speech) and to
+// occupational / academic shadowing — the register a vocational college needs.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ModelAudio = 'tts-slow' | 'tts' | 'recorded'
@@ -231,6 +233,243 @@ export const SEED_ITEMS: SeedItem[] = [
         { text: 'Go straight, then turn left at the coffee shop.', gloss: { zh: '直走，在咖啡店左转。', es: 'Sigue recto y gira a la izquierda en la cafetería.' } },
         { text: "It's on your right.", gloss: { zh: '就在你右边。', es: 'Está a tu derecha.' } },
         { text: 'Thank you very much!', gloss: { zh: '非常感谢！', es: '¡Muchas gracias!' } },
+      ],
+    },
+  },
+
+  // ── B1 ──────────────────────────────────────────────────────────────────────
+  {
+    id: 'en.spk.pron.b1.word-stress',
+    title: 'B1 发音 · 词重音 Word stress',
+    subject: 'english',
+    strand: 'english.speaking.pronunciation',
+    itemType: 'pronunciation-drill',
+    cefr: 'b1',
+    domain: 'general',
+    canDo: '能在多音节词中正确放置重音，并掌握名/动重音转移。',
+    tags: ['word-stress'],
+    l1Trouble: [
+      { l1: 'zh', note: '汉语逐字等重，英语词重音常被读平；重读音节要更长、更响、更清。' },
+      { l1: 'es', note: '西语重音规则不同，易把英语重音放错音节。' },
+    ],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Stress the CAPITAL syllable — longer and louder.', zh: '重读大写音节，更长更响。', es: 'Acentúa la sílaba en MAYÚSCULAS: más larga y fuerte.' },
+    payload: {
+      targetFeature: 'word-stress',
+      modelAudio: 'tts-slow',
+      minimalPairs: [['PREsent (n.)', 'preSENT (v.)'], ['REcord (n.)', 'reCORD (v.)']],
+      lines: [
+        { text: 'comPUter · baNAna · toMORRow', ipa: 'stress on -PU- / -NA- / -MO-' },
+        { text: 'Please preSENT your PREsent now.', ipa: 'verb vs noun' },
+        { text: 'PHOto · phoTOGrapher · photoGRAPHic', ipa: 'stress shift' },
+      ],
+    },
+  },
+  {
+    id: 'en.spk.pron.b1.weak-forms',
+    title: 'B1 发音 · 句重音与弱读 Stress & weak forms',
+    subject: 'english',
+    strand: 'english.speaking.pronunciation',
+    itemType: 'pronunciation-drill',
+    cefr: 'b1',
+    domain: 'general',
+    canDo: '能重读实词、弱读功能词，形成英语句子节奏。',
+    tags: ['sentence-stress', 'weak-forms'],
+    l1Trouble: [{ l1: 'zh', note: '汉语每字清晰等重；英语 to/of/and/for 要弱读成 /ə/。' }],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Punch the content words; weaken the small words (to, of, and → /ə/).', zh: '重读实词，弱读 to/of/and 等小词。', es: 'Marca las palabras de contenido; debilita to, of, and → /ə/.' },
+    payload: {
+      targetFeature: 'weak-forms',
+      modelAudio: 'tts',
+      lines: [
+        { text: 'I want to go to the shops.', ipa: 'to → /tə/' },
+        { text: 'A cup of tea and a piece of cake.', ipa: 'of → /əv/, and → /ən/' },
+        { text: "We're going to call you at four.", ipa: 'going to → /gənə/' },
+      ],
+    },
+  },
+  {
+    id: 'en.spk.shadow.b1.workplace-phone',
+    title: 'B1 跟读 · 职场电话 On the phone',
+    subject: 'english',
+    strand: 'english.speaking.shadowing',
+    itemType: 'shadowing',
+    cefr: 'b1',
+    domain: 'occupational',
+    subTheme: '电话',
+    canDo: '能在简单工作电话中接听、转接与确认信息。',
+    tags: ['linking', 'intonation-rise'],
+    l1Trouble: [{ l1: 'zh', note: '连读 put you through、take a message；是非问句尾音上扬。' }],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Shadow the call; link the words and let yes/no questions rise.', zh: '跟读电话，连读并让是非问句尾音上扬。', es: 'Imita la llamada; enlaza y sube la entonación en preguntas de sí/no.' },
+    payload: {
+      modelAudio: 'tts',
+      lines: [
+        { text: 'Good morning, Sunrise Trading. How can I help you?', gloss: { zh: '早上好，旭日贸易。有什么可以帮您？', es: 'Buenos días, Sunrise Trading. ¿En qué puedo ayudarle?' } },
+        { text: 'Could I speak to Ms. Lee, please?', gloss: { zh: '请问能和李女士通话吗？', es: '¿Podría hablar con la Sra. Lee, por favor?' } },
+        { text: "Hold on, please. I'll put you through.", gloss: { zh: '请稍等，我帮您转接。', es: 'Un momento, le paso con ella.' } },
+        { text: 'Could you take a message?', gloss: { zh: '能帮我留个口信吗？', es: '¿Podría tomar un mensaje?' } },
+      ],
+    },
+  },
+
+  // ── B2 ──────────────────────────────────────────────────────────────────────
+  {
+    id: 'en.spk.pron.b2.intonation',
+    title: 'B2 发音 · 语调 Intonation',
+    subject: 'english',
+    strand: 'english.speaking.pronunciation',
+    itemType: 'pronunciation-drill',
+    cefr: 'b2',
+    domain: 'general',
+    canDo: '能用降调表陈述与特殊疑问、升调表是非问与列举，并以语调传达态度。',
+    tags: ['intonation-fall', 'intonation-rise'],
+    l1Trouble: [{ l1: 'zh', note: '汉语声调在字，英语语调在句：陈述句尾下降，是非问上扬。' }],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Fall on statements & wh-questions; rise on yes/no questions and list items.', zh: '陈述句与特殊疑问句降调；是非问与列举升调。', es: 'Baja en afirmaciones y preguntas-wh; sube en preguntas de sí/no y enumeraciones.' },
+    payload: {
+      targetFeature: 'intonation',
+      modelAudio: 'tts-slow',
+      lines: [
+        { text: 'I work in Wuhan.', ipa: '↘ fall' },
+        { text: 'Where do you work?', ipa: '↘ fall' },
+        { text: 'Are you ready?', ipa: '↗ rise' },
+        { text: 'We need pens, paper, and folders.', ipa: '↗ ↗ ↘ list' },
+        { text: "Really? That's great news!", ipa: '↗ surprise' },
+      ],
+    },
+  },
+  {
+    id: 'en.spk.shadow.b2.opinions',
+    title: 'B2 跟读 · 表达观点 Giving opinions',
+    subject: 'english',
+    strand: 'english.speaking.shadowing',
+    itemType: 'shadowing',
+    cefr: 'b2',
+    domain: 'general',
+    subTheme: '社交',
+    canDo: '能礼貌地表达、回应与缓和不同观点。',
+    tags: ['sentence-stress', 'rhythm'],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Shadow with natural rhythm; stress the opinion words.', zh: '自然节奏跟读，重读表态词。', es: 'Imita con ritmo natural; acentúa las palabras de opinión.' },
+    payload: {
+      modelAudio: 'tts',
+      lines: [
+        { text: 'Personally, I think remote work saves a lot of time.', gloss: { zh: '我个人认为远程办公省了很多时间。', es: 'Personalmente, creo que el teletrabajo ahorra mucho tiempo.' } },
+        { text: "That's a fair point, but I'm not sure it suits everyone.", gloss: { zh: '有道理，但我不确定适合所有人。', es: 'Es razonable, pero no sé si le conviene a todos.' } },
+        { text: "It depends on the job, doesn't it?", gloss: { zh: '这要看工作类型，对吧？', es: 'Depende del trabajo, ¿no?' } },
+        { text: "I see what you mean, though I'd say balance is the key.", gloss: { zh: '我懂你的意思，不过我认为平衡才是关键。', es: 'Entiendo tu punto, aunque diría que el equilibrio es la clave.' } },
+      ],
+    },
+  },
+  {
+    id: 'en.spk.shadow.b2.job-interview',
+    title: 'B2 跟读 · 求职面试 Job interview',
+    subject: 'english',
+    strand: 'english.speaking.shadowing',
+    itemType: 'shadowing',
+    cefr: 'b2',
+    domain: 'occupational',
+    subTheme: '求职',
+    canDo: '能在面试中介绍优势并得体应答。',
+    tags: ['emphatic-stress', 'linking'],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Shadow confidently; emphasise your strengths.', zh: '自信跟读，强调优势词。', es: 'Imita con seguridad; enfatiza tus fortalezas.' },
+    payload: {
+      modelAudio: 'tts',
+      lines: [
+        { text: "Thanks for having me. I'm really keen on this role.", gloss: { zh: '谢谢给我机会。我非常想得到这个职位。', es: 'Gracias por recibirme. Me interesa mucho este puesto.' } },
+        { text: 'My biggest strength is staying calm under pressure.', gloss: { zh: '我最大的优势是高压下保持冷静。', es: 'Mi mayor fortaleza es mantener la calma bajo presión.' } },
+        { text: 'In my last job, I led a team of five.', gloss: { zh: '上一份工作我带了五人团队。', es: 'En mi último trabajo dirigí un equipo de cinco.' } },
+        { text: "I'm a fast learner, and I'm happy to take on new challenges.", gloss: { zh: '我学得快，乐于接受新挑战。', es: 'Aprendo rápido y me gusta asumir nuevos retos.' } },
+      ],
+    },
+  },
+
+  // ── C1 ──────────────────────────────────────────────────────────────────────
+  {
+    id: 'en.spk.pron.c1.connected-speech',
+    title: 'C1 发音 · 连读与省音 Connected speech',
+    subject: 'english',
+    strand: 'english.speaking.pronunciation',
+    itemType: 'pronunciation-drill',
+    cefr: 'c1',
+    domain: 'general',
+    canDo: '能在自然语流中连读、省音与同化，听感更地道。',
+    tags: ['linking', 'elision'],
+    l1Trouble: [{ l1: 'zh', note: '逐词清晰显生硬；学连读 an_apple、省音 nex(t) day、同化 did you→didja。' }],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Blend words: link consonant→vowel, drop weak /t/ /d/, soften did you → "didja".', zh: '词词相连：辅音接元音连读，弱读 /t//d/ 省音。', es: 'Une las palabras: enlaza, omite /t/ /d/ débiles y suaviza did you → "didja".' },
+    payload: {
+      targetFeature: 'linking',
+      modelAudio: 'tts',
+      lines: [
+        { text: "What are you going to do? (whatcha gonna do)", ipa: 'gonna' },
+        { text: "I'd like an apple and an orange. (an‿apple, an‿orange)", ipa: 'linking' },
+        { text: 'We left the next day. (nex(t) day)', ipa: 'elision /t/' },
+        { text: 'Did you eat yet? (didja eat yet)', ipa: 'assimilation' },
+      ],
+    },
+  },
+  {
+    id: 'en.spk.pron.c1.contrastive-stress',
+    title: 'C1 发音 · 对比重音 Contrastive stress',
+    subject: 'english',
+    strand: 'english.speaking.pronunciation',
+    itemType: 'pronunciation-drill',
+    cefr: 'c1',
+    domain: 'general',
+    canDo: '能通过移动重音改变句意重点，表达对比与强调。',
+    tags: ['emphatic-stress'],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Move the stress to change the meaning — punch the key word.', zh: '移动重音改变重点，强调关键词。', es: 'Mueve el acento para cambiar el sentido: marca la palabra clave.' },
+    payload: {
+      targetFeature: 'emphatic-stress',
+      modelAudio: 'tts-slow',
+      lines: [
+        { text: "I didn't say SHE took it.", ipa: '→ someone else did' },
+        { text: "I didn't say she TOOK it.", ipa: '→ maybe she borrowed it' },
+        { text: "It's not what you say, it's HOW you say it.", ipa: 'contrast' },
+      ],
+    },
+  },
+  {
+    id: 'en.spk.shadow.c1.presentation',
+    title: 'C1 跟读 · 演示陈述 Presentation',
+    subject: 'english',
+    strand: 'english.speaking.shadowing',
+    itemType: 'shadowing',
+    cefr: 'c1',
+    domain: 'academic',
+    canDo: '能在学术/职场演示中清晰引导、衔接与收束。',
+    tags: ['sentence-stress', 'intonation-fall'],
+    assessment: 'ai-speaking',
+    source: 'original',
+    status: 'draft',
+    instructions: { en: 'Shadow at a measured pace; signpost clearly.', zh: '稳速跟读，清晰使用过渡语。', es: 'Imita a un ritmo pausado; señaliza con claridad.' },
+    payload: {
+      modelAudio: 'tts',
+      lines: [
+        { text: "Today I'll outline three key findings from our research.", gloss: { zh: '今天我将概述研究中的三个关键发现。', es: 'Hoy expondré tres hallazgos clave de nuestra investigación.' } },
+        { text: "First, let's look at the overall trend.", gloss: { zh: '首先，我们来看总体趋势。', es: 'Primero, veamos la tendencia general.' } },
+        { text: 'This brings me to my second point.', gloss: { zh: '这就引出我的第二点。', es: 'Esto me lleva a mi segundo punto.' } },
+        { text: 'To sum up, the data clearly supports our approach.', gloss: { zh: '总而言之，数据明确支持我们的方案。', es: 'En resumen, los datos respaldan claramente nuestro enfoque.' } },
       ],
     },
   },
