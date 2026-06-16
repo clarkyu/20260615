@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseChunks } from '@/lib/bank'
+import { parseChunks, serializeChunks } from '@/lib/bank'
 
 describe('parseChunks', () => {
   it('parses three-part bilingual blocks separated by blank lines', () => {
@@ -41,5 +41,15 @@ describe('parseChunks', () => {
 
   it('drops empty-core blocks', () => {
     expect(parseChunks('\n\n  \n')).toEqual([])
+  })
+})
+
+describe('serializeChunks round-trip', () => {
+  it('parse(serialize(chunks)) returns the same chunks', () => {
+    const chunks = [
+      { english: 'Time flies.', chinese: '时光飞逝', meaningEn: 'Time passes quickly.', meaningZh: '时间过得快。', exampleEn: 'Time flies!', exampleZh: '时间过得真快！' },
+      { english: 'Get rid of.', chinese: '摆脱', meaningEn: 'To remove something.', meaningZh: null, exampleEn: null, exampleZh: null },
+    ]
+    expect(parseChunks(serializeChunks(chunks))).toEqual(chunks)
   })
 })

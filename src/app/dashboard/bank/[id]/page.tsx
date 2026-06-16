@@ -4,10 +4,12 @@ import { ChevronLeft, ClipboardPen } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import { serializeChunks } from '@/lib/bank'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { deleteChunkSet } from '@/actions/bank'
 import { VideoUpload } from './video-upload'
+import { EditSetForm } from './edit-set-form'
 
 export default async function ChunkSetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -30,9 +32,12 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
       <Link href="/dashboard/bank" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" />{t('bank.title')}
       </Link>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{set.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{set.chunks.length} {t('bank.chunkUnit')}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{set.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{set.chunks.length} {t('bank.chunkUnit')}</p>
+        </div>
+        <EditSetForm setId={set.id} name={set.name} chunksText={serializeChunks(set.chunks)} />
       </div>
 
       <VideoUpload chunkSetId={set.id} hasVideo={Boolean(set.shadowVideoKey)} />

@@ -60,6 +60,40 @@ export async function getChunkSetVideoUrl(chunkSetId: number, contentType: strin
   }
 }
 
+// Edit a set: rename + replace all chunks from the re-pasted three-part text.
+export async function updateChunkSet(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  const id = Number(formData.get('chunkSetId'))
+  const set = await prisma.chunkSet.findFirst({ where: { id, schoolId: user.schoolId ?? -1 } })
+  if (!set) return { error: t('err.setNotFound') }
+
+  const name = (formData.get('name') as string)?.trim()
+  const chunks = parseChunks((formData.get('chunks') as string) ?? '')
+  if (!name) return { error: t('err.needSetName') }
+  if (chunks.length === 0) return { error: t('err.needChunks') }
+
+  await prisma.$transaction([
+    prisma.chunkSet.update({ where: { id }, data: { name } }),
+    prisma.chunk.deleteMany({ where: { chunkSetId: id } }),
+    prisma.chunk.createMany({
+      data: chunks.map((c, i) => ({
+        chunkSetId: id,
+        order: i + 1,
+        english: c.english,
+        chinese: c.chinese,
+        meaningEn: c.meaningEn,
+        meaningZh: c.meaningZh,
+        exampleEn: c.exampleEn,
+        exampleZh: c.exampleZh,
+      })),
+    }),
+  ])
+  revalidatePath(`/dashboard/bank/${id}`)
+  return { success: true }
+}
+
 export async function deleteChunkSet(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const prisma = await getDb()
