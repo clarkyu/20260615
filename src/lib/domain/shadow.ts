@@ -9,6 +9,7 @@ import type { PrismaClient } from '@prisma/client'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import { presignDownload, storageConfigured } from '@/lib/storage'
+import * as submissionRepo from '@/lib/repo/submissions'
 import { isUnavailable } from './grading'
 
 // Score one sentence's audio: weighted accuracy(0.7) + completeness(0.3), 0..100.
@@ -31,17 +32,14 @@ const AUTO_PASS_MIN = 60
 
 export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: number): Promise<void> {
   if (!storageConfigured()) return
-  const submission = await prisma.submission.findUnique({
-    where: { id: submissionId },
-    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } }, shadowTakes: { orderBy: { order: 'asc' } } },
-  })
+  const submission = await submissionRepo.findGradableShadow(prisma, submissionId)
   if (!submission || submission.shadowTakes.length === 0) return
   const textByOrder = new Map(submission.assignment.sentences.map((s) => [s.order, s.text]))
   const perceptionModel = submission.assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL
 
-  const revert = () => prisma.submission.update({ where: { id: submissionId }, data: { status: 'UPLOADED', needsReview: true } })
+  const revert = () => submissionRepo.revertToQueue(prisma, submissionId, 'UPLOADED')
 
-  await prisma.submission.update({ where: { id: submissionId }, data: { status: 'PROCESSING' } })
+  await submissionRepo.markProcessing(prisma, submissionId)
   try {
     const scoreByOrder = new Map<number, number>()
     // Grade in small batches to stay within Worker limits without firing 50 at once.
@@ -54,7 +52,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
           if (!text) return null
           const url = await presignDownload(tk.audioKey)
           const r = await gradeShadowTake(url, text, perceptionModel)
-          await prisma.shadowTake.update({ where: { id: tk.id }, data: { aiScore: r.score, spokenText: r.spokenText } })
+          await submissionRepo.setShadowTakeScore(prisma, tk.id, { aiScore: r.score, spokenText: r.spokenText })
           return { order: tk.order, score: r.score }
         }),
       )
@@ -79,17 +77,12 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       ? `逐句平均 ${overall} 分；最弱第 ${weakest[0]} 句仅 ${weakest[1]} 分，注意发音与完整度。`
       : `逐句平均 ${overall} 分，整体不错，继续保持。`
 
-    await prisma.submission.update({
-      where: { id: submissionId },
-      data: {
-        status: 'GRADED',
-        needsReview,
-        aiScore: overall,
-        finalScore: submission.teacherScore ?? overall,
-        confidence: overall / 100,
-        feedback,
-        gradedAt: new Date(),
-      },
+    await submissionRepo.applyShadowResult(prisma, submissionId, {
+      needsReview,
+      aiScore: overall,
+      finalScore: submission.teacherScore ?? overall,
+      confidence: overall / 100,
+      feedback,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''

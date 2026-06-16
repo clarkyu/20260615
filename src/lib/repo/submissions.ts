@@ -75,6 +75,72 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
   })
 }
 
+// ── grading pipeline (the AI grading state machine; called by the job queue /
+//    grading services, keyed by submission id — system-wide, not tenant-scoped) ──
+
+// One submission to auto-grade, with its assignment + ordered reference sentences.
+export function findGradable(prisma: PrismaClient, id: number) {
+  return prisma.submission.findUnique({
+    where: { id },
+    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
+  })
+}
+
+// Same, plus the per-sentence shadow takes (for the shadowing grader).
+export function findGradableShadow(prisma: PrismaClient, id: number) {
+  return prisma.submission.findUnique({
+    where: { id },
+    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } }, shadowTakes: { orderBy: { order: 'asc' } } },
+  })
+}
+
+export function markProcessing(prisma: PrismaClient, id: number) {
+  return prisma.submission.update({ where: { id }, data: { status: 'PROCESSING' } })
+}
+
+export function markFailed(prisma: PrismaClient, id: number) {
+  return prisma.submission.update({ where: { id }, data: { status: 'FAILED', needsReview: true } })
+}
+
+// Model unavailable / nothing to grade — back to the teacher queue (keep FLAGGED).
+export function revertToQueue(prisma: PrismaClient, id: number, status: SubmissionStatus) {
+  return prisma.submission.update({ where: { id }, data: { status, needsReview: true } })
+}
+
+export interface GradeResult {
+  status: SubmissionStatus
+  needsReview: boolean
+  confidence: number | null
+  perceptionModel: string
+  judgeModel: string
+  transcript: string
+  aiResult: string
+  aiScore: number
+  finalScore: number
+  feedback: string
+  gradedById: number | null
+}
+
+export function applyGradeResult(prisma: PrismaClient, id: number, data: GradeResult) {
+  return prisma.submission.update({ where: { id }, data: { ...data, gradedAt: new Date() } })
+}
+
+export interface ShadowResult {
+  needsReview: boolean
+  aiScore: number
+  finalScore: number
+  confidence: number
+  feedback: string
+}
+
+export function applyShadowResult(prisma: PrismaClient, id: number, data: ShadowResult) {
+  return prisma.submission.update({ where: { id }, data: { status: 'GRADED', ...data, gradedAt: new Date() } })
+}
+
+export function setShadowTakeScore(prisma: PrismaClient, takeId: number, data: { aiScore: number; spokenText: string }) {
+  return prisma.shadowTake.update({ where: { id: takeId }, data })
+}
+
 // ── student-facing reads/writes (a student only ever touches their own rows) ──
 
 // Anything past DRAFT counts as an attempt used — including FAILED (a genuine
