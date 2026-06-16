@@ -6,8 +6,10 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
 import { serializeChunks } from '@/lib/bank'
+import { CEFR_LEVELS, STRANDS } from '@/lib/curriculum/taxonomy'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/submit-button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { deleteChunkSet } from '@/actions/bank'
 import { VideoUpload } from './video-upload'
@@ -35,8 +37,20 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{set.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{set.chunks.length} {t('bank.chunkUnit')}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {set.cefr ? <Badge tone="primary">{CEFR_LEVELS.find((l) => l.band === set.cefr)?.label ?? set.cefr}</Badge> : null}
+            {set.strand ? <Badge>{STRANDS.find((s) => s.id === set.strand)?.label ?? set.strand}</Badge> : null}
+            {(set.tags ?? '').split(',').map((x) => x.trim()).filter(Boolean).map((tag) => (
+              <span key={tag} className="rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">{tag}</span>
+            ))}
+          </div>
         </div>
-        <EditSetForm setId={set.id} name={set.name} chunksText={serializeChunks(set.chunks)} />
+        <EditSetForm
+          setId={set.id}
+          name={set.name}
+          chunksText={serializeChunks(set.chunks)}
+          meta={{ cefr: set.cefr, strand: set.strand, domain: set.domain, tags: set.tags, source: set.source }}
+        />
       </div>
 
       <VideoUpload chunkSetId={set.id} hasVideo={Boolean(set.shadowVideoKey)} />
