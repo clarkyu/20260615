@@ -3,12 +3,14 @@ import { ChevronLeft, Eye, Scale } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
-import { MODELS, PROVIDER_LABELS, MODEL_PRICING, CREDENTIAL_SLOTS } from '@/lib/ai/registry'
+import { MODELS, PROVIDER_LABELS, MODEL_PRICING, CREDENTIAL_SLOTS, modelsForCapability } from '@/lib/ai/registry'
 import type { Provider, Capability } from '@/lib/ai/types'
 import * as aiKeyRepo from '@/lib/repo/ai-keys'
+import * as userRepo from '@/lib/repo/users'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AiKeySlot } from './ai-key-slot'
+import { DefaultModelForm } from './default-model-form'
 
 const CAP_LABEL: Record<Capability, { zh: string; en: string }> = {
   perception: { zh: '感知·看视频/听音频', en: 'Perceive' },
@@ -30,6 +32,9 @@ export default async function AiModelsPage() {
   const zh = locale === 'zh'
 
   const configured = new Map((await aiKeyRepo.listForUser(prisma, user.userId)).map((k) => [k.provider, k.last4]))
+  const defaults = await userRepo.gradingDefaults(prisma, user.userId)
+  const perceptionOptions = modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))
+  const judgeOptions = modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))
   const providers = ORDER.filter((p) => MODELS.some((m) => m.provider === p))
 
   return (
@@ -57,6 +62,21 @@ export default async function AiModelsPage() {
               <AiKeySlot key={s.id} id={s.id} label={s.label} help={s.help} last4={configured.get(s.id) ?? null} />
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div>
+            <p className="font-semibold">{t('ai.defaultsTitle')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t('ai.defaultsHint')}</p>
+          </div>
+          <DefaultModelForm
+            perceptionOptions={perceptionOptions}
+            judgeOptions={judgeOptions}
+            perception={defaults?.defaultPerceptionModel ?? null}
+            judge={defaults?.defaultJudgeModel ?? null}
+          />
         </CardContent>
       </Card>
 

@@ -126,8 +126,8 @@ export async function autoGradeSubmission(
   await submissionRepo.markProcessing(prisma, submission.id)
 
   // Grade on the assignment-owning teacher's own API keys (BYOK); empty → platform key.
-  const owner = await assignmentRepo.offeringTeacherId(prisma, submission.assignmentId)
-  const keys = await resolveTeacherKeys(prisma, owner?.offering?.teacherId)
+  const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
+  const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
 
   try {
     const result = await withAiKeys(keys, () => gradeSubmission({
@@ -185,9 +185,11 @@ export async function autoGradeById(prisma: PrismaClient, submissionId: number):
   if (!submission) return null
   if (!submission.videoKey && !submission.audioKey) return null
   if (submission.assignment.sentences.length === 0) return null
+  // Model resolution: assignment-pinned → the teacher's own default → platform default.
+  const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   return autoGradeSubmission(prisma, submission, {
-    perceptionModel: submission.assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
-    judgeModel: submission.assignment.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
+    perceptionModel: submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
+    judgeModel: submission.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
     rubric: submission.assignment.rubric || DEFAULT_RUBRIC,
   })
 }

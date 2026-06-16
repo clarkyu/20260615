@@ -73,12 +73,13 @@ export async function gradePracticeAttempt(
     }
   }
 
-  // Practice feedback runs on the assignment-owning teacher's key (BYOK); empty → platform.
-  const owner = await assignmentRepo.offeringTeacherId(prisma, assignmentId)
-  const keys = await resolveTeacherKeys(prisma, owner?.offering?.teacherId)
+  // Practice runs on the assignment-owning teacher's key + their default model (BYOK);
+  // empty → platform key / default.
+  const owner = await assignmentRepo.offeringTeacher(prisma, assignmentId)
+  const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
   const outcome = await withAiKeys(keys, () => gradePractice({
-    perceptionModel: assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
-    judgeModel: assignment.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
+    perceptionModel: assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
+    judgeModel: assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
     rubric: assignment.rubric || DEFAULT_RUBRIC,
     referenceSentences: assignment.sentences.map((s) => ({ order: s.order, text: s.text })),
     audioUrl,

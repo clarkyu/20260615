@@ -59,6 +59,15 @@ export function setContact(prisma: PrismaClient, id: number, data: { phone: stri
   return prisma.user.update({ where: { id }, data })
 }
 
+// A teacher's own default grading models.
+export function gradingDefaults(prisma: PrismaClient, id: number) {
+  return prisma.user.findUnique({ where: { id }, select: { defaultPerceptionModel: true, defaultJudgeModel: true } })
+}
+
+export function setGradingDefaults(prisma: PrismaClient, id: number, data: { defaultPerceptionModel: string | null; defaultJudgeModel: string | null }) {
+  return prisma.user.update({ where: { id }, data })
+}
+
 export interface NewStudent {
   schoolId: number
   classId: number

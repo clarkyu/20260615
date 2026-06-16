@@ -30,9 +30,15 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.assignment.findFirst({ where: { id, ...inSchool(schoolId) } })
 }
 
-// The teacher who owns this assignment's offering — used to resolve BYOK keys.
-export function offeringTeacherId(prisma: PrismaClient, assignmentId: number) {
-  return prisma.assignment.findUnique({ where: { id: assignmentId }, select: { offering: { select: { teacherId: true } } } })
+// The teacher who owns this assignment's offering + their default grading models —
+// used to resolve BYOK keys and the per-teacher default model in one query.
+export async function offeringTeacher(prisma: PrismaClient, assignmentId: number) {
+  const a = await prisma.assignment.findUnique({
+    where: { id: assignmentId },
+    select: { offering: { select: { teacherId: true, teacher: { select: { defaultPerceptionModel: true, defaultJudgeModel: true } } } } },
+  })
+  const o = a?.offering
+  return o ? { teacherId: o.teacherId, defaultPerceptionModel: o.teacher.defaultPerceptionModel, defaultJudgeModel: o.teacher.defaultJudgeModel } : null
 }
 
 // The grading screen: assignment + offering(course/class) + every submission with
