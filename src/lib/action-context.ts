@@ -1,7 +1,9 @@
 import type { PrismaClient } from '@prisma/client'
 import { requireStaff, requireRole, type CurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import { getSession } from '@/lib/session'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
 
 // The thin-action prelude. Every action used to repeat the same three awaits —
 // require{Staff,Role} / getT / getDb — and then re-derive the scope inline. These
@@ -27,11 +29,22 @@ export async function staffContext(): Promise<StaffCtx> {
   return { user, prisma, t }
 }
 
-// Authenticated student + a db client + a translator.
+// Authenticated student + a db client + a translator. Self-heals the session's
+// classId from the DB: a teacher may have moved the student to another class since
+// login, and submission gating keys off classId — so a stale session would block
+// them from the new class's work until re-login. Cheap (one PK lookup); the cookie
+// is only rewritten on the rare turn the class actually changed.
 export async function studentContext(): Promise<ActionCtx> {
   const user = await requireRole('STUDENT')
   const { t } = await getT()
   const prisma = await getDb()
+  const fresh = await userRepo.findById(prisma, user.userId)
+  if (fresh && fresh.classId !== user.classId) {
+    user.classId = fresh.classId
+    const session = await getSession()
+    session.classId = fresh.classId
+    await session.save()
+  }
   return { user, prisma, t }
 }
 
