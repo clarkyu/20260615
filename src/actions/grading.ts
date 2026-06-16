@@ -7,6 +7,7 @@ import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
+import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -24,13 +25,18 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   const user = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const submissionId = Number(formData.get('submissionId'))
-  const perceptionModel = (formData.get('perceptionModel') as string)?.trim()
-  const judgeModel = (formData.get('judgeModel') as string)?.trim()
-  const rubric = (formData.get('rubric') as string)?.trim() || '按完整度、准确度、发音、流利度综合评分。'
-
-  if (!submissionId) return { error: t('err.needSubmission') }
-  if (!perceptionModel || !judgeModel) return { error: t('err.needModels') }
+  const parsed = parseForm(
+    z.object({
+      submissionId: reqId,
+      perceptionModel: reqText('err.needModels', 100),
+      judgeModel: reqText('err.needModels', 100),
+      rubric: optText(2000),
+    }),
+    formData,
+  )
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { submissionId, perceptionModel, judgeModel } = parsed.data
+  const rubric = parsed.data.rubric || '按完整度、准确度、发音、流利度综合评分。'
 
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }
@@ -89,15 +95,16 @@ export async function overrideScore(prevState: unknown, formData: FormData): Pro
   const user = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const submissionId = Number(formData.get('submissionId'))
-  const scoreRaw = (formData.get('score') as string)?.trim()
-  const feedback = (formData.get('feedback') as string)?.trim()
-  if (!submissionId) return { error: t('err.needSubmission') }
-
-  const score = Number(scoreRaw)
-  if (scoreRaw === '' || isNaN(score) || score < 0 || score > MAX_SCORE) {
-    return { error: t('err.scoreRange') }
-  }
+  const parsed = parseForm(
+    z.object({
+      submissionId: reqId,
+      score: z.coerce.number({ error: 'err.scoreRange' }).min(0, 'err.scoreRange').max(MAX_SCORE, 'err.scoreRange'),
+      feedback: optText(2000),
+    }),
+    formData,
+  )
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { submissionId, score, feedback } = parsed.data
 
   const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }
@@ -125,8 +132,9 @@ export async function acceptAiForAssignment(prevState: unknown, formData: FormDa
   const user = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const assignmentId = Number(formData.get('assignmentId'))
-  if (!assignmentId) return { error: t('err.needSubmission') }
+  const parsed = parseForm(z.object({ assignmentId: reqId }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const assignmentId = parsed.data.assignmentId
 
   const assignment = await prisma.assignment.findFirst({
     where: { id: assignmentId, offering: { schoolId: user.schoolId ?? -1 } },

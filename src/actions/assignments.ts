@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db'
 import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { weakSentences, parsePerSentence, type AnalyticsSubmission } from '@/lib/domain/analytics'
+import { parseForm, reqText, optText, checkbox, intField, z, type ParseResult } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -20,21 +21,37 @@ function parseDate(value: FormDataEntryValue | null): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-function readFields(formData: FormData) {
+const assignmentSchema = z.object({
+  title: reqText('err.needTitle', 200),
+  category: optText(50),
+  monthLabel: optText(20),
+  instructions: optText(5000),
+  requireEyesClosed: checkbox,
+  requireText: checkbox,
+  requireAudio: checkbox,
+  requireVideo: checkbox,
+  requireHandwriting: checkbox,
+  maxAttempts: intField(1, 1, 99),
+})
+
+type AssignmentFields = z.infer<typeof assignmentSchema> & {
+  sentences: string[]
+  openAt: Date | null
+  dueAt: Date | null
+}
+
+// Validate the form fields (zod), then add the derived sentences + dates.
+function readFields(formData: FormData): ParseResult<AssignmentFields> {
+  const parsed = parseForm(assignmentSchema, formData)
+  if (!parsed.ok) return parsed
   return {
-    title: (formData.get('title') as string)?.trim(),
-    category: (formData.get('category') as string)?.trim() || null,
-    sentences: parseSentences((formData.get('sentences') as string) ?? ''),
-    monthLabel: (formData.get('monthLabel') as string)?.trim() || null,
-    instructions: (formData.get('instructions') as string)?.trim() || null,
-    openAt: parseDate(formData.get('openAt')),
-    dueAt: parseDate(formData.get('dueAt')),
-    requireEyesClosed: formData.get('requireEyesClosed') !== null,
-    requireText: formData.get('requireText') !== null,
-    requireAudio: formData.get('requireAudio') !== null,
-    requireVideo: formData.get('requireVideo') !== null,
-    requireHandwriting: formData.get('requireHandwriting') !== null,
-    maxAttempts: Math.max(1, Number(formData.get('maxAttempts') ?? '1') || 1),
+    ok: true,
+    data: {
+      ...parsed.data,
+      sentences: parseSentences((formData.get('sentences') as string) ?? ''),
+      openAt: parseDate(formData.get('openAt')),
+      dueAt: parseDate(formData.get('dueAt')),
+    },
   }
 }
 
@@ -52,8 +69,9 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   const valid = await prisma.courseOffering.findMany({ where: { id: { in: offeringIds }, schoolId }, select: { id: true } })
   if (valid.length === 0) return { error: t('err.offeringNotFound') }
 
-  const f = readFields(formData)
-  if (!f.title) return { error: t('err.needTitle') }
+  const fr = readFields(formData)
+  if (!fr.ok) return { error: t(fr.error) }
+  const f = fr.data
   if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
 
   // Publishing from the item bank: pull the shadow video + sentences from the set.
@@ -116,8 +134,9 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
   const existing = await prisma.assignment.findFirst({ where: { id: assignmentId, offering: { schoolId: user.schoolId } } })
   if (!existing) return { error: t('err.assignNotFound') }
 
-  const f = readFields(formData)
-  if (!f.title) return { error: t('err.needTitle') }
+  const fr = readFields(formData)
+  if (!fr.ok) return { error: t(fr.error) }
+  const f = fr.data
   if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
 
   await prisma.$transaction([
