@@ -27,3 +27,11 @@ export function rename(prisma: PrismaClient, id: number, name: string) {
 export function listAll(prisma: PrismaClient) {
   return prisma.school.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
 }
+
+// All schools with code + member/class counts — the super-admin platform console.
+export function listAllWithCounts(prisma: PrismaClient) {
+  return prisma.school.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, name: true, code: true, _count: { select: { users: true, classes: true } } },
+  })
+}

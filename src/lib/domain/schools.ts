@@ -17,6 +17,17 @@ export async function createSchool(prisma: PrismaClient, userId: number, name: s
   return { ok: true, schoolId: school.id }
 }
 
+// Create a school for the platform WITHOUT binding the creator — a super-admin
+// provisions schools but stays school-independent (they curate global content,
+// not one school's data).
+export async function createSchoolForPlatform(prisma: PrismaClient, name: string, code: string): Promise<CreateResult> {
+  if (await schools.findByName(prisma, name)) return { ok: false, error: 'err.schoolNameExists' }
+  if (await schools.findByCode(prisma, code)) return { ok: false, error: 'err.codeTaken' }
+
+  const school = await schools.create(prisma, name, code)
+  return { ok: true, schoolId: school.id }
+}
+
 export type RenameResult = { ok: true } | { ok: false; error: string }
 
 export async function renameSchool(prisma: PrismaClient, schoolId: number, name: string): Promise<RenameResult> {
