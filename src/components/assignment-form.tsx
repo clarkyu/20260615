@@ -279,7 +279,13 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
 
   if (!open) {
     return (
-      <Card className="tap border-primary/30 bg-primary/5 hover:shadow-card" onClick={() => setOpen(true)}>
+      <Card
+        className="tap border-primary/30 bg-primary/5 hover:shadow-card"
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true) } }}
+      >
         <CardContent className="flex items-center gap-3 p-4">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
             <Sparkles className="h-5 w-5" />

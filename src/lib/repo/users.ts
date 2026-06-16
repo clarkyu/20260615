@@ -126,12 +126,8 @@ export function listStudentsInClass(prisma: PrismaClient, classId: number) {
   })
 }
 
-// Full student rows for a class (school-scoped) — the score-export builder.
-export function listClassStudents(prisma: PrismaClient, schoolId: number | null | undefined, classId: number) {
-  return prisma.user.findMany({ where: { schoolId: schoolId ?? -1, classId, role: 'STUDENT' }, orderBy: { studentNo: 'asc' } })
-}
-
-// Lightweight roster {id, name, studentNo} for a class (school-scoped) — analytics.
+// Lightweight roster {id, name, studentNo} for a class (school-scoped) — analytics
+// + the score export (which only needs id/name/studentNo, not the full user row).
 export function listClassRoster(prisma: PrismaClient, schoolId: number | null | undefined, classId: number) {
   return prisma.user.findMany({
     where: { schoolId: schoolId ?? -1, classId, role: 'STUDENT' },
