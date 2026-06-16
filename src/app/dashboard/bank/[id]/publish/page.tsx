@@ -1,0 +1,64 @@
+import Link from 'next/link'
+import { notFound, redirect } from 'next/navigation'
+import { ChevronLeft } from 'lucide-react'
+import { requireStaff } from '@/lib/auth'
+import { getDb } from '@/lib/db'
+import { getT } from '@/lib/i18n-server'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { AssignmentForm } from '@/components/assignment-form'
+
+export default async function PublishFromSetPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const setId = Number(id)
+  if (!Number.isInteger(setId)) notFound()
+
+  const user = await requireStaff()
+  const prisma = await getDb()
+  const { t } = await getT()
+  if (!user.schoolId) redirect('/dashboard')
+
+  const set = await prisma.chunkSet.findFirst({
+    where: { id: setId, schoolId: user.schoolId },
+    select: { id: true, name: true, shadowVideoKey: true, _count: { select: { chunks: true } } },
+  })
+  if (!set) notFound()
+
+  const offerings = await prisma.courseOffering.findMany({
+    where: { schoolId: user.schoolId, ...(user.role === 'TEACHER' ? { teacherId: user.userId } : {}) },
+    orderBy: [{ year: 'desc' }, { semester: 'desc' }, { id: 'desc' }],
+    include: { course: { select: { name: true } }, class: { select: { name: true } } },
+  })
+
+  if (offerings.length === 0) {
+    return (
+      <div className="space-y-4 py-2">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+            {t('asg.noOfferingFirst')}
+            <Link href="/dashboard/teaching/new"><Button size="sm">{t('teach.new')}</Button></Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const nameCounts = new Map<string, number>()
+  for (const o of offerings) nameCounts.set(o.class.name, (nameCounts.get(o.class.name) ?? 0) + 1)
+  const targets = offerings.map((o) => ({
+    offeringId: o.id,
+    label: (nameCounts.get(o.class.name) ?? 0) > 1 ? `${o.class.name} · ${o.course.name}` : o.class.name,
+  }))
+
+  return (
+    <div className="space-y-3 py-2">
+      <Link href={`/dashboard/bank/${set.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-4 w-4" />{set.name}
+      </Link>
+      <AssignmentForm
+        targets={targets}
+        chunkSet={{ id: set.id, name: set.name, count: set._count.chunks, hasVideo: Boolean(set.shadowVideoKey) }}
+      />
+    </div>
+  )
+}

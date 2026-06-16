@@ -55,7 +55,23 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   if (!f.title) return { error: t('err.needTitle') }
   if (!f.requireText && !f.requireAudio && !f.requireVideo && !f.requireHandwriting) return { error: t('err.needSubmitKind') }
 
-  const sentences = f.sentences.map((text, i) => ({ order: i + 1, text }))
+  // Publishing from the item bank: pull the shadow video + sentences from the set.
+  let shadowVideoKey: string | null = null
+  let linkedSetId: number | null = null
+  let sentences = f.sentences.map((text, i) => ({ order: i + 1, text, translation: null as string | null }))
+  const chunkSetId = Number(formData.get('chunkSetId')) || null
+  if (chunkSetId) {
+    const set = await prisma.chunkSet.findFirst({
+      where: { id: chunkSetId, schoolId },
+      include: { chunks: { orderBy: { order: 'asc' } } },
+    })
+    if (!set) return { error: t('err.setNotFound') }
+    shadowVideoKey = set.shadowVideoKey
+    linkedSetId = set.id
+    // The example sentence is what the student reads aloud / shadows.
+    sentences = set.chunks.map((c, i) => ({ order: i + 1, text: c.exampleEn || c.english, translation: c.exampleZh || c.chinese }))
+  }
+
   // One standalone create per offering. Don't wrap in $transaction: D1 has no
   // interactive transactions, so a batched create can't resolve the new
   // assignment's auto-increment id for its nested sentence inserts.
@@ -65,6 +81,8 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
         offeringId: o.id,
         title: f.title,
         category: f.category,
+        shadowVideoKey,
+        chunkSetId: linkedSetId,
         monthLabel: f.monthLabel,
         instructions: f.instructions,
         openAt: f.openAt,

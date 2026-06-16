@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
-import { presignUpload, storageConfigured, submissionMediaKey } from '@/lib/storage'
+import { presignUpload, presignDownload, storageConfigured, submissionMediaKey } from '@/lib/storage'
 import { autoGradeById, hasAntiCheatViolation } from '@/lib/domain/grading'
 import { runAfterResponse } from '@/lib/cf'
 
@@ -133,6 +133,24 @@ export async function finishSubmission(assignmentId: number) {
 
   revalidatePath('/student')
   return { success: true }
+}
+
+// Presigned playback URL for the shadowing video of a bank-based assignment.
+export async function getShadowVideoUrl(assignmentId: number): Promise<{ url?: string; error?: string }> {
+  const user = await requireRole('STUDENT')
+  const { t } = await getT()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
+  const prisma = await getDb()
+  const assignment = await prisma.assignment.findFirst({
+    where: { id: assignmentId, offering: { classId: user.classId ?? -1 } },
+    select: { shadowVideoKey: true },
+  })
+  if (!assignment?.shadowVideoKey) return { error: t('err.noVideo') }
+  try {
+    return { url: await presignDownload(assignment.shadowVideoKey) }
+  } catch {
+    return { error: t('err.videoUrlFail') }
+  }
 }
 
 // Step 1: the student's recited text (from memory).

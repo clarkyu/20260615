@@ -45,6 +45,7 @@ model ChunkSet {
   createdAt      DateTime @default(now())
   school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   chunks         Chunk[]
+  assignments    Assignment[]
 
   @@index([schoolId])
 }
@@ -194,6 +195,7 @@ model Assignment {
   title        String
   category     String?
   shadowVideoKey String?
+  chunkSetId   Int?
   monthLabel   String?
   instructions String?
   rubric       String?
@@ -212,6 +214,7 @@ model Assignment {
   updatedAt    DateTime @updatedAt
 
   offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  chunkSet    ChunkSet?      @relation(fields: [chunkSetId], references: [id], onDelete: SetNull)
   sentences   Sentence[]
   submissions Submission[]
   practiceAttempts PracticeAttempt[]

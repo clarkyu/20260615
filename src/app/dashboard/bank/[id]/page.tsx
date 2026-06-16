@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, ClipboardPen } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -36,6 +36,10 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
       </div>
 
       <VideoUpload chunkSetId={set.id} hasVideo={Boolean(set.shadowVideoKey)} />
+
+      <Link href={`/dashboard/bank/${set.id}/publish`}>
+        <Button className="w-full" size="lg"><ClipboardPen className="h-4 w-4" />{t('bank.publish')}</Button>
+      </Link>
 
       <Card>
         <CardContent className="divide-y divide-border/60 p-0">
