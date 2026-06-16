@@ -31,7 +31,7 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   })
   if (!offering) notFound()
 
-  const [students, assignments, rawSubs] = await Promise.all([
+  const [students, assignments, rawSubs, rawPractice] = await Promise.all([
     prisma.user.findMany({
       where: { schoolId: user.schoolId, classId: offering.classId, role: 'STUDENT' },
       select: { id: true, name: true, studentNo: true },
@@ -46,6 +46,11 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
       where: { assignment: { offeringId } },
       select: { studentId: true, assignmentId: true, attempt: true, status: true, finalScore: true, needsReview: true, aiResult: true },
       orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
+    }),
+    // Practice rounds (训练) → 平时成绩, separate from graded submissions (测试).
+    prisma.practiceAttempt.findMany({
+      where: { assignment: { offeringId }, aiScore: { not: null } },
+      select: { studentId: true, assignmentId: true, aiScore: true },
     }),
   ])
 
@@ -66,9 +71,10 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
     })
   }
 
+  const practice = rawPractice.map((p) => ({ studentId: p.studentId, assignmentId: p.assignmentId, aiScore: p.aiScore }))
   const roster = students.map((s) => ({ id: s.id, name: s.name ?? '', studentNo: s.studentNo ?? '' }))
   const stats = assignmentStats(assignments, submissions, students.length)
-  const profiles = studentProfiles(roster, assignments, submissions)
+  const profiles = studentProfiles(roster, assignments, submissions, practice)
   const summary = offeringSummary(stats, profiles, students.length)
   const weak = weakSentences(submissions)
   const titleById = new Map(assignments.map((a) => [a.id, a.title]))
@@ -76,8 +82,8 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
 
   const tiles = [
     { label: t('insights.students'), value: String(summary.students) },
-    { label: t('insights.subRate'), value: `${Math.round(summary.submissionRate * 100)}%` },
-    { label: t('insights.avgScore'), value: summary.avgScore == null ? '—' : String(summary.avgScore) },
+    { label: t('insights.dailyScore'), value: summary.dailyAvg == null ? '—' : String(summary.dailyAvg) },
+    { label: t('insights.examScore'), value: summary.avgScore == null ? '—' : String(summary.avgScore) },
     { label: t('insights.atRisk'), value: String(summary.atRisk) },
   ]
 
@@ -107,6 +113,7 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
               </Card>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">{t('insights.gradeNote')}</p>
 
           {/* At-risk students */}
           <section className="space-y-2">
@@ -126,8 +133,8 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
                       </div>
                     </div>
                     <div className="shrink-0 text-right text-xs text-muted-foreground">
-                      <div>{t('insights.submitted')} {p.submitted}/{p.totalAssignments}</div>
-                      <div>{t('insights.avg')} {p.avgScore == null ? '—' : p.avgScore}</div>
+                      <div>{t('insights.daily')} {p.dailyScore == null ? '—' : p.dailyScore}</div>
+                      <div>{t('insights.exam')} {p.avgScore == null ? '—' : p.avgScore}</div>
                     </div>
                   </CardContent>
                 </Card>

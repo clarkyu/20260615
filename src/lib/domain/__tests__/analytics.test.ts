@@ -60,6 +60,28 @@ describe('studentProfiles', () => {
   })
 })
 
+describe('平时成绩 from practice', () => {
+  it('averages the best practice score per assignment, independent of submissions', () => {
+    const practice = [
+      { studentId: 1, assignmentId: 10, aiScore: 60 },
+      { studentId: 1, assignmentId: 10, aiScore: 85 }, // best for assignment 10
+      { studentId: 1, assignmentId: 11, aiScore: 75 },
+    ]
+    const profiles = studentProfiles(students, assignments, [], practice)
+    const p1 = profiles.find((p) => p.id === 1)!
+    expect(p1.dailyScore).toBe(80) // (85 + 75) / 2
+    const p2 = profiles.find((p) => p.id === 2)!
+    expect(p2.dailyScore).toBeNull() // never practiced
+  })
+
+  it('rolls up into offeringSummary.dailyAvg', () => {
+    const practice = [{ studentId: 1, assignmentId: 10, aiScore: 90 }]
+    const stats = assignmentStats(assignments, [], 2)
+    const profiles = studentProfiles(students, assignments, [], practice)
+    expect(offeringSummary(stats, profiles, 2).dailyAvg).toBe(90)
+  })
+})
+
 describe('weakSentences', () => {
   it('ranks the hardest lines by average accuracy', () => {
     const subs = [
