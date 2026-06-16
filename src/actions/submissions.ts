@@ -1,13 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getDb } from '@/lib/db'
 import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { hasAntiCheatViolation } from '@/lib/domain/grading'
-import { enqueueGrading, drainGradingJobs } from '@/lib/domain/jobs'
+import { scheduleGrading } from '@/lib/domain/jobs'
 import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
-import { runAfterResponse } from '@/lib/cf'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 
@@ -17,15 +15,6 @@ function keyFieldFor(kind: MediaKind, key: string): submissionRepo.MediaKeyField
   if (kind === 'audio') return { audioKey: key }
   if (kind === 'image') return { imageKey: key }
   return { videoKey: key }
-}
-
-// Kick a durable background grade once a submission is finalised.
-async function scheduleGrading(prisma: Awaited<ReturnType<typeof getDb>>, submissionId: number, kind: 'submission' | 'shadow') {
-  await enqueueGrading(prisma, submissionId, kind)
-  await runAfterResponse(async () => {
-    const bg = await getDb()
-    await drainGradingJobs(bg)
-  })
 }
 
 // Presigned URL for a video or audio recording; saves the key on the (draft) submission.
