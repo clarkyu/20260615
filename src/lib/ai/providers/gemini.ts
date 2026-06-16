@@ -8,6 +8,7 @@ import type {
   ReferenceSentence,
 } from '../types'
 import { config } from '@/lib/config'
+import { overrideKey } from '../key-context'
 
 // Real Gemini adapter (REST API via fetch — Workers-compatible, no SDK).
 // Perception (multimodal: video/audio) and judging (text) both go to Gemini
@@ -19,7 +20,8 @@ function baseUrl(): string {
 }
 
 function apiKey(): string {
-  const key = config.geminiKey()
+  // The grading teacher's own key (BYOK) wins; otherwise the platform key.
+  const key = overrideKey('gemini') ?? config.geminiKey()
   if (!key) throw new Error('GEMINI_API_KEY 未配置')
   return key
 }

@@ -8,9 +8,12 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { gradeSubmission } from '@/lib/ai/grade'
+import { withAiKeys } from '@/lib/ai/key-context'
+import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
+import * as assignmentRepo from '@/lib/repo/assignments'
 
 export const DEFAULT_MAX_SCORE = 100
 
@@ -70,6 +73,7 @@ export function hasAntiCheatViolation(violations: string | null | undefined): bo
 // `submission` loaded with its assignment + sentences.
 export interface GradableSubmission {
   id: number
+  assignmentId: number
   status: string
   videoKey: string | null
   audioKey: string | null
@@ -121,8 +125,12 @@ export async function autoGradeSubmission(
 
   await submissionRepo.markProcessing(prisma, submission.id)
 
+  // Grade on the assignment-owning teacher's own API keys (BYOK); empty → platform key.
+  const owner = await assignmentRepo.offeringTeacherId(prisma, submission.assignmentId)
+  const keys = await resolveTeacherKeys(prisma, owner?.offering?.teacherId)
+
   try {
-    const result = await gradeSubmission({
+    const result = await withAiKeys(keys, () => gradeSubmission({
       perceptionModelId: opts.perceptionModel,
       judgeModelId: opts.judgeModel,
       rubric: opts.rubric,
@@ -132,7 +140,7 @@ export async function autoGradeSubmission(
       videoUrl,
       audioUrl,
       recitedText: submission.recitedText ?? undefined,
-    })
+    }))
 
     const decision = decideReview({
       confidence: result.judge.confidence,

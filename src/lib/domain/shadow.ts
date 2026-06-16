@@ -9,7 +9,10 @@ import type { PrismaClient } from '@prisma/client'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import { presignDownload, storageConfigured } from '@/lib/storage'
+import { withAiKeys } from '@/lib/ai/key-context'
+import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import * as submissionRepo from '@/lib/repo/submissions'
+import * as assignmentRepo from '@/lib/repo/assignments'
 import { isUnavailable } from './grading'
 
 // Score one sentence's audio: weighted accuracy(0.7) + completeness(0.3), 0..100.
@@ -61,6 +64,10 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   const revert = () => submissionRepo.revertToQueue(prisma, submissionId, 'UPLOADED')
 
   await submissionRepo.markProcessing(prisma, submissionId)
+  // Grade on the assignment-owning teacher's own API key (BYOK); empty → platform key.
+  const owner = await assignmentRepo.offeringTeacherId(prisma, submission.assignmentId)
+  const keys = await resolveTeacherKeys(prisma, owner?.offering?.teacherId)
+  await withAiKeys(keys, async () => {
   try {
     const scoreByOrder = new Map<number, number>()
     // Grade in small batches to stay within Worker limits without firing 50 at once.
@@ -108,4 +115,5 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     // Never mark FAILED — the teacher can still review the per-sentence takes.
     await revert()
   }
+  })
 }
