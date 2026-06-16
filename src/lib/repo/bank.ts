@@ -29,6 +29,16 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.chunkSet.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
 
+// Stable `source` keys already present in a school — lets the starter-pack import
+// skip sets it has imported before (idempotent re-import).
+export async function importedSources(prisma: PrismaClient, schoolId: number): Promise<Set<string>> {
+  const rows = await prisma.chunkSet.findMany({
+    where: { schoolId, source: { not: null } },
+    select: { source: true },
+  })
+  return new Set(rows.map((r) => r.source).filter((s): s is string => s !== null))
+}
+
 // Set list for the bank index — name, video presence, chunk count, level/skill
 // for badges, newest first.
 export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {

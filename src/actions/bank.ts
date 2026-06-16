@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { staffContext, staffSchoolContext } from '@/lib/action-context'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
 import { parseChunks } from '@/lib/bank'
+import { starterSets } from '@/lib/curriculum/starter-bank'
 import * as bankRepo from '@/lib/repo/bank'
 import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
@@ -27,6 +28,27 @@ export async function createChunkSet(prevState: unknown, formData: FormData): Pr
   const id = await bankRepo.createWithChunks(cx.prisma, cx.schoolId, parsed.data.name, chunks, metaFrom(parsed.data))
   revalidatePath('/dashboard/bank')
   redirect(`/dashboard/bank/${id}`)
+}
+
+// One-click starter pack: import the curated curriculum seed sets into this
+// school's bank. Idempotent — sets already imported (matched by source) are
+// skipped, so it is safe to click again. Returns how many were newly added.
+export async function importStarterBank(): Promise<{ imported: number; skipped: number; error?: string }> {
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { imported: 0, skipped: 0, error: cx.error }
+  const existing = await bankRepo.importedSources(cx.prisma, cx.schoolId)
+  let imported = 0
+  let skipped = 0
+  for (const set of starterSets()) {
+    if (set.meta.source && existing.has(set.meta.source)) {
+      skipped++
+      continue
+    }
+    await bankRepo.createWithChunks(cx.prisma, cx.schoolId, set.name, set.chunks, set.meta)
+    imported++
+  }
+  revalidatePath('/dashboard/bank')
+  return { imported, skipped }
 }
 
 // Presigned URL for the chunk set's shadowing video; saves the key on the set.

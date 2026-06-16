@@ -11,6 +11,8 @@ export type ModelAudio = 'tts-slow' | 'tts' | 'recorded'
 
 // Localizable scaffolding (target English content stays L1-agnostic).
 export interface Scaffold {
+  // Short human title — used as the bank set name when imported as a starter pack.
+  title: string
   instructions: { en: string; zh?: string; es?: string }
 }
 
@@ -38,6 +40,7 @@ export const SEED_ITEMS: SeedItem[] = [
   // ── Pre-A1 ────────────────────────────────────────────────────────────────
   {
     id: 'en.spk.pron.prea1.letter-sounds-1',
+    title: 'Pre-A1 发音 · 字母音 b / p / m / s / t',
     subject: 'english',
     strand: 'english.speaking.pronunciation',
     itemType: 'pronunciation-drill',
@@ -67,6 +70,7 @@ export const SEED_ITEMS: SeedItem[] = [
   },
   {
     id: 'en.spk.shadow.prea1.greetings',
+    title: 'Pre-A1 跟读 · 问候 Greetings',
     subject: 'english',
     strand: 'english.speaking.shadowing',
     itemType: 'shadowing',
@@ -93,6 +97,7 @@ export const SEED_ITEMS: SeedItem[] = [
   // ── A1 ──────────────────────────────────────────────────────────────────────
   {
     id: 'en.spk.pron.a1.vowel-length-ship-sheep',
+    title: 'A1 发音 · 短/长元音 /ɪ/–/iː/ (ship–sheep)',
     subject: 'english',
     strand: 'english.speaking.pronunciation',
     itemType: 'pronunciation-drill',
@@ -121,6 +126,7 @@ export const SEED_ITEMS: SeedItem[] = [
   },
   {
     id: 'en.spk.shadow.a1.introductions',
+    title: 'A1 跟读 · 自我介绍 Introductions',
     subject: 'english',
     strand: 'english.speaking.shadowing',
     itemType: 'shadowing',
@@ -147,6 +153,7 @@ export const SEED_ITEMS: SeedItem[] = [
   // ── A2 ──────────────────────────────────────────────────────────────────────
   {
     id: 'en.spk.pron.a2.th-fricatives',
+    title: 'A2 发音 · 齿间音 /θ/–/ð/ (think–this)',
     subject: 'english',
     strand: 'english.speaking.pronunciation',
     itemType: 'pronunciation-drill',
@@ -175,6 +182,7 @@ export const SEED_ITEMS: SeedItem[] = [
   },
   {
     id: 'en.spk.pron.a2.final-consonants',
+    title: 'A2 发音 · 词尾辅音与辅音丛',
     subject: 'english',
     strand: 'english.speaking.pronunciation',
     itemType: 'pronunciation-drill',
@@ -202,6 +210,7 @@ export const SEED_ITEMS: SeedItem[] = [
   },
   {
     id: 'en.spk.shadow.a2.directions',
+    title: 'A2 跟读 · 问路指路 Directions',
     subject: 'english',
     strand: 'english.speaking.shadowing',
     itemType: 'shadowing',
