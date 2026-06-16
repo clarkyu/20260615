@@ -21,6 +21,14 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.chunkSet.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
 
+// The set plus its ordered chunks — used when publishing an assignment from a set.
+export function findWithChunksForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.chunkSet.findFirst({
+    where: { id, schoolId: schoolId ?? -1 },
+    include: { chunks: { orderBy: { order: 'asc' } } },
+  })
+}
+
 // Standalone create (not nested in $transaction) so D1 can resolve the new set id
 // for the chunk inserts. Returns the new set id.
 export async function createWithChunks(prisma: PrismaClient, schoolId: number, name: string, chunks: ChunkInput[]): Promise<number> {

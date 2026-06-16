@@ -1,30 +1,19 @@
 'use server'
 
-import type { PrismaClient } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
-import { getDb } from '@/lib/db'
-import { requireStaff } from '@/lib/auth'
-import { getT } from '@/lib/i18n-server'
+import { staffContext } from '@/lib/staff-action'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
+import * as submissionRepo from '@/lib/repo/submissions'
+import * as assignmentRepo from '@/lib/repo/assignments'
 import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
 const MAX_SCORE = DEFAULT_MAX_SCORE
 
-// Ensures the submission belongs to a school the staff member manages.
-async function loadSubmissionForStaff(prisma: PrismaClient, submissionId: number, schoolId: number | null | undefined) {
-  return prisma.submission.findFirst({
-    where: { id: submissionId, assignment: { offering: { schoolId: schoolId ?? -1 } } },
-    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
-  })
-}
-
 export async function runGrading(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  const prisma = await getDb()
+  const { user, prisma, t } = await staffContext()
   const parsed = parseForm(
     z.object({
       submissionId: reqId,
@@ -38,16 +27,11 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   const { submissionId, perceptionModel, judgeModel } = parsed.data
   const rubric = parsed.data.rubric || '按完整度、准确度、发音、流利度综合评分。'
 
-  const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }
   if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
-  const res = await autoGradeSubmission(prisma, submission, {
-    perceptionModel,
-    judgeModel,
-    rubric,
-    graderUserId: user.userId,
-  })
+  const res = await autoGradeSubmission(prisma, submission, { perceptionModel, judgeModel, rubric, graderUserId: user.userId })
   if (!res.ok) return { error: res.error || t('err.gradeFail') }
 
   revalidatePath(`/dashboard/assignments/${submission.assignmentId}`)
@@ -56,11 +40,9 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
 
 // Presigned playback URL (video or audio) so the teacher can review before grading.
 export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' | 'audio' | 'image' = 'video'): Promise<{ url?: string; error?: string }> {
-  const user = await requireStaff()
-  const { t } = await getT()
+  const { user, prisma, t } = await staffContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const prisma = await getDb()
-  const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
   const key = kind === 'audio' ? submission?.audioKey : kind === 'image' ? submission?.imageKey : submission?.videoKey
   if (!key) return { error: t('err.noVideo') }
   try {
@@ -72,13 +54,11 @@ export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' 
 
 // Per-sentence shadowing takes for teacher review (ordered, presigned for playback).
 export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?: { order: number; url: string; score: number | null; spokenText: string | null }[]; error?: string }> {
-  const user = await requireStaff()
-  const { t } = await getT()
+  const { user, prisma, t } = await staffContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const prisma = await getDb()
-  const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }
-  const takes = await prisma.shadowTake.findMany({ where: { submissionId }, orderBy: { order: 'asc' }, select: { order: true, audioKey: true, aiScore: true, spokenText: true } })
+  const takes = await submissionRepo.listShadowTakes(prisma, submissionId)
   const out: { order: number; url: string; score: number | null; spokenText: string | null }[] = []
   for (const tk of takes) {
     try {
@@ -92,9 +72,7 @@ export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?:
 
 // Teacher manual override — the AI score is advisory, the teacher's is final.
 export async function overrideScore(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  const prisma = await getDb()
+  const { user, prisma, t } = await staffContext()
   const parsed = parseForm(
     z.object({
       submissionId: reqId,
@@ -106,20 +84,14 @@ export async function overrideScore(prevState: unknown, formData: FormData): Pro
   if (!parsed.ok) return { error: t(parsed.error) }
   const { submissionId, score, feedback } = parsed.data
 
-  const submission = await loadSubmissionForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
   if (!submission) return { error: t('err.subNoAccess') }
 
-  await prisma.submission.update({
-    where: { id: submission.id },
-    data: {
-      teacherScore: score,
-      finalScore: score,
-      feedback: feedback || submission.feedback,
-      status: 'GRADED',
-      needsReview: false,
-      gradedById: user.userId,
-      gradedAt: new Date(),
-    },
+  await submissionRepo.applyTeacherOverride(prisma, submission.id, {
+    teacherScore: score,
+    finalScore: score,
+    feedback: feedback || submission.feedback,
+    gradedById: user.userId,
   })
   revalidatePath(`/dashboard/assignments/${submission.assignmentId}`)
   return { success: true }
@@ -129,36 +101,15 @@ export async function overrideScore(prevState: unknown, formData: FormData): Pro
 // still-pending-review submission in an assignment that already has an AI score.
 // Rows without an AI score still need a human, so they're left untouched.
 export async function acceptAiForAssignment(prevState: unknown, formData: FormData): Promise<ActionState & { count?: number }> {
-  const user = await requireStaff()
-  const { t } = await getT()
-  const prisma = await getDb()
+  const { user, prisma, t } = await staffContext()
   const parsed = parseForm(z.object({ assignmentId: reqId }), formData)
   if (!parsed.ok) return { error: t(parsed.error) }
   const assignmentId = parsed.data.assignmentId
 
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, offering: { schoolId: user.schoolId ?? -1 } },
-    select: { id: true },
-  })
+  const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId)
   if (!assignment) return { error: t('err.subNoAccess') }
 
-  // updateMany can't copy aiScore→finalScore, so a scoped raw UPDATE does it.
-  // - COALESCE(teacherScore, aiScore): never clobber a score a teacher already set.
-  // - exclude FLAGGED (anti-cheat) rows: those must stay for manual review.
-  // - bind a JS Date (not CURRENT_TIMESTAMP) so the encoding matches Prisma's DateTime.
-  const now = new Date()
-  const count = await prisma.$executeRaw`
-    UPDATE "Submission"
-       SET "finalScore" = COALESCE("teacherScore", "aiScore"),
-           "needsReview" = 0,
-           "status" = 'GRADED',
-           "gradedById" = ${user.userId},
-           "gradedAt" = ${now}
-     WHERE "assignmentId" = ${assignmentId}
-       AND "needsReview" = 1
-       AND "aiScore" IS NOT NULL
-       AND "status" <> 'FLAGGED'`
-
+  const count = await submissionRepo.acceptAiForAssignment(prisma, assignmentId, user.userId, new Date())
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   return { success: true, count }
 }
