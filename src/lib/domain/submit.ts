@@ -6,7 +6,7 @@ import type { PrismaClient } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
 
-export type AttemptResult = { error: string } | { attempt: number }
+export type AttemptResult = { ok: false; error: string } | { ok: true; attempt: number }
 
 // Confirms the student may submit (class targeted & window open & attempts left);
 // returns the active attempt number, or an i18n error key.
@@ -16,17 +16,17 @@ export async function resolveAttempt(
   classId: number | null,
   assignmentId: number,
 ): Promise<AttemptResult> {
-  if (!classId) return { error: 'err.noClassAssigned' }
+  if (!classId) return { ok: false, error: 'err.noClassAssigned' }
   const assignment = await assignments.findForClass(prisma, assignmentId, classId)
-  if (!assignment) return { error: 'err.assignNotFound' }
+  if (!assignment) return { ok: false, error: 'err.assignNotFound' }
 
   const now = new Date()
-  if (assignment.openAt && now < assignment.openAt) return { error: 'err.notOpen' }
-  if (assignment.dueAt && now > assignment.dueAt) return { error: 'err.closed' }
+  if (assignment.openAt && now < assignment.openAt) return { ok: false, error: 'err.notOpen' }
+  if (assignment.dueAt && now > assignment.dueAt) return { ok: false, error: 'err.closed' }
 
   const used = await submissions.countActiveAttempts(prisma, assignmentId, studentId)
-  if (used >= assignment.maxAttempts) return { error: 'err.attemptsUsed' }
-  return { attempt: used + 1 }
+  if (used >= assignment.maxAttempts) return { ok: false, error: 'err.attemptsUsed' }
+  return { ok: true, attempt: used + 1 }
 }
 
 interface Requirements {

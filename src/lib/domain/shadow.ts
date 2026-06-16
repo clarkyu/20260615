@@ -14,13 +14,14 @@ import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { isUnavailable } from './grading'
+import { unavailable } from '@/lib/ai/errors'
 
 // Score one sentence's audio: weighted accuracy(0.7) + completeness(0.3), 0..100.
 export async function gradeShadowTake(audioUrl: string, sentenceText: string, perceptionModelId: string): Promise<{ score: number; spokenText: string }> {
   const model = getModel(perceptionModelId)
-  if (!model || !model.capabilities.includes('perception')) throw new Error('感知 provider 未实现')
+  if (!model || !model.capabilities.includes('perception')) throw unavailable('感知 provider 未实现')
   const provider = getPerceptionProvider(model.provider)
-  if (!provider) throw new Error('感知 provider 未实现')
+  if (!provider) throw unavailable('感知 provider 未实现')
   const perception = await provider.perceive({ audioUrl, referenceSentences: [{ order: 1, text: sentenceText }], requireEyesClosed: false }, model.id)
   const ps = perception.perSentence[0]
   const accuracy = ps ? Math.max(0, Math.min(1, ps.accuracy)) : 0

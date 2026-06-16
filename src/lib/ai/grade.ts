@@ -1,5 +1,6 @@
 import { getModel } from './registry'
 import { getPerceptionProvider, getJudgeProvider } from './adapters'
+import { unavailable } from './errors'
 import type { JudgeResult, PerceptionResult, ReferenceSentence } from './types'
 
 export interface GradeRequest {
@@ -37,9 +38,9 @@ export async function gradeSubmission(req: GradeRequest): Promise<GradeResult> {
   }
 
   const perceptionProvider = getPerceptionProvider(perceptionModel.provider)
-  if (!perceptionProvider) throw new Error(`感知 provider 未实现: ${perceptionModel.provider}`)
+  if (!perceptionProvider) throw unavailable(`感知 provider 未实现: ${perceptionModel.provider}`)
   const judgeProvider = getJudgeProvider(judgeModel.provider)
-  if (!judgeProvider) throw new Error(`评分 provider 未实现: ${judgeModel.provider}`)
+  if (!judgeProvider) throw unavailable(`评分 provider 未实现: ${judgeModel.provider}`)
 
   const perception = await perceptionProvider.perceive(
     {

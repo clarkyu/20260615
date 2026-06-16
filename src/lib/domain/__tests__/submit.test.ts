@@ -41,25 +41,25 @@ const A = (over: Record<string, unknown> = {}) => ({ id: 1, maxAttempts: 3, open
 
 describe('resolveAttempt', () => {
   it('rejects a student with no class', async () => {
-    expect(await resolveAttempt(fakePrisma(A()), 7, null, 1)).toEqual({ error: 'err.noClassAssigned' })
+    expect(await resolveAttempt(fakePrisma(A()), 7, null, 1)).toEqual({ ok: false, error: 'err.noClassAssigned' })
   })
 
   it('rejects when the assignment is not in the class', async () => {
-    expect(await resolveAttempt(fakePrisma(null), 7, 2, 1)).toEqual({ error: 'err.assignNotFound' })
+    expect(await resolveAttempt(fakePrisma(null), 7, 2, 1)).toEqual({ ok: false, error: 'err.assignNotFound' })
   })
 
   it('rejects before open and after due', async () => {
     const future = new Date(Date.now() + 60_000)
     const past = new Date(Date.now() - 60_000)
-    expect(await resolveAttempt(fakePrisma(A({ openAt: future })), 7, 2, 1)).toEqual({ error: 'err.notOpen' })
-    expect(await resolveAttempt(fakePrisma(A({ dueAt: past })), 7, 2, 1)).toEqual({ error: 'err.closed' })
+    expect(await resolveAttempt(fakePrisma(A({ openAt: future })), 7, 2, 1)).toEqual({ ok: false, error: 'err.notOpen' })
+    expect(await resolveAttempt(fakePrisma(A({ dueAt: past })), 7, 2, 1)).toEqual({ ok: false, error: 'err.closed' })
   })
 
   it('rejects when all attempts are used', async () => {
-    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 2 }), 2), 7, 2, 1)).toEqual({ error: 'err.attemptsUsed' })
+    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 2 }), 2), 7, 2, 1)).toEqual({ ok: false, error: 'err.attemptsUsed' })
   })
 
   it('returns the next attempt number on the happy path', async () => {
-    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 3 }), 1), 7, 2, 1)).toEqual({ attempt: 2 })
+    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 3 }), 1), 7, 2, 1)).toEqual({ ok: true, attempt: 2 })
   })
 })
