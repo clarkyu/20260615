@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
+import * as assignmentRepo from '@/lib/repo/assignments'
 import { GradingClient } from './grading-client'
 
 export default async function AssignmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,17 +19,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, offering: { schoolId: user.schoolId } },
-    include: {
-      _count: { select: { sentences: true } },
-      offering: { include: { course: true, class: { select: { id: true, name: true } } } },
-      submissions: {
-        include: { student: { select: { name: true, studentNo: true } } },
-        orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
-      },
-    },
-  })
+  const assignment = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId)
   if (!assignment) notFound()
 
   const latestByStudent = new Map<number, (typeof assignment.submissions)[number]>()

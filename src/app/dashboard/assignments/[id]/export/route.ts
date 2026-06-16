@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import * as assignmentRepo from '@/lib/repo/assignments'
+import * as classRepo from '@/lib/repo/classes'
+import * as userRepo from '@/lib/repo/users'
+import * as submissionRepo from '@/lib/repo/submissions'
 import { buildScoreWorkbook, type ScoreExportRow } from '@/lib/roster'
 
 const STATUS: Record<string, string> = {
@@ -26,18 +30,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const prisma = await getDb()
-  const assignment = await prisma.assignment.findFirst({ where: { id: assignmentId, offering: { schoolId: user.schoolId } } })
-  const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId } })
+  const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId)
+  const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
   if (!assignment || !cls) return new NextResponse('Not found', { status: 404 })
 
-  const students = await prisma.user.findMany({
-    where: { schoolId: user.schoolId, classId, role: 'STUDENT' },
-    orderBy: { studentNo: 'asc' },
-  })
-  const submissions = await prisma.submission.findMany({
-    where: { assignmentId, studentId: { in: students.map((s) => s.id) } },
-    orderBy: { attempt: 'desc' },
-  })
+  const students = await userRepo.listClassStudents(prisma, user.schoolId, classId)
+  const submissions = await submissionRepo.listForAssignmentStudents(prisma, assignmentId, students.map((s) => s.id))
   const latest = new Map<number, (typeof submissions)[number]>()
   for (const s of submissions) if (!latest.has(s.studentId)) latest.set(s.studentId, s)
 

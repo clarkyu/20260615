@@ -30,6 +30,30 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.assignment.findFirst({ where: { id, ...inSchool(schoolId) } })
 }
 
+// The grading screen: assignment + offering(course/class) + every submission with
+// its student, ordered so the latest attempt per student comes first.
+export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.assignment.findFirst({
+    where: { id, ...inSchool(schoolId) },
+    include: {
+      _count: { select: { sentences: true } },
+      offering: { include: { course: true, class: { select: { id: true, name: true } } } },
+      submissions: {
+        include: { student: { select: { name: true, studentNo: true } } },
+        orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
+      },
+    },
+  })
+}
+
+// The edit screen: assignment + its ordered sentences.
+export function findForStaffWithSentences(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.assignment.findFirst({
+    where: { id, ...inSchool(schoolId) },
+    include: { sentences: { orderBy: { order: 'asc' } } },
+  })
+}
+
 // One create per offering — the bank link (video + chunk-set id) and the read-aloud
 // sentences are resolved by the caller.
 export function create(

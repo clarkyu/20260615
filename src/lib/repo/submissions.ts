@@ -53,6 +53,12 @@ export function acceptAiForAssignment(prisma: PrismaClient, assignmentId: number
        AND "status" <> 'FLAGGED'`
 }
 
+// Submissions for an assignment by a set of students, newest attempt first — the
+// caller keeps the latest per student (score export).
+export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: number, studentIds: number[]) {
+  return prisma.submission.findMany({ where: { assignmentId, studentId: { in: studentIds } }, orderBy: { attempt: 'desc' } })
+}
+
 // Every submission in an offering, ordered so the latest attempt per
 // (student, assignment) comes first — the caller keeps the first of each pair.
 export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number) {
