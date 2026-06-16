@@ -1,7 +1,6 @@
 import type { ChunkInput } from '@/lib/bank'
 import type { ChunkSetMeta } from '@/lib/repo/bank'
 import { SEED_ITEMS } from './seed'
-import { ENGLISH_FLOW } from './english-flow'
 
 // Maps the hand-authored curriculum seed items into ready-to-import bank sets
 // (题库句集). Each seed item becomes one set; every spoken line becomes a chunk
@@ -49,7 +48,10 @@ export function starterSets(): StarterSet[] {
 // meaningEn / exampleEn). `source` keys each set for idempotent re-import. Level
 // is left blank (the source mixes A1–C2 without per-chunk tags).
 const FLOW_BATCH = 50
-export function englishFlowSets(): StarterSet[] {
+// Lazily loads the 210KB dataset only when an import actually runs, so it stays
+// out of the eagerly-evaluated server module graph (and off the cold path).
+export async function englishFlowSets(): Promise<StarterSet[]> {
+  const { ENGLISH_FLOW } = await import('./english-flow')
   const sets: StarterSet[] = []
   for (let start = 0; start < ENGLISH_FLOW.length; start += FLOW_BATCH) {
     const slice = ENGLISH_FLOW.slice(start, start + FLOW_BATCH)

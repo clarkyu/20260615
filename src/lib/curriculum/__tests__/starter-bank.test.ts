@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { starterSets, englishFlowSets } from '../starter-bank'
+import type { StarterSet } from '../starter-bank'
 import { SEED_ITEMS } from '../seed'
 import { ENGLISH_FLOW } from '../english-flow'
 import { strandExists, isCefrBand, DOMAIN_IDS } from '../taxonomy'
@@ -41,7 +42,8 @@ describe('starter bank projection', () => {
 })
 
 describe('English Flow 2000 projection', () => {
-  const sets = englishFlowSets()
+  let sets: StarterSet[]
+  beforeAll(async () => { sets = await englishFlowSets() })
 
   it('batches all 2000 chunks into sets of 50', () => {
     expect(ENGLISH_FLOW.length).toBe(2000)

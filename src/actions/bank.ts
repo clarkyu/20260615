@@ -63,7 +63,7 @@ export async function importEnglishFlow(): Promise<ImportState> {
   if (!isSuper(user)) return { imported: 0, skipped: 0, error: t('err.forbidden') }
   const existing = await bankRepo.globalSources(prisma)
 
-  const res = await importPack(prisma, null, englishFlowSets(), existing)
+  const res = await importPack(prisma, null, await englishFlowSets(), existing)
   revalidatePath('/dashboard/bank')
   return res
 }
