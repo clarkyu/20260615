@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft, AlertTriangle, TrendingUp } from 'lucide-react'
+import { ChevronLeft, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import { createReviewAssignment } from '@/actions/assignments'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -39,7 +41,7 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
     }),
     prisma.assignment.findMany({
       where: { offeringId },
-      select: { id: true, title: true },
+      select: { id: true, title: true, sentences: { select: { order: true, text: true } } },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.submission.findMany({
@@ -78,6 +80,8 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   const summary = offeringSummary(stats, profiles, students.length)
   const weak = weakSentences(submissions)
   const titleById = new Map(assignments.map((a) => [a.id, a.title]))
+  const sentenceText = new Map<string, string>()
+  for (const a of assignments) for (const s of a.sentences) sentenceText.set(`${a.id}:${s.order}`, s.text)
   const sem = offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 
   const tiles = [
@@ -145,18 +149,31 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
           {/* Weakest lines (needs AI perception data) */}
           {weak.length > 0 ? (
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-muted-foreground">{t('insights.weakTitle')}</h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-muted-foreground">{t('insights.weakTitle')}</h2>
+                <form action={createReviewAssignment}>
+                  <input type="hidden" name="offeringId" value={offering.id} />
+                  <Button type="submit" size="sm"><RefreshCw className="h-3.5 w-3.5" />{t('insights.reassign')}</Button>
+                </form>
+              </div>
               <Card>
-                <CardContent className="space-y-2 p-4">
-                  {weak.map((w) => (
-                    <div key={`${w.assignmentId}:${w.order}`} className="flex items-center gap-3 text-sm">
-                      <span className="w-10 shrink-0 text-xs text-muted-foreground tabular-nums">{Math.round(w.avgAccuracy * 100)}%</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full rounded-full bg-[hsl(var(--warning))]" style={{ width: `${Math.round(w.avgAccuracy * 100)}%` }} />
+                <CardContent className="space-y-2.5 p-4">
+                  {weak.map((w) => {
+                    const text = sentenceText.get(`${w.assignmentId}:${w.order}`)
+                    return (
+                      <div key={`${w.assignmentId}:${w.order}`} className="text-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="w-10 shrink-0 text-xs font-medium text-[hsl(var(--warning))] tabular-nums">{Math.round(w.avgAccuracy * 100)}%</span>
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                            <div className="h-full rounded-full bg-[hsl(var(--warning))]" style={{ width: `${Math.round(w.avgAccuracy * 100)}%` }} />
+                          </div>
+                        </div>
+                        <div className="mt-0.5 pl-[3.25rem] text-xs text-muted-foreground">
+                          {text ? <span className="text-foreground">{text}</span> : `${titleById.get(w.assignmentId)} · ${t('insights.lineN', { n: w.order })}`}
+                        </div>
                       </div>
-                      <span className="w-28 shrink-0 truncate text-right text-xs text-muted-foreground">{titleById.get(w.assignmentId)} · {t('insights.lineN', { n: w.order })}</span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </CardContent>
               </Card>
             </section>
