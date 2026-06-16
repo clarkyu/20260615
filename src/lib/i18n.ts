@@ -11,6 +11,7 @@ const zh: Dict = {
   // common
   signIn: '登录',
   signOut: '退出',
+  'theme.toggle': '切换深色 / 浅色',
   register: '注册',
   back: '返回',
   submit: '提交',
@@ -564,6 +565,7 @@ const en: Dict = {
   langName: 'English',
   signIn: 'Sign in',
   signOut: 'Sign out',
+  'theme.toggle': 'Toggle dark / light',
   register: 'Register',
   back: 'Back',
   submit: 'Submit',

@@ -7,7 +7,7 @@ import { I18nProvider } from '@/components/i18n-provider'
 import { AppHeader } from '@/components/app-header'
 import { BottomNav } from '@/components/bottom-nav'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 const APP_NAME = process.env.APP_NAME || '你好！作业 Hi, Homework'
 
@@ -19,20 +19,25 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#4f46e5',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#4f46e5' },
+    { media: '(prefers-color-scheme: dark)', color: '#0d1019' },
+  ],
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
 }
+
+// Set the theme class before paint so there's no flash of the wrong theme.
+const themeInit = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]+)/);var t=m?m[1]:'system';if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}})()`
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [locale, user] = await Promise.all([getLocale(), getCurrentUser()])
 
   return (
-    <html lang={locale === 'zh' ? 'zh-CN' : 'en'}>
-      <body className={inter.className}>
+    <html lang={locale === 'zh' ? 'zh-CN' : 'en'} className={inter.variable} suppressHydrationWarning>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <I18nProvider locale={locale}>
           <AppHeader user={user} />
           <main className="mx-auto w-full max-w-xl px-4 pt-5" style={{ paddingBottom: user ? '6.5rem' : '2rem' }}>
