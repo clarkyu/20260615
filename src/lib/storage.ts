@@ -55,6 +55,11 @@ export function practiceMediaKey(assignmentId: number, studentId: number, kind: 
   return `practice/${assignmentId}/${studentId}/${Date.now()}-${kind}.${ext}`
 }
 
+// The single shadowing video for an item-bank chunk set.
+export function chunkSetVideoKey(chunkSetId: number, ext: string): string {
+  return `bank/${chunkSetId}/shadow-${Date.now()}.${ext}`
+}
+
 export function referenceAudioKey(assignmentId: number, name: string): string {
   const safe = name.replace(/[^a-zA-Z0-9._-]/g, '_')
   return `reference/${assignmentId}/${Date.now()}-${safe}`

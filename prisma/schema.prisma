@@ -33,6 +33,32 @@ model School {
   offerings   CourseOffering[]
   departments Department[]
   majors      Major[]
+  chunkSets   ChunkSet[]
+}
+
+// 题库：一套跟读句集 = 一个整套跟读视频 + 若干双语句子，可复用来发布作业。
+model ChunkSet {
+  id             Int      @id @default(autoincrement())
+  schoolId       Int
+  name           String
+  shadowVideoKey String?
+  createdAt      DateTime @default(now())
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  chunks         Chunk[]
+
+  @@index([schoolId])
+}
+
+// 句子（chunk）：英文 + 中文，按顺序属于某句集。
+model Chunk {
+  id         Int      @id @default(autoincrement())
+  chunkSetId Int
+  order      Int
+  english    String
+  chinese    String?
+  chunkSet   ChunkSet @relation(fields: [chunkSetId], references: [id], onDelete: Cascade)
+
+  @@index([chunkSetId])
 }
 
 // 院系 / 部门：既是学生的学院院系，也是教师所属部门。
@@ -162,6 +188,7 @@ model Assignment {
   offeringId   Int
   title        String
   category     String?
+  shadowVideoKey String?
   monthLabel   String?
   instructions String?
   rubric       String?
@@ -214,6 +241,7 @@ model Sentence {
   assignmentId      Int
   order             Int
   text              String
+  translation       String?
   referenceAudioKey String?
   assignment        Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 

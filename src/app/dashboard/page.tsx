@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog } from 'lucide-react'
+import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library } from 'lucide-react'
 import type { SubmissionStatus } from '@prisma/client'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
@@ -138,7 +138,7 @@ export default async function DashboardPage() {
       </Link>
 
       {/* Secondary actions */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <Link href="/dashboard/teaching">
           <Card className="tap h-full hover:shadow-card">
             <CardContent className="flex flex-col gap-1.5 p-4">
@@ -152,6 +152,14 @@ export default async function DashboardPage() {
             <CardContent className="flex flex-col gap-1.5 p-4">
               <Users className="h-5 w-5 text-accent-foreground" />
               <p className="text-sm font-semibold">{t('dash.rosterTitle')}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/bank">
+          <Card className="tap h-full hover:shadow-card">
+            <CardContent className="flex flex-col gap-1.5 p-4">
+              <Library className="h-5 w-5 text-accent-foreground" />
+              <p className="text-sm font-semibold">{t('bank.title')}</p>
             </CardContent>
           </Card>
         </Link>
