@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as offeringRepo from '@/lib/repo/offerings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AssignmentForm } from '@/components/assignment-form'
@@ -14,11 +15,7 @@ export default async function NewAssignmentDirectPage() {
   if (!user.schoolId) redirect('/dashboard')
 
   // All of the teacher's offerings — the assignment can be published to any of them.
-  const offerings = await prisma.courseOffering.findMany({
-    where: { schoolId: user.schoolId, ...(user.role === 'TEACHER' ? { teacherId: user.userId } : {}) },
-    orderBy: [{ year: 'desc' }, { semester: 'desc' }, { id: 'desc' }],
-    include: { course: { select: { name: true } }, class: { select: { name: true } } },
-  })
+  const offerings = await offeringRepo.listForStaff(prisma, user.schoolId, user.userId, user.role)
 
   if (offerings.length === 0) {
     return (

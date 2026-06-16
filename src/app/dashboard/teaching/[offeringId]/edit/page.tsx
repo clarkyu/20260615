@@ -1,6 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import * as offeringRepo from '@/lib/repo/offerings'
+import * as classRepo from '@/lib/repo/classes'
 import { OfferingForm, type OfferingInitial } from '../../offering-form'
 
 export default async function EditOfferingPage({ params }: { params: Promise<{ offeringId: string }> }) {
@@ -12,14 +14,10 @@ export default async function EditOfferingPage({ params }: { params: Promise<{ o
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const o = await prisma.courseOffering.findFirst({ where: { id: offeringId, schoolId: user.schoolId }, include: { course: true } })
+  const o = await offeringRepo.findForSchoolWithCourse(prisma, offeringId, user.schoolId)
   if (!o) notFound()
 
-  const classes = await prisma.classGroup.findMany({
-    where: { schoolId: user.schoolId },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-  })
+  const classes = await classRepo.listForSchool(prisma, user.schoolId)
 
   const initial: OfferingInitial = {
     id: o.id,

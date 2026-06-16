@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as classRepo from '@/lib/repo/classes'
 import { OfferingForm } from '../offering-form'
 
 export default async function NewOfferingPage() {
@@ -10,11 +11,7 @@ export default async function NewOfferingPage() {
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const classes = await prisma.classGroup.findMany({
-    where: { schoolId: user.schoolId },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-  })
+  const classes = await classRepo.listForSchool(prisma, user.schoolId)
 
   if (classes.length === 0) {
     return (

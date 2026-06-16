@@ -4,6 +4,7 @@ import { Plus, GraduationCap, ClipboardPen } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as offeringRepo from '@/lib/repo/offerings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { TeachingList } from './teaching-list'
@@ -14,11 +15,7 @@ export default async function TeachingPage() {
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const offerings = await prisma.courseOffering.findMany({
-    where: { schoolId: user.schoolId, ...(user.role === 'TEACHER' ? { teacherId: user.userId } : {}) },
-    orderBy: [{ year: 'desc' }, { semester: 'desc' }, { id: 'desc' }],
-    include: { course: true, class: { select: { name: true } }, _count: { select: { assignments: true } } },
-  })
+  const offerings = await offeringRepo.listForStaffWithCounts(prisma, user.schoolId, user.userId, user.role)
 
   return (
     <div className="space-y-4 py-2">

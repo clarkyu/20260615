@@ -4,6 +4,7 @@ import { Plus, Pencil, ChevronRight, ChevronLeft, ClipboardList, TrendingUp } fr
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as offeringRepo from '@/lib/repo/offerings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,17 +19,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const offering = await prisma.courseOffering.findFirst({
-    where: { id: offeringId, schoolId: user.schoolId },
-    include: {
-      course: true,
-      class: { select: { name: true } },
-      assignments: {
-        orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { sentences: true, submissions: true } } },
-      },
-    },
-  })
+  const offering = await offeringRepo.findDetailForSchool(prisma, offeringId, user.schoolId)
   if (!offering) notFound()
   const sem = offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 

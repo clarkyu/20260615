@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import * as offeringRepo from '@/lib/repo/offerings'
 import { AssignmentForm } from '@/components/assignment-form'
 
 export default async function NewAssignmentPage({ params }: { params: Promise<{ offeringId: string }> }) {
@@ -12,21 +13,12 @@ export default async function NewAssignmentPage({ params }: { params: Promise<{ 
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const offering = await prisma.courseOffering.findFirst({ where: { id: offeringId, schoolId: user.schoolId } })
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId)
   if (!offering) notFound()
 
   // Sibling offerings = the same course taught to other classes in the same term.
   // The teacher can tick several to publish the assignment to all at once.
-  const siblings = await prisma.courseOffering.findMany({
-    where: {
-      schoolId: user.schoolId,
-      courseId: offering.courseId,
-      year: offering.year,
-      semester: offering.semester,
-      ...(user.role === 'TEACHER' ? { teacherId: user.userId } : {}),
-    },
-    include: { class: { select: { name: true } } },
-  })
+  const siblings = await offeringRepo.listSiblingsForStaff(prisma, user.schoolId, offering, user.userId, user.role)
   const targets = siblings
     .map((o) => ({ offeringId: o.id, label: o.class.name }))
     .sort((a, b) => a.label.localeCompare(b.label))
