@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, X, Sparkles } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, getShadowTakeUrls } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -52,6 +52,7 @@ export function GradeFocus({
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [takes, setTakes] = useState<{ order: number; url: string }[]>([])
   const [score, setScore] = useState('')
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
@@ -66,11 +67,13 @@ export function GradeFocus({
     setVideoUrl(null)
     setAudioUrl(null)
     setImageUrl(null)
+    setTakes([])
     setError(null)
     let active = true
     if (cur.hasVideo) getSubmissionMediaUrl(cur.id, 'video').then((r) => { if (active && r.url) setVideoUrl(r.url) })
     if (cur.hasAudio) getSubmissionMediaUrl(cur.id, 'audio').then((r) => { if (active && r.url) setAudioUrl(r.url) })
     if (cur.hasImage) getSubmissionMediaUrl(cur.id, 'image').then((r) => { if (active && r.url) setImageUrl(r.url) })
+    getShadowTakeUrls(cur.id).then((r) => { if (active && r.takes && r.takes.length) setTakes(r.takes) })
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId])
@@ -146,7 +149,18 @@ export function GradeFocus({
             ? <img src={imageUrl} alt="" className="w-full rounded-2xl bg-secondary object-contain" />
             : <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('loading')}</div>
         ) : null}
-        {!cur.hasVideo && !cur.hasAudio && !cur.hasImage ? (
+        {takes.length > 0 ? (
+          <div className="space-y-1.5 rounded-xl border border-border/70 p-2.5">
+            <div className="text-xs font-medium text-muted-foreground">{t('grade.shadowTakes')}（{takes.length}）</div>
+            {takes.map((tk) => (
+              <div key={tk.order} className="flex items-center gap-2">
+                <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{tk.order}</span>
+                <audio src={tk.url} controls className="h-8 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {!cur.hasVideo && !cur.hasAudio && !cur.hasImage && takes.length === 0 ? (
           <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('grade.noSub')}</div>
         ) : null}
 
