@@ -21,6 +21,23 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
   return prisma.chunkSet.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
 
+// Set list for the bank index — name, video presence, chunk count, newest first.
+export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+  return prisma.chunkSet.findMany({
+    where: { schoolId: schoolId ?? -1 },
+    select: { id: true, name: true, shadowVideoKey: true, _count: { select: { chunks: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+// A set's header summary (no chunk rows) — for the publish-from-set screen.
+export function findSummaryForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.chunkSet.findFirst({
+    where: { id, schoolId: schoolId ?? -1 },
+    select: { id: true, name: true, shadowVideoKey: true, _count: { select: { chunks: true } } },
+  })
+}
+
 // The set plus its ordered chunks — used when publishing an assignment from a set.
 export function findWithChunksForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
   return prisma.chunkSet.findFirst({

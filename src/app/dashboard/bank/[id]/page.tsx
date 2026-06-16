@@ -4,6 +4,7 @@ import { ChevronLeft, ClipboardPen } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as bankRepo from '@/lib/repo/bank'
 import { serializeChunks } from '@/lib/bank'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,10 +22,7 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const set = await prisma.chunkSet.findFirst({
-    where: { id: setId, schoolId: user.schoolId },
-    include: { chunks: { orderBy: { order: 'asc' } } },
-  })
+  const set = await bankRepo.findWithChunksForSchool(prisma, setId, user.schoolId)
   if (!set) notFound()
 
   return (
