@@ -19,7 +19,7 @@
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "recitations"
+      "bucket_name": "hihomework"
     }
   ],
   "vars": {
