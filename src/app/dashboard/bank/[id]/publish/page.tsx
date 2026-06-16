@@ -20,7 +20,7 @@ export default async function PublishFromSetPage({ params }: { params: Promise<{
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const set = await bankRepo.findSummaryForSchool(prisma, setId, user.schoolId)
+  const set = await bankRepo.findSummaryVisible(prisma, setId, user.schoolId)
   if (!set) notFound()
 
   const offerings = await offeringRepo.listForStaff(prisma, user.schoolId, user.userId, user.role)

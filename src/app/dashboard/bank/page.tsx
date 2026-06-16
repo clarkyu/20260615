@@ -16,11 +16,13 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
-  if (!user.schoolId) redirect('/dashboard')
+  const isSuperAdmin = user.role === 'SUPER_ADMIN'
+  // A super-admin curates the global pool and may have no school of their own.
+  if (!user.schoolId && !isSuperAdmin) redirect('/dashboard')
 
   const { cefr, strand, domain } = await searchParams
   const filtered = Boolean(cefr || strand || domain)
-  const sets = await bankRepo.listForSchool(prisma, user.schoolId, { cefr, strand, domain })
+  const sets = await bankRepo.listVisible(prisma, user.schoolId, { cefr, strand, domain })
 
   return (
     <div className="space-y-4 py-2">
@@ -33,8 +35,8 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
       </div>
 
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-        <CreateSetForm />
-        <ImportStarter />
+        <CreateSetForm canPublishGlobal={isSuperAdmin} />
+        <ImportStarter toGlobal={isSuperAdmin} />
       </div>
 
       <BankFilters cefr={cefr} strand={strand} domain={domain} />
@@ -47,7 +49,10 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
             <Card className="tap hover:shadow-card">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold leading-snug">{s.name}</p>
+                  <p className="flex items-center gap-1.5 truncate font-semibold leading-snug">
+                    {s.schoolId === null ? <Badge tone="success">{t('bank.official')}</Badge> : null}
+                    {s.name}
+                  </p>
                   <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><ListChecks className="h-3.5 w-3.5" />{s._count.chunks} {t('bank.chunkUnit')}</span>
                     <span className={'inline-flex items-center gap-1 ' + (s.shadowVideoKey ? 'text-success' : '')}>

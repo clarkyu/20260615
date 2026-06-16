@@ -7,9 +7,10 @@ import { importStarterBank } from '@/actions/bank'
 import { useT } from '@/components/i18n-provider'
 import { Button } from '@/components/ui/button'
 
-// One-click import of the curated curriculum starter pack into this school's bank.
-// Idempotent on the server, so the button stays available even after a first run.
-export function ImportStarter() {
+// One-click import of the curated curriculum starter pack. For a super-admin it
+// imports into the platform-global pool (toGlobal); for a teacher, into their own
+// school. Idempotent on the server, so the button stays available after a run.
+export function ImportStarter({ toGlobal = false }: { toGlobal?: boolean }) {
   const t = useT()
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -32,7 +33,7 @@ export function ImportStarter() {
       <Button variant="outline" size="sm" onClick={run} disabled={pending}>
         <Sparkles className="h-4 w-4" />{pending ? t('bank.importing') : t('bank.importStarter')}
       </Button>
-      <p className="text-xs text-muted-foreground">{msg ?? t('bank.starterHint')}</p>
+      <p className="text-xs text-muted-foreground">{msg ?? t(toGlobal ? 'bank.starterHintGlobal' : 'bank.starterHint')}</p>
     </div>
   )
 }
