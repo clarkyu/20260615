@@ -6,8 +6,8 @@ import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
-import { autoGradeById, hasAntiCheatViolation } from '@/lib/domain/grading'
-import { gradeShadowSubmission } from '@/lib/domain/shadow'
+import { hasAntiCheatViolation } from '@/lib/domain/grading'
+import { enqueueGrading, drainGradingJobs } from '@/lib/domain/jobs'
 import { runAfterResponse } from '@/lib/cf'
 
 type MediaKind = 'video' | 'audio' | 'image'
@@ -123,14 +123,18 @@ export async function finishSubmission(assignmentId: number) {
     return { success: true }
   }
 
-  // AI-first: try to grade right away in the background so the teacher only sees
-  // exceptions. Degrades safely — if the model isn't configured, it stays in the
-  // queue exactly as before. The student isn't blocked on the AI.
-  const sid = submission.id
-  await runAfterResponse(async () => {
-    const bg = await getDb()
-    await autoGradeById(bg, sid)
-  })
+  // AI-first, durably: persist a grading job up front, then kick a background
+  // drain so the teacher usually only sees exceptions. If the kick is lost (worker
+  // eviction) the job is still PENDING and a later drain — the next submission or
+  // the teacher dashboard self-heal — picks it up. Text/handwriting-only work has
+  // no media to AI-grade, so it goes straight to the teacher queue as before.
+  if (submission.videoKey || submission.audioKey) {
+    await enqueueGrading(prisma, submission.id, 'submission')
+    await runAfterResponse(async () => {
+      const bg = await getDb()
+      await drainGradingJobs(bg)
+    })
+  }
 
   revalidatePath('/student')
   return { success: true }
@@ -198,16 +202,16 @@ export async function finishShadowing(assignmentId: number) {
   const sentenceCount = await prisma.sentence.count({ where: { assignmentId } })
   if (sentenceCount === 0 || submission._count.shadowTakes < sentenceCount) return { error: t('err.shadowIncomplete') }
 
-  // Idempotent flip; only the call that submits schedules per-sentence grading.
+  // Idempotent flip; only the call that submits enqueues per-sentence grading.
   const flipped = await prisma.submission.updateMany({
     where: { id: submission.id, status: 'DRAFT' },
     data: { status: 'UPLOADED', needsReview: true },
   })
   if (flipped.count > 0) {
-    const sid = submission.id
+    await enqueueGrading(prisma, submission.id, 'shadow')
     await runAfterResponse(async () => {
       const bg = await getDb()
-      await gradeShadowSubmission(bg, sid)
+      await drainGradingJobs(bg)
     })
   }
   revalidatePath('/student')

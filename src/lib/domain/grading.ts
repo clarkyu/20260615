@@ -175,17 +175,18 @@ export async function autoGradeSubmission(
 }
 
 // Loads a submission and auto-grades it with the assignment's configured (or
-// default) models. Used by the auto-grade-on-submit hook. No-op when there's no
-// gradable media or no reference sentences (those stay in the teacher queue).
-export async function autoGradeById(prisma: PrismaClient, submissionId: number): Promise<void> {
+// default) models. Used by the durable grading job. Returns null when there's
+// nothing to grade (no media / no reference sentences) so the job layer can
+// settle it instead of retrying forever; otherwise the AutoGradeResult.
+export async function autoGradeById(prisma: PrismaClient, submissionId: number): Promise<AutoGradeResult | null> {
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
     include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
   })
-  if (!submission) return
-  if (!submission.videoKey && !submission.audioKey) return
-  if (submission.assignment.sentences.length === 0) return
-  await autoGradeSubmission(prisma, submission, {
+  if (!submission) return null
+  if (!submission.videoKey && !submission.audioKey) return null
+  if (submission.assignment.sentences.length === 0) return null
+  return autoGradeSubmission(prisma, submission, {
     perceptionModel: submission.assignment.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
     judgeModel: submission.assignment.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
     rubric: submission.assignment.rubric || DEFAULT_RUBRIC,
