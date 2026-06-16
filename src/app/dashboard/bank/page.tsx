@@ -5,8 +5,11 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
+import { CEFR_LEVELS, STRANDS } from '@/lib/curriculum/taxonomy'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { CreateSetForm } from './create-set-form'
+import { ImportStarter } from './import-starter'
 
 export default async function BankPage() {
   const user = await requireStaff()
@@ -26,7 +29,10 @@ export default async function BankPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t('bank.desc')}</p>
       </div>
 
-      <CreateSetForm />
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <CreateSetForm />
+        <ImportStarter />
+      </div>
 
       {sets.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">{t('bank.empty')}</CardContent></Card>
@@ -43,6 +49,12 @@ export default async function BankPage() {
                       <Video className="h-3.5 w-3.5" />{s.shadowVideoKey ? t('bank.hasVideo') : t('bank.noVideo')}
                     </span>
                   </p>
+                  {s.cefr || s.strand ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {s.cefr ? <Badge tone="primary">{CEFR_LEVELS.find((l) => l.band === s.cefr)?.label ?? s.cefr}</Badge> : null}
+                      {s.strand ? <Badge>{STRANDS.find((x) => x.id === s.strand)?.label ?? s.strand}</Badge> : null}
+                    </div>
+                  ) : null}
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
               </CardContent>
