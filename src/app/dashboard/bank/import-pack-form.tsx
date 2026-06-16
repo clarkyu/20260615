@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { PackagePlus } from 'lucide-react'
 import { importPackAction } from '@/actions/bank'
 import { useT } from '@/components/i18n-provider'
@@ -11,13 +11,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { BankMetaFields } from './bank-meta-fields'
+import { useChunkedImport } from './use-chunked-import'
 
 // Super-admin "build a pack": paste many three-part chunks, name + classify it,
-// auto-split into sets of N, import as global official — no per-pack code.
+// auto-split into sets of N, import as global official — no per-pack code. The
+// import is bounded + resumable: the form's data is re-submitted until done.
 export function ImportPackForm() {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const [state, action, pending] = useActionState(importPackAction, null)
+  const { run, pending, msg } = useChunkedImport()
+
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    run(() => importPackAction(null, fd))
+  }
 
   if (!open) {
     return (
@@ -30,7 +38,7 @@ export function ImportPackForm() {
   return (
     <Card>
       <CardContent className="p-4">
-        <form action={action} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-3">
           <p className="text-xs text-muted-foreground">{t('pack.hint')}</p>
           <div className="grid grid-cols-[1fr_auto] gap-3">
             <div className="space-y-1.5">
@@ -48,10 +56,7 @@ export function ImportPackForm() {
             <Textarea id="pack-chunks" name="chunks" rows={12} required />
           </div>
           <BankMetaFields />
-          {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-          {state?.imported != null ? (
-            <FormMessage tone="success">{t('bank.imported').replace('{n}', String(state.imported)).replace('{s}', String(state.skipped ?? 0))}</FormMessage>
-          ) : null}
+          {msg ? <FormMessage>{msg}</FormMessage> : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>{pending ? t('bank.importing') : t('pack.import')}</Button>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('stu.cancelClass')}</Button>
