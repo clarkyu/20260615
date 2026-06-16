@@ -23,7 +23,7 @@ export async function getUploadUrl(assignmentId: number, kind: MediaKind, conten
   if (!storageConfigured()) return { error: t('err.storageNot') }
 
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: t(resolved.error) }
+  if (!resolved.ok) return { error: t(resolved.error) }
 
   const key = submissionMediaKey(assignmentId, user.userId, resolved.attempt, kind, ext || 'webm')
   const submission = await submissionRepo.upsertDraftWithMedia(prisma, assignmentId, user.userId, resolved.attempt, keyFieldFor(kind, key))
@@ -57,7 +57,7 @@ export async function finishSubmission(assignmentId: number) {
   const { user, prisma, t } = await studentContext()
 
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: t(resolved.error) }
+  if (!resolved.ok) return { error: t(resolved.error) }
   const submission = await submissionRepo.findOwnAttempt(prisma, assignmentId, user.userId, resolved.attempt)
   if (!submission) return { error: t('err.subNotFound') }
 
@@ -104,7 +104,7 @@ export async function getShadowTakeUploadUrl(assignmentId: number, order: number
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: t(resolved.error) }
+  if (!resolved.ok) return { error: t(resolved.error) }
 
   const key = shadowTakeKey(assignmentId, user.userId, resolved.attempt, order, ext || 'webm')
   const submission = await submissionRepo.upsertDraft(prisma, assignmentId, user.userId, resolved.attempt)
@@ -121,7 +121,7 @@ export async function getShadowTakeUploadUrl(assignmentId: number, order: number
 export async function finishShadowing(assignmentId: number) {
   const { user, prisma, t } = await studentContext()
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: t(resolved.error) }
+  if (!resolved.ok) return { error: t(resolved.error) }
   const submission = await submissionRepo.findOwnAttemptWithTakeCount(prisma, assignmentId, user.userId, resolved.attempt)
   if (!submission) return { error: t('err.subNotFound') }
   const sentenceCount = await assignmentRepo.countSentences(prisma, assignmentId)
@@ -143,7 +143,7 @@ export async function submitRecitedText(assignmentId: number, text: string) {
   if (trimmed.length > 20000) return { error: t('err.textTooLong') }
 
   const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
-  if ('error' in resolved) return { error: t(resolved.error) }
+  if (!resolved.ok) return { error: t(resolved.error) }
 
   await submissionRepo.upsertRecitedText(prisma, assignmentId, user.userId, resolved.attempt, trimmed)
   revalidatePath('/student')

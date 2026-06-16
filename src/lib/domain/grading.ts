@@ -14,22 +14,15 @@ import { presignDownload, storageConfigured } from '@/lib/storage'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import { isUnavailable } from '@/lib/ai/errors'
 
 export const DEFAULT_MAX_SCORE = 100
 
 export const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综合评分。'
 
-// True when a grading failure is "the model isn't wired up" (no API key, provider
-// not implemented) rather than a genuine fault — so callers can keep the work in
-// the teacher queue and show a friendly "AI 点评准备中" instead of an error.
-//
-// Matches ONLY our own precise sentinels ("XXX_API_KEY 未配置", "… provider 未实现")
-// — deliberately NOT loose words like "provider"/"api key", which appear in real
-// upstream error bodies (e.g. a 401 "Incorrect API key provided") that we must
-// surface as genuine failures rather than silently bury in the queue.
-export function isUnavailable(message: string): boolean {
-  return /未配置|未实现/.test(message)
-}
+// "AI not wired up" detection lives in @/lib/ai/errors; re-exported so existing
+// importers (practice / shadow / authoring) keep importing it from here.
+export { isUnavailable }
 
 // Above this AI self-confidence — and with no anti-cheat flags — a submission can
 // skip the teacher queue. This is the dial behind "AI-first grading, teacher by
