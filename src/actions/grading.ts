@@ -115,16 +115,21 @@ export async function acceptAiForAssignment(prevState: unknown, formData: FormDa
   if (!assignment) return { error: t('err.subNoAccess') }
 
   // updateMany can't copy aiScore→finalScore, so a scoped raw UPDATE does it.
+  // - COALESCE(teacherScore, aiScore): never clobber a score a teacher already set.
+  // - exclude FLAGGED (anti-cheat) rows: those must stay for manual review.
+  // - bind a JS Date (not CURRENT_TIMESTAMP) so the encoding matches Prisma's DateTime.
+  const now = new Date()
   const count = await prisma.$executeRaw`
     UPDATE "Submission"
-       SET "finalScore" = "aiScore",
+       SET "finalScore" = COALESCE("teacherScore", "aiScore"),
            "needsReview" = 0,
            "status" = 'GRADED',
            "gradedById" = ${user.userId},
-           "gradedAt" = CURRENT_TIMESTAMP
+           "gradedAt" = ${now}
      WHERE "assignmentId" = ${assignmentId}
        AND "needsReview" = 1
-       AND "aiScore" IS NOT NULL`
+       AND "aiScore" IS NOT NULL
+       AND "status" <> 'FLAGGED'`
 
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   return { success: true, count }

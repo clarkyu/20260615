@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
+import { countViolations } from '@/lib/domain/grading'
 import { GradingClient } from './grading-client'
 
 export default async function AssignmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,7 +50,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
     hasAudio: Boolean(s.audioKey),
     hasImage: Boolean(s.imageKey),
     recitedText: s.recitedText ?? '',
-    violations: s.violations ? (JSON.parse(s.violations) as unknown[]).length : 0,
+    violations: countViolations(s.violations),
   }))
 
   const sem = assignment.offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')

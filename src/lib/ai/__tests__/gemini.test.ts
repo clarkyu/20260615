@@ -72,6 +72,13 @@ describe('normalizeJudge', () => {
     expect(out.feedback).toBe('')
     expect(out.breakdown).toEqual({})
   })
+
+  it('parses and clamps confidence to [0,1], undefined when absent', () => {
+    expect(normalizeJudge({ score: 80, feedback: 'x', confidence: 0.7 }, 100).confidence).toBe(0.7)
+    expect(normalizeJudge({ score: 80, feedback: 'x', confidence: 1.5 }, 100).confidence).toBe(1)
+    expect(normalizeJudge({ score: 80, feedback: 'x', confidence: -2 }, 100).confidence).toBe(0)
+    expect(normalizeJudge({ score: 80, feedback: 'x' }, 100).confidence).toBeUndefined()
+  })
 })
 
 describe('normalizeAuthorDraft', () => {

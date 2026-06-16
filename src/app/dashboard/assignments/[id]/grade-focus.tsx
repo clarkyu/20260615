@@ -75,6 +75,13 @@ export function GradeFocus({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId])
 
+  // Close on Escape — the overlay covers the page, so keyboard users need a way out.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   if (!cur) return null
 
   async function runAi() {
@@ -105,7 +112,7 @@ export function GradeFocus({
   }
 
   return (
-    <div className="safe-bottom safe-top fixed inset-0 z-50 flex flex-col bg-background">
+    <div role="dialog" aria-modal="true" aria-label={t('grade.focus')} className="safe-bottom safe-top fixed inset-0 z-50 flex flex-col bg-background">
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
         <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" />{t('grade.close')}</Button>
         <span className="text-sm font-medium text-muted-foreground">{index + 1} / {rows.length}</span>

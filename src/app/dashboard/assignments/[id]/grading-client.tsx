@@ -65,6 +65,10 @@ export function GradingClient(props: {
   const [search, setSearch] = useState('')
   const [reviewOnly, setReviewOnly] = useState(false)
   const [focusIdx, setFocusIdx] = useState<number | null>(null)
+  // Snapshot the worklist when focus opens so a background refresh (after each save)
+  // can't shift the list under the index — otherwise the index would point at a
+  // different submission, especially with the "only to-review" filter on.
+  const [focusRows, setFocusRows] = useState<Row[]>([])
 
   // AI-first triage: rows the AI has handed to the teacher vs. ones it finished.
   const submitted = useMemo(() => props.rows.filter((r) => r.status !== 'DRAFT'), [props.rows])
@@ -252,6 +256,7 @@ export function GradingClient(props: {
               size="sm"
               onClick={() => {
                 const first = visibleRows.findIndex((r) => r.needsReview && r.status !== 'DRAFT')
+                setFocusRows(visibleRows)
                 setFocusIdx(first >= 0 ? first : 0)
               }}
             >
@@ -317,9 +322,9 @@ export function GradingClient(props: {
         </CardContent>
       </Card>
 
-      {focusIdx !== null && visibleRows[focusIdx] ? (
+      {focusIdx !== null && focusRows[focusIdx] ? (
         <GradeFocus
-          rows={visibleRows}
+          rows={focusRows}
           index={focusIdx}
           setIndex={setFocusIdx}
           onClose={() => setFocusIdx(null)}

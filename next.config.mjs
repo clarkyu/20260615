@@ -11,17 +11,19 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  // The app records recitations, so camera/mic must be allowed for our own origin.
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
   {
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      // R2 (S3 API endpoint) serves uploaded images; browser uploads/plays media there too.
+      "img-src 'self' data: blob: https://*.r2.cloudflarestorage.com",
       "font-src 'self'",
-      "connect-src 'self'",
-      "media-src 'self' blob:",
+      "connect-src 'self' https://*.r2.cloudflarestorage.com",
+      "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

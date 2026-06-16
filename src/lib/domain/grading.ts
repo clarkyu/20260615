@@ -17,9 +17,14 @@ export const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综�
 
 // True when a grading failure is "the model isn't wired up" (no API key, provider
 // not implemented) rather than a genuine fault — so callers can keep the work in
-// the teacher queue and the UI can show a friendly "AI 点评准备中" instead of an error.
+// the teacher queue and show a friendly "AI 点评准备中" instead of an error.
+//
+// Matches ONLY our own precise sentinels ("XXX_API_KEY 未配置", "… provider 未实现")
+// — deliberately NOT loose words like "provider"/"api key", which appear in real
+// upstream error bodies (e.g. a 401 "Incorrect API key provided") that we must
+// surface as genuine failures rather than silently bury in the queue.
 export function isUnavailable(message: string): boolean {
-  return /未配置|not configured|api[_\s-]?key|未实现|provider/i.test(message)
+  return /未配置|未实现/.test(message)
 }
 
 // Above this AI self-confidence — and with no anti-cheat flags — a submission can
@@ -46,13 +51,18 @@ export function decideReview(input: {
 }
 
 // Anti-cheat violations are stored as a JSON array string on the submission.
-export function hasAntiCheatViolation(violations: string | null | undefined): boolean {
+// Always guard the parse — one malformed row must never crash a page.
+export function countViolations(violations: string | null | undefined): number {
   try {
     const parsed = JSON.parse(violations ?? '[]')
-    return Array.isArray(parsed) && parsed.length > 0
+    return Array.isArray(parsed) ? parsed.length : 0
   } catch {
-    return false
+    return 0
   }
+}
+
+export function hasAntiCheatViolation(violations: string | null | undefined): boolean {
+  return countViolations(violations) > 0
 }
 
 // The shape the orchestrator needs — structurally satisfied by a Prisma

@@ -6,7 +6,7 @@ import { getDb } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, storageConfigured, submissionMediaKey } from '@/lib/storage'
-import { autoGradeById } from '@/lib/domain/grading'
+import { autoGradeById, hasAntiCheatViolation } from '@/lib/domain/grading'
 import { runAfterResponse } from '@/lib/cf'
 
 type MediaKind = 'video' | 'audio' | 'image'
@@ -109,19 +109,18 @@ export async function finishSubmission(assignmentId: number) {
   if (assignment.requireAudio && !submission.audioKey) return { error: t('err.noAudioYet') }
   if (assignment.requireHandwriting && !submission.imageKey) return { error: t('err.noImageYet') }
 
-  const hasViolation = (() => {
-    try {
-      const parsed = JSON.parse(submission.violations ?? '[]')
-      return Array.isArray(parsed) && parsed.length > 0
-    } catch {
-      return false
-    }
-  })()
+  const hasViolation = hasAntiCheatViolation(submission.violations)
 
-  await prisma.submission.update({
-    where: { id: submission.id },
+  // Idempotent flip: only the call that actually moves DRAFT→submitted proceeds, so
+  // concurrent/duplicate finishes can't double-grade or reset an already-finalized row.
+  const flipped = await prisma.submission.updateMany({
+    where: { id: submission.id, status: 'DRAFT' },
     data: { status: hasViolation ? 'FLAGGED' : 'UPLOADED', needsReview: true },
   })
+  if (flipped.count === 0) {
+    revalidatePath('/student')
+    return { success: true }
+  }
 
   // AI-first: try to grade right away in the background so the teacher only sees
   // exceptions. Degrades safely — if the model isn't configured, it stays in the

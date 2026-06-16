@@ -3,15 +3,17 @@ import { gradePractice } from '@/lib/domain/practice'
 import { isUnavailable } from '@/lib/domain/grading'
 
 describe('isUnavailable', () => {
-  it('classifies missing-key / unconfigured failures as unavailable', () => {
+  it('classifies our own missing-key / not-implemented sentinels as unavailable', () => {
     expect(isUnavailable('GEMINI_API_KEY 未配置')).toBe(true)
-    expect(isUnavailable('OPENAI api key not configured')).toBe(true)
+    expect(isUnavailable('OPENAI_API_KEY 未配置')).toBe(true)
     expect(isUnavailable('感知 provider 未实现: whisper')).toBe(true)
   })
 
-  it('treats genuine faults as real errors', () => {
+  it('treats genuine upstream faults as real errors (never silently buried)', () => {
     expect(isUnavailable('Gemini 500: internal error')).toBe(false)
     expect(isUnavailable('没有可评阅的视频')).toBe(false)
+    // A real 401 body mentions "api key"/"provided" but must NOT be hidden as unavailable.
+    expect(isUnavailable('OPENAI 401: Incorrect API key provided')).toBe(false)
   })
 })
 
