@@ -150,6 +150,33 @@ export function findShadowVideoForClass(prisma: PrismaClient, id: number, classI
   return prisma.assignment.findFirst({ where: { id, offering: { classId: classId ?? -1 } }, select: { shadowVideoKey: true } })
 }
 
+// The student home list: a class's assignments, each with the student's latest
+// submission (take 1), sentence count, and course name.
+export function listForStudent(prisma: PrismaClient, classId: number | null | undefined, studentId: number) {
+  return prisma.assignment.findMany({
+    where: { offering: { classId: classId ?? -1 } },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      _count: { select: { sentences: true } },
+      offering: { include: { course: { select: { name: true } } } },
+      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1 },
+    },
+  })
+}
+
+// One assignment for the student detail/submit screen: sentences, optional bank
+// chunk set (shadowing), and the student's latest submission with its take orders.
+export function findForStudentDetail(prisma: PrismaClient, id: number, classId: number | null | undefined, studentId: number) {
+  return prisma.assignment.findFirst({
+    where: { id, offering: { classId: classId ?? -1 } },
+    include: {
+      sentences: { orderBy: { order: 'asc' } },
+      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
+      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, include: { shadowTakes: { select: { order: true } } } },
+    },
+  })
+}
+
 export function countSentences(prisma: PrismaClient, assignmentId: number) {
   return prisma.sentence.count({ where: { assignmentId } })
 }

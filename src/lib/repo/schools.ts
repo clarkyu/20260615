@@ -22,3 +22,8 @@ export function create(prisma: PrismaClient, name: string, code: string) {
 export function rename(prisma: PrismaClient, id: number, name: string) {
   return prisma.school.update({ where: { id }, data: { name } })
 }
+
+// All schools {id, name} alphabetical — the login screen's school picker.
+export function listAll(prisma: PrismaClient) {
+  return prisma.school.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+}
