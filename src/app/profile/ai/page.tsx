@@ -1,11 +1,14 @@
 import Link from 'next/link'
 import { ChevronLeft, Eye, Scale } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
+import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
-import { MODELS, PROVIDER_LABELS, MODEL_PRICING } from '@/lib/ai/registry'
+import { MODELS, PROVIDER_LABELS, MODEL_PRICING, CREDENTIAL_SLOTS } from '@/lib/ai/registry'
 import type { Provider, Capability } from '@/lib/ai/types'
+import * as aiKeyRepo from '@/lib/repo/ai-keys'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { AiKeySlot } from './ai-key-slot'
 
 const CAP_LABEL: Record<Capability, { zh: string; en: string }> = {
   perception: { zh: '感知·看视频/听音频', en: 'Perceive' },
@@ -21,10 +24,12 @@ const MODALITY: Record<'text' | 'image' | 'audio' | 'video', { zh: string; en: s
 const ORDER: Provider[] = ['gemini', 'qwen', 'openai', 'claude', 'deepseek', 'minimax', 'whisper']
 
 export default async function AiModelsPage() {
-  await requireStaff()
-  const { locale } = await getT()
+  const user = await requireStaff()
+  const prisma = await getDb()
+  const { locale, t } = await getT()
   const zh = locale === 'zh'
 
+  const configured = new Map((await aiKeyRepo.listForUser(prisma, user.userId)).map((k) => [k.provider, k.last4]))
   const providers = ORDER.filter((p) => MODELS.some((m) => m.provider === p))
 
   return (
@@ -36,10 +41,24 @@ export default async function AiModelsPage() {
         <h1 className="text-2xl font-bold tracking-tight">{zh ? 'AI 模型目录' : 'AI Models'}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {zh
-            ? '各家各模型的使用范围、支持的模态与价格。批改作业时在批改页选用；自填密钥（即将上线）后即可各用各的、各付各账。'
-            : 'Each provider’s models — scope, modalities and price. Pick them on the grading screen; bring-your-own-key is coming.'}
+            ? '各家各模型的使用范围、支持的模态与价格。填入你自己的密钥即可各用各的、各付各账。'
+            : 'Each provider’s models — scope, modalities and price. Add your own keys to use them on your own account.'}
         </p>
       </div>
+
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div>
+            <p className="font-semibold">{t('ai.keysTitle')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t('ai.keysHint')}</p>
+          </div>
+          <div className="space-y-2.5">
+            {CREDENTIAL_SLOTS.map((s) => (
+              <AiKeySlot key={s.id} id={s.id} label={s.label} help={s.help} last4={configured.get(s.id) ?? null} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {providers.map((provider) => {
         const models = MODELS.filter((m) => m.provider === provider)
