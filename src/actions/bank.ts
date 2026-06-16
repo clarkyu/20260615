@@ -7,6 +7,7 @@ import { requireStaff } from '@/lib/auth'
 import { getT } from '@/lib/i18n-server'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
 import { parseChunks } from '@/lib/bank'
+import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -17,9 +18,10 @@ export async function createChunkSet(prevState: unknown, formData: FormData): Pr
   const prisma = await getDb()
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
 
-  const name = (formData.get('name') as string)?.trim()
-  const chunks = parseChunks((formData.get('chunks') as string) ?? '')
-  if (!name) return { error: t('err.needSetName') }
+  const parsed = parseForm(z.object({ name: reqText('err.needSetName', 100), chunks: optText(200000) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const name = parsed.data.name
+  const chunks = parseChunks(parsed.data.chunks ?? '')
   if (chunks.length === 0) return { error: t('err.needChunks') }
 
   // Standalone create (not nested in $transaction) so D1 can resolve the new id.
@@ -65,13 +67,13 @@ export async function updateChunkSet(prevState: unknown, formData: FormData): Pr
   const user = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const id = Number(formData.get('chunkSetId'))
+  const parsed = parseForm(z.object({ chunkSetId: reqId, name: reqText('err.needSetName', 100), chunks: optText(200000) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { chunkSetId: id, name } = parsed.data
   const set = await prisma.chunkSet.findFirst({ where: { id, schoolId: user.schoolId ?? -1 } })
   if (!set) return { error: t('err.setNotFound') }
 
-  const name = (formData.get('name') as string)?.trim()
-  const chunks = parseChunks((formData.get('chunks') as string) ?? '')
-  if (!name) return { error: t('err.needSetName') }
+  const chunks = parseChunks(parsed.data.chunks ?? '')
   if (chunks.length === 0) return { error: t('err.needChunks') }
 
   await prisma.$transaction([

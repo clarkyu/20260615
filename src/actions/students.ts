@@ -7,6 +7,7 @@ import { requireStaff } from '@/lib/auth'
 import { hashPassword, BULK_HASH_ITERATIONS } from '@/lib/password'
 import { parseRoster, type RosterRow } from '@/lib/roster'
 import { getT } from '@/lib/i18n-server'
+import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type PreviewState = {
   error?: string
@@ -172,9 +173,9 @@ export async function addClassGroup(prevState: unknown, formData: FormData): Pro
   const { t } = await getT()
   const prisma = await getDb()
   if (!user.schoolId) return { error: t('err.createSchoolFirst') }
-  const name = (formData.get('name') as string)?.trim()
-  const grade = (formData.get('grade') as string)?.trim() || null
-  if (!name) return { error: t('err.needClassName') }
+  const parsed = parseForm(z.object({ name: reqText('err.needClassName', 50), grade: optText(20) }), formData)
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { name, grade } = parsed.data
   const dup = await prisma.classGroup.findFirst({ where: { schoolId: user.schoolId, name } })
   if (dup) return { error: t('err.classNameExists') }
   await prisma.classGroup.create({ data: { schoolId: user.schoolId, name, grade } })
@@ -224,12 +225,19 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
   const user = await requireStaff()
   const { t } = await getT()
   const prisma = await getDb()
-  const classId = Number(formData.get('classId'))
-  const studentNo = (formData.get('studentNo') as string)?.trim()
-  const name = (formData.get('name') as string)?.trim()
-  const phone = (formData.get('phone') as string)?.trim() || null
-  const email = (formData.get('email') as string)?.trim().toLowerCase() || null
-  if (!studentNo || !name) return { error: t('err.needNoAndName') }
+  const parsed = parseForm(
+    z.object({
+      classId: reqId,
+      studentNo: reqText('err.needNoAndName', 50),
+      name: reqText('err.needNoAndName', 50),
+      phone: optText(50),
+      email: optText(120),
+    }),
+    formData,
+  )
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const { classId, studentNo, name, phone } = parsed.data
+  const email = parsed.data.email?.toLowerCase() ?? null
 
   const cls = await prisma.classGroup.findFirst({ where: { id: classId, schoolId: user.schoolId ?? -1 } })
   if (!cls) return { error: t('err.classNotFound') }
