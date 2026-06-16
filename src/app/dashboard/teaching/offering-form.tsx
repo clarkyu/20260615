@@ -6,6 +6,7 @@ import { createOffering, updateOffering, deleteOffering } from '@/actions/offeri
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -90,7 +91,7 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
           <CardContent className="p-4">
             <form action={deleteOffering} onSubmit={(e) => { if (!confirm(t('teach.deleteConfirm'))) e.preventDefault() }}>
               <input type="hidden" name="offeringId" value={initial!.id} />
-              <Button type="submit" variant="destructive" className="w-full">{t('teach.delete')}</Button>
+              <SubmitButton variant="destructive" className="w-full">{t('teach.delete')}</SubmitButton>
             </form>
           </CardContent>
         </Card>

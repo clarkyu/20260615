@@ -15,6 +15,7 @@ import {
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -226,7 +227,7 @@ export function ClassManager({
         <CardContent className="p-4">
           <form action={deleteClass} onSubmit={(e) => { if (!confirm(t('cls.deleteClassConfirm'))) e.preventDefault() }}>
             <input type="hidden" name="classId" value={cls.id} />
-            <Button type="submit" variant="destructive" className="w-full">{t('cls.deleteClass')}</Button>
+            <SubmitButton variant="destructive" className="w-full">{t('cls.deleteClass')}</SubmitButton>
           </form>
         </CardContent>
       </Card>
