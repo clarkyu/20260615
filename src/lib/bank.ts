@@ -56,3 +56,35 @@ export function parseChunks(raw: string): ChunkInput[] {
   }
   return out
 }
+
+// Stable short ascii key derived from any title (incl. CJK) — used to make a
+// pack's set `source` idempotent across re-imports.
+export function slugHash(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
+
+export interface PackSetInput {
+  name: string
+  chunks: ChunkInput[]
+  sourceKey: string
+}
+
+// Split a parsed pack into named sets of `perSet` chunks each (or a single set
+// when perSet<=0 or it already fits). Names get a "· NNNN–MMMM" range suffix; a
+// stable `sourceKey` keys each set for idempotent re-import.
+export function splitIntoSets(name: string, chunks: ChunkInput[], perSet: number): PackSetInput[] {
+  const slug = slugHash(name)
+  if (perSet <= 0 || chunks.length <= perSet) {
+    return [{ name, chunks, sourceKey: `pack:${slug}` }]
+  }
+  const sets: PackSetInput[] = []
+  for (let i = 0; i < chunks.length; i += perSet) {
+    const slice = chunks.slice(i, i + perSet)
+    const from = String(i + 1).padStart(4, '0')
+    const to = String(i + slice.length).padStart(4, '0')
+    sets.push({ name: `${name} · ${from}–${to}`, chunks: slice, sourceKey: `pack:${slug}:${from}-${to}` })
+  }
+  return sets
+}

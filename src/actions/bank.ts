@@ -5,10 +5,11 @@ import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import type { CurrentUser } from '@/lib/auth'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
-import { parseChunks } from '@/lib/bank'
+import { parseChunks, splitIntoSets } from '@/lib/bank'
 import { starterSets, englishFlowSets } from '@/lib/curriculum/starter-bank'
+import { importPack } from '@/lib/domain/bank'
 import * as bankRepo from '@/lib/repo/bank'
-import { parseForm, reqText, optText, reqId, checkbox, z } from '@/lib/validate'
+import { parseForm, reqText, optText, reqId, intField, checkbox, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -48,40 +49,47 @@ export async function importStarterBank(): Promise<{ imported: number; skipped: 
   const scope: number | null = toGlobal ? null : (user.schoolId ?? null)
   const existing = toGlobal ? await bankRepo.globalSources(prisma) : await bankRepo.visibleSources(prisma, user.schoolId)
 
-  let imported = 0
-  let skipped = 0
-  for (const set of starterSets()) {
-    if (set.meta.source && existing.has(set.meta.source)) {
-      skipped++
-      continue
-    }
-    await bankRepo.createWithChunks(prisma, scope, set.name, set.chunks, set.meta)
-    imported++
-  }
+  const res = await importPack(prisma, scope, starterSets(), existing)
   revalidatePath('/dashboard/bank')
-  return { imported, skipped }
+  return res
 }
 
-// Import the English Flow "2000 chunks" pack as global official sets (super-admin
-// only). 40 sets × 50, idempotent by source — safe to re-click, and a timed-out
-// run resumes where it left off on the next click.
+// Import the built-in curated chunk pack as global official sets (super-admin
+// only). Idempotent by source — safe to re-click, and a timed-out run resumes.
 export async function importEnglishFlow(): Promise<{ imported: number; skipped: number; error?: string }> {
   const { user, prisma, t } = await staffContext()
   if (!isSuper(user)) return { imported: 0, skipped: 0, error: t('err.forbidden') }
   const existing = await bankRepo.globalSources(prisma)
 
-  let imported = 0
-  let skipped = 0
-  for (const set of englishFlowSets()) {
-    if (set.meta.source && existing.has(set.meta.source)) {
-      skipped++
-      continue
-    }
-    await bankRepo.createWithChunks(prisma, null, set.name, set.chunks, set.meta)
-    imported++
-  }
+  const res = await importPack(prisma, null, englishFlowSets(), existing)
   revalidatePath('/dashboard/bank')
-  return { imported, skipped }
+  return res
+}
+
+// Generic pack importer (super-admin): paste a pack of three-part chunks, name it,
+// classify it, and auto-split into sets of `perSet` — imported as global official.
+// No per-pack code; idempotent by a name-derived source key.
+export async function importPackAction(prevState: unknown, formData: FormData): Promise<{ imported?: number; skipped?: number; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!isSuper(user)) return { error: t('err.forbidden') }
+  const parsed = parseForm(
+    z.object({ name: reqText('err.needSetName', 100), chunks: optText(2_000_000), perSet: intField(50, 1, 500), ...metaShape }),
+    formData,
+  )
+  if (!parsed.ok) return { error: t(parsed.error) }
+  const chunks = parseChunks(parsed.data.chunks ?? '')
+  if (chunks.length === 0) return { error: t('err.needChunks') }
+
+  const meta = metaFrom(parsed.data)
+  const sets = splitIntoSets(parsed.data.name, chunks, parsed.data.perSet).map((s) => ({
+    name: s.name,
+    chunks: s.chunks,
+    meta: { ...meta, source: s.sourceKey },
+  }))
+  const existing = await bankRepo.globalSources(prisma)
+  const res = await importPack(prisma, null, sets, existing)
+  revalidatePath('/dashboard/bank')
+  return res
 }
 
 // Presigned URL for the chunk set's shadowing video; saves the key on the set.

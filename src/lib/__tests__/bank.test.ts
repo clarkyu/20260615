@@ -1,5 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { parseChunks, serializeChunks } from '@/lib/bank'
+import { parseChunks, serializeChunks, splitIntoSets, slugHash, type ChunkInput } from '@/lib/bank'
+
+const chunk = (en: string): ChunkInput => ({ english: en, chinese: null, meaningEn: null, meaningZh: null, exampleEn: null, exampleZh: null })
+
+describe('splitIntoSets', () => {
+  it('returns a single set when it fits or perSet<=0', () => {
+    const cs = [chunk('a'), chunk('b')]
+    expect(splitIntoSets('Pack', cs, 50)).toEqual([{ name: 'Pack', chunks: cs, sourceKey: `pack:${slugHash('Pack')}` }])
+    expect(splitIntoSets('Pack', cs, 0)[0].chunks).toHaveLength(2)
+  })
+
+  it('splits into named ranges of perSet with stable, unique source keys', () => {
+    const cs = Array.from({ length: 120 }, (_, i) => chunk(`c${i}`))
+    const sets = splitIntoSets('商务口语', cs, 50)
+    expect(sets.map((s) => s.chunks.length)).toEqual([50, 50, 20])
+    expect(sets.map((s) => s.name)).toEqual(['商务口语 · 0001–0050', '商务口语 · 0051–0100', '商务口语 · 0101–0120'])
+    expect(new Set(sets.map((s) => s.sourceKey)).size).toBe(3)
+    // idempotent: same name → same keys
+    expect(splitIntoSets('商务口语', cs, 50).map((s) => s.sourceKey)).toEqual(sets.map((s) => s.sourceKey))
+  })
+
+  it('derives a non-empty ascii slug even for CJK-only names', () => {
+    expect(slugHash('商务口语')).toMatch(/^[a-z0-9]+$/)
+    expect(slugHash('a') === slugHash('b')).toBe(false)
+  })
+})
 
 describe('parseChunks', () => {
   it('parses three-part bilingual blocks separated by blank lines', () => {

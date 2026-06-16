@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { CreateSetForm } from './create-set-form'
 import { ImportStarter } from './import-starter'
 import { ImportEnglishFlow } from './import-english-flow'
+import { ImportPackForm } from './import-pack-form'
 import { BankFilters } from './bank-filters'
 
 export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string }> }) {
@@ -39,6 +40,7 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
         <CreateSetForm canPublishGlobal={isSuperAdmin} />
         <ImportStarter toGlobal={isSuperAdmin} />
         {isSuperAdmin ? <ImportEnglishFlow /> : null}
+        {isSuperAdmin ? <ImportPackForm /> : null}
       </div>
 
       <BankFilters cefr={cefr} strand={strand} domain={domain} />
