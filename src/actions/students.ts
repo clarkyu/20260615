@@ -165,6 +165,23 @@ export async function commitRoster(prevState: unknown, formData: FormData): Prom
 
 type MutState = { error?: string; success?: boolean }
 
+// Create an empty class by 班号 (and optional grade) without importing a roster —
+// students can be added one by one afterwards, or imported later.
+export async function addClassGroup(prevState: unknown, formData: FormData): Promise<MutState> {
+  const user = await requireStaff()
+  const { t } = await getT()
+  const prisma = await getDb()
+  if (!user.schoolId) return { error: t('err.createSchoolFirst') }
+  const name = (formData.get('name') as string)?.trim()
+  const grade = (formData.get('grade') as string)?.trim() || null
+  if (!name) return { error: t('err.needClassName') }
+  const dup = await prisma.classGroup.findFirst({ where: { schoolId: user.schoolId, name } })
+  if (dup) return { error: t('err.classNameExists') }
+  await prisma.classGroup.create({ data: { schoolId: user.schoolId, name, grade } })
+  revalidatePath('/dashboard/students')
+  return { success: true }
+}
+
 export async function updateClass(prevState: unknown, formData: FormData): Promise<MutState> {
   const user = await requireStaff()
   const { t } = await getT()
