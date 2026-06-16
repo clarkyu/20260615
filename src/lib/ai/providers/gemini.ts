@@ -258,3 +258,62 @@ export const geminiJudge: JudgeProvider = {
     return normalizeJudge(json, input.maxScore)
   },
 }
+
+// ── Authoring (备课出题) ──────────────────────────────────────────────────────
+
+const AUTHOR_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    title: { type: 'STRING' },
+    category: { type: 'STRING' },
+    instructions: { type: 'STRING' },
+    sentences: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['title', 'sentences'],
+} as const
+
+export interface AuthorDraft {
+  title: string
+  category: string
+  instructions: string
+  sentences: string[]
+}
+
+export interface AuthorInput {
+  topic: string
+  imageBase64?: string
+  imageMime?: string
+}
+
+export function normalizeAuthorDraft(raw: unknown): AuthorDraft {
+  const r = raw as { title?: unknown; category?: unknown; instructions?: unknown; sentences?: unknown }
+  const sentences = Array.isArray(r?.sentences) ? r.sentences.map((s) => String(s).trim()).filter(Boolean) : []
+  return {
+    title: typeof r?.title === 'string' ? r.title.trim() : '',
+    category: typeof r?.category === 'string' ? r.category.trim() : '',
+    instructions: typeof r?.instructions === 'string' ? r.instructions.trim() : '',
+    sentences,
+  }
+}
+
+export function buildAuthorPrompt(topic: string, hasImage: boolean): string {
+  return [
+    '你是中职英语老师的备课助手，帮老师起草一份背诵 / 朗读类作业。',
+    '请根据老师的要求' + (hasImage ? '和所附图片（课本 / 讲义页）' : '') + '，生成：',
+    '- title：简洁的作业标题；',
+    '- category：作业分类（如 背诵作业 / 口语作业 / 听写作业 等）；',
+    '- instructions：给学生的简短说明（1-3 句）；',
+    '- sentences：要背诵 / 朗读的句子，逐句一条，难度适合中职学生，5-12 句，不要编号。',
+    '',
+    topic ? `老师的要求：\n${topic}` : '（老师未填文字要求，请主要依据图片内容。）',
+  ].join('\n')
+}
+
+export async function geminiAuthor(input: AuthorInput, modelId: string): Promise<AuthorDraft> {
+  const parts: Part[] = [{ text: buildAuthorPrompt(input.topic, Boolean(input.imageBase64)) }]
+  if (input.imageBase64 && input.imageMime) {
+    parts.push({ inlineData: { mimeType: input.imageMime, data: input.imageBase64 } })
+  }
+  const json = await generate(modelId, parts, AUTHOR_SCHEMA)
+  return normalizeAuthorDraft(json)
+}

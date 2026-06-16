@@ -5,6 +5,8 @@ import {
   buildJudgePrompt,
   buildPerceptionPrompt,
   normalizeJudge,
+  normalizeAuthorDraft,
+  buildAuthorPrompt,
 } from '@/lib/ai/providers/gemini'
 
 const refs = [
@@ -69,5 +71,31 @@ describe('normalizeJudge', () => {
     expect(out.score).toBe(0)
     expect(out.feedback).toBe('')
     expect(out.breakdown).toEqual({})
+  })
+})
+
+describe('normalizeAuthorDraft', () => {
+  it('trims fields and drops blank sentences', () => {
+    const out = normalizeAuthorDraft({
+      title: '  Unit 3 背诵  ',
+      category: '背诵作业',
+      instructions: '凭记忆背诵。',
+      sentences: [' The early bird catches the worm. ', '', 'Actions speak louder than words.'],
+    })
+    expect(out.title).toBe('Unit 3 背诵')
+    expect(out.sentences).toEqual(['The early bird catches the worm.', 'Actions speak louder than words.'])
+  })
+
+  it('tolerates missing / wrong-typed fields', () => {
+    const out = normalizeAuthorDraft({ sentences: 'not an array' })
+    expect(out).toEqual({ title: '', category: '', instructions: '', sentences: [] })
+  })
+})
+
+describe('buildAuthorPrompt', () => {
+  it('mentions the photo only when one is attached, and includes the topic', () => {
+    expect(buildAuthorPrompt('Unit 3 重点句', false)).toContain('Unit 3 重点句')
+    expect(buildAuthorPrompt('', true)).toContain('图片')
+    expect(buildAuthorPrompt('x', false)).not.toContain('所附图片')
   })
 })
