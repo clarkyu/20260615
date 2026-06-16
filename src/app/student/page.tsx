@@ -4,6 +4,9 @@ import { Inbox, Sparkles } from 'lucide-react'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
+import * as assignmentRepo from '@/lib/repo/assignments'
+import * as practiceRepo from '@/lib/repo/practice'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -12,7 +15,7 @@ export default async function StudentHome() {
   const user = await requireRole('STUDENT')
   const prisma = await getDb()
   const { locale, t } = await getT()
-  const me = await prisma.user.findUnique({ where: { id: user.userId } })
+  const me = await userRepo.findById(prisma, user.userId)
   if (me?.mustChangePassword) redirect('/student/change-password')
   if (!me?.classId) {
     return (
@@ -23,19 +26,8 @@ export default async function StudentHome() {
   }
 
   const [assignments, practiceRows] = await Promise.all([
-    prisma.assignment.findMany({
-      where: { offering: { classId: me.classId } },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: { select: { sentences: true } },
-        offering: { include: { course: { select: { name: true } } } },
-        submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1 },
-      },
-    }),
-    prisma.practiceAttempt.findMany({
-      where: { studentId: user.userId, aiScore: { not: null } },
-      select: { assignmentId: true, aiScore: true },
-    }),
+    assignmentRepo.listForStudent(prisma, me.classId, user.userId),
+    practiceRepo.listScoredForStudent(prisma, user.userId),
   ])
 
   // My growth: 平时成绩 (best practice per assignment), 测试成绩 (graded submissions),

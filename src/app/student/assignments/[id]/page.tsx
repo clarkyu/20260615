@@ -1,6 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import * as userRepo from '@/lib/repo/users'
+import * as assignmentRepo from '@/lib/repo/assignments'
+import * as submissionRepo from '@/lib/repo/submissions'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
 import { ShadowSubmit } from './shadow-submit'
@@ -32,28 +35,15 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
 
   const user = await requireRole('STUDENT')
   const prisma = await getDb()
-  const me = await prisma.user.findUnique({ where: { id: user.userId } })
+  const me = await userRepo.findById(prisma, user.userId)
   if (me?.mustChangePassword) redirect('/student/change-password')
   if (!me?.classId) notFound()
 
-  const assignment = await prisma.assignment.findFirst({
-    where: { id: assignmentId, offering: { classId: me.classId } },
-    include: {
-      sentences: { orderBy: { order: 'asc' } },
-      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
-      submissions: { where: { studentId: user.userId }, orderBy: { attempt: 'desc' }, take: 1, include: { shadowTakes: { select: { order: true } } } },
-    },
-  })
+  const assignment = await assignmentRepo.findForStudentDetail(prisma, assignmentId, me.classId, user.userId)
   if (!assignment) notFound()
 
   const latest = assignment.submissions[0]
-  const usedAttempts = await prisma.submission.count({
-    where: {
-      assignmentId,
-      studentId: user.userId,
-      status: { in: ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED'] },
-    },
-  })
+  const usedAttempts = await submissionRepo.countActiveAttempts(prisma, assignmentId, user.userId)
 
   const now = new Date()
   const notOpen = assignment.openAt ? now < assignment.openAt : false

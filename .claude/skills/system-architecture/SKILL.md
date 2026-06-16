@@ -107,10 +107,10 @@ export async function doThing(prisma, schoolId, input): Promise<Result> {
   persistent + bounded-retry + self-heal; never fire-and-forget a one-shot grade.
 
 ## Intentional boundaries (leave these alone unless asked)
-- **Page reads are migrating into `lib/repo`** (incremental, per page/vertical — bank done
-  first). New page reads should call a repo function, not write prisma inline; the page
-  still gets prisma via `getDb()` and passes it to the repo. (The lint rule is
-  actions-only, so pages may import `@/lib/db` — but prefer a repo for the query.)
+- **Page reads go through `lib/repo`** (migration complete — no inline prisma anywhere in
+  `app/**`). A page still gets prisma via `getDb()` and passes it to a repo function; add a
+  new repo read rather than writing a query in the page. (The lint rule is actions-only, so
+  pages may import `@/lib/db`.)
 - **Auth flows (login/register/reset/verify) stay bespoke** — login uses constant-time
   fake verification on the not-found path to avoid a timing side-channel; do NOT convert
   it to "parse-then-early-return".
