@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, FilePlus2, Sparkles, PackagePlus, BookOpen } from 'lucide-react'
-import { importStarterBank, importEnglishFlow } from '@/actions/bank'
+import { Plus, FilePlus2, Sparkles, PackagePlus, BookOpen, Languages } from 'lucide-react'
+import { importStarterBank, importEnglishFlow, refreshEnglishFlow } from '@/actions/bank'
 import { useT } from '@/components/i18n-provider'
 import { Button } from '@/components/ui/button'
 import { useChunkedImport } from './use-chunked-import'
@@ -37,6 +37,7 @@ export function BankActions({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     { icon: Sparkles, label: t('bank.importStarter'), act: () => run(importStarterBank) },
     { icon: PackagePlus, label: t('pack.new'), act: () => setPanel('pack') },
     { icon: BookOpen, label: t('bank.importFlow'), act: () => run(importEnglishFlow) },
+    { icon: Languages, label: t('bank.refreshFlow'), act: () => run(refreshEnglishFlow) },
   ]
 
   return (

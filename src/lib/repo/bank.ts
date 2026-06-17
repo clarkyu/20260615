@@ -73,6 +73,19 @@ export function globalSources(prisma: PrismaClient) {
   return importedSources(prisma, { schoolId: null })
 }
 
+// For each global official set (keyed by source): its id + how many of its chunks
+// already carry a Chinese 中心句. Lets the official-bank refresh detect which sets
+// still need source translations pushed (live coverage < source coverage).
+export async function globalSetZhCoverage(prisma: PrismaClient): Promise<Map<string, { id: number; withZh: number }>> {
+  const sets = await prisma.chunkSet.findMany({ where: { schoolId: null, source: { not: null } }, select: { id: true, source: true } })
+  if (sets.length === 0) return new Map()
+  const ids = sets.map((s) => s.id)
+  const zhRows = await prisma.chunk.findMany({ where: { chunkSetId: { in: ids }, chinese: { not: null } }, select: { chunkSetId: true } })
+  const byId = new Map<number, number>()
+  for (const r of zhRows) byId.set(r.chunkSetId, (byId.get(r.chunkSetId) ?? 0) + 1)
+  return new Map(sets.map((s) => [s.source as string, { id: s.id, withZh: byId.get(s.id) ?? 0 }]))
+}
+
 export interface BankFilters {
   cefr?: string
   strand?: string
