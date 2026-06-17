@@ -11,11 +11,22 @@ export interface SentenceRow {
   translation?: string | null
 }
 
-export interface AssignmentFields {
+// Assignment-level (shared by all phases): identity + scheduling label.
+export interface AssignmentMeta {
   title: string
   category: string | null
   monthLabel: string | null
+}
+
+// One ordered 环节 (phase) of an assignment: its own content (bank set or typed
+// sentences), submission requirements, time window, attempts, and whether it counts
+// toward the grade. `graded: false` = practice-only. Sentences come resolved.
+export interface PhaseInput {
+  order: number
+  title: string | null
   instructions: string | null
+  chunkSetId: number | null
+  shadowVideoKey: string | null
   openAt: Date | null
   dueAt: Date | null
   requireEyesClosed: boolean
@@ -23,7 +34,29 @@ export interface AssignmentFields {
   requireAudio: boolean
   requireVideo: boolean
   requireHandwriting: boolean
+  graded: boolean
   maxAttempts: number
+  sentences: SentenceRow[]
+}
+
+// The assignment's legacy columns mirror its FIRST phase, so the (still
+// phase-unaware) student + grading pipeline keeps working unchanged — a single-phase
+// assignment is byte-for-byte what it was before phases existed. Phase 3 switches the
+// student/grading reads to iterate every phase.
+function legacyColumnsFromPrimary(p: PhaseInput) {
+  return {
+    instructions: p.instructions,
+    chunkSetId: p.chunkSetId,
+    shadowVideoKey: p.shadowVideoKey,
+    openAt: p.openAt,
+    dueAt: p.dueAt,
+    requireEyesClosed: p.requireEyesClosed,
+    requireText: p.requireText,
+    requireAudio: p.requireAudio,
+    requireVideo: p.requireVideo,
+    requireHandwriting: p.requireHandwriting,
+    maxAttempts: p.maxAttempts,
+  }
 }
 
 export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
@@ -77,51 +110,94 @@ export function findForStaffPreview(prisma: PrismaClient, id: number, schoolId: 
   })
 }
 
-// One create per offering — the bank link (video + chunk-set id) and the read-aloud
-// sentences are resolved by the caller.
-export function create(
-  prisma: PrismaClient,
-  fields: AssignmentFields,
-  offeringId: number,
-  link: { shadowVideoKey: string | null; chunkSetId: number | null },
-  sentences: SentenceRow[],
-) {
-  return prisma.assignment.create({
-    data: {
-      offeringId,
-      ...fields,
-      shadowVideoKey: link.shadowVideoKey,
-      chunkSetId: link.chunkSetId,
-      sentences: { create: sentences },
+// Create the Phase rows (+ their sentences) for an assignment. Each phase is a
+// standalone create so D1 can resolve its autoincrement id for the nested sentence
+// inserts (interactive/batched transactions can't on D1).
+async function createPhases(prisma: PrismaClient, assignmentId: number, phases: PhaseInput[]) {
+  for (const p of phases) {
+    await prisma.phase.create({
+      data: {
+        assignmentId,
+        order: p.order,
+        title: p.title,
+        instructions: p.instructions,
+        chunkSetId: p.chunkSetId,
+        shadowVideoKey: p.shadowVideoKey,
+        openAt: p.openAt,
+        dueAt: p.dueAt,
+        requireEyesClosed: p.requireEyesClosed,
+        requireText: p.requireText,
+        requireAudio: p.requireAudio,
+        requireVideo: p.requireVideo,
+        requireHandwriting: p.requireHandwriting,
+        graded: p.graded,
+        maxAttempts: p.maxAttempts,
+        sentences: { create: p.sentences.map((s) => ({ assignmentId, order: s.order, text: s.text, translation: s.translation ?? null })) },
+      },
+    })
+  }
+}
+
+// One create per offering. Writes the assignment (legacy columns mirror phase 1) and
+// its ordered phases. `phases` must be non-empty with `order` 1..n.
+export async function createWithPhases(prisma: PrismaClient, offeringId: number, meta: AssignmentMeta, phases: PhaseInput[]) {
+  const assignment = await prisma.assignment.create({
+    data: { offeringId, ...meta, ...legacyColumnsFromPrimary(phases[0]) },
+  })
+  await createPhases(prisma, assignment.id, phases)
+  return assignment
+}
+
+// Replace an assignment's phases (and all its sentences) and refresh its legacy
+// columns from the new phase 1. Clear is one atomic batch; the per-phase recreate
+// follows (standalone creates — see createPhases).
+export async function updateWithPhases(prisma: PrismaClient, id: number, meta: AssignmentMeta, phases: PhaseInput[]) {
+  await prisma.$transaction([
+    prisma.phase.deleteMany({ where: { assignmentId: id } }), // cascades phase sentences
+    prisma.sentence.deleteMany({ where: { assignmentId: id } }), // any phaseId-null leftovers
+    prisma.assignment.update({ where: { id }, data: { ...meta, ...legacyColumnsFromPrimary(phases[0]) } }),
+  ])
+  await createPhases(prisma, id, phases)
+}
+
+// The edit screen: assignment + its ordered phases, each with sentences + chunk-set name.
+export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.assignment.findFirst({
+    where: { id, ...inSchool(schoolId) },
+    include: {
+      phases: {
+        orderBy: { order: 'asc' },
+        include: {
+          sentences: { orderBy: { order: 'asc' } },
+          chunkSet: { select: { id: true, name: true, shadowVideoKey: true, _count: { select: { chunks: true } } } },
+        },
+      },
     },
   })
 }
 
-// Replace the sentence list and update the fields in one batch ($transaction of
-// statements is fine on D1 — only interactive transactions are unavailable).
-export function updateWithSentences(prisma: PrismaClient, id: number, fields: AssignmentFields, sentences: SentenceRow[]) {
-  return prisma.$transaction([
-    prisma.sentence.deleteMany({ where: { assignmentId: id } }),
-    prisma.assignment.update({ where: { id }, data: { ...fields, sentences: { create: sentences } } }),
-  ])
-}
-
-// A bare review assignment (默认音频背诵、可多次) seeded from the picked sentences.
+// A bare review assignment (默认音频背诵、可多次) seeded from the picked sentences — one
+// graded phase.
 export function createReview(prisma: PrismaClient, offeringId: number, title: string, sentences: SentenceRow[]) {
-  return prisma.assignment.create({
-    data: {
-      offeringId,
-      title,
-      category: '复习作业',
+  return createWithPhases(prisma, offeringId, { title, category: '复习作业', monthLabel: null }, [
+    {
+      order: 1,
+      title: null,
+      instructions: null,
+      chunkSetId: null,
+      shadowVideoKey: null,
+      openAt: null,
+      dueAt: null,
+      requireEyesClosed: false,
+      requireText: false,
       requireAudio: true,
       requireVideo: false,
-      requireText: false,
-      requireEyesClosed: false,
       requireHandwriting: false,
+      graded: true,
       maxAttempts: 3,
-      sentences: { create: sentences },
+      sentences,
     },
-  })
+  ])
 }
 
 // Delete iff it belongs to the school; returns the offering id (for redirect) or null.

@@ -8,23 +8,92 @@ import * as offerings from '@/lib/repo/offerings'
 import * as bank from '@/lib/repo/bank'
 import * as submissions from '@/lib/repo/submissions'
 import { weakSentences, parsePerSentence, type AnalyticsSubmission } from '@/lib/domain/analytics'
-import type { AssignmentFields, SentenceRow } from '@/lib/repo/assignments'
+import type { AssignmentMeta, PhaseInput, SentenceRow } from '@/lib/repo/assignments'
 
-export type { AssignmentFields }
+export type { AssignmentMeta }
 
-function hasSubmitKind(f: AssignmentFields): boolean {
-  return f.requireText || f.requireAudio || f.requireVideo || f.requireHandwriting
+// One phase as the teacher authored it, before its content is resolved. `useBankSet`
+// means "this phase's sentences (and shadow video) come from the published bank set";
+// otherwise the typed sentence list is used.
+export interface PhaseDraft {
+  title: string | null
+  instructions: string | null
+  useBankSet: boolean
+  typedSentences: string[]
+  openAt: Date | null
+  dueAt: Date | null
+  requireEyesClosed: boolean
+  requireText: boolean
+  requireAudio: boolean
+  requireVideo: boolean
+  requireHandwriting: boolean
+  graded: boolean
+  maxAttempts: number
+}
+
+function hasSubmitKind(p: PhaseDraft): boolean {
+  return p.requireText || p.requireAudio || p.requireVideo || p.requireHandwriting
+}
+
+// Resolve every phase's content into ready-to-store PhaseInput[]: bank-set phases get
+// the set's example sentences (中文 gloss) + shadow video; typed phases get their list.
+// The bank set is loaded once. Returns an i18n error key on any invalid phase.
+async function resolvePhases(
+  prisma: PrismaClient,
+  schoolId: number,
+  drafts: PhaseDraft[],
+  chunkSetId: number | null,
+): Promise<{ ok: true; phases: PhaseInput[] } | { ok: false; error: string }> {
+  if (drafts.length === 0) return { ok: false, error: 'err.needPhase' }
+
+  let bankSentences: SentenceRow[] | null = null
+  let bankVideoKey: string | null = null
+  if (chunkSetId && drafts.some((d) => d.useBankSet)) {
+    const set = await bank.findWithChunksVisible(prisma, chunkSetId, schoolId)
+    if (!set) return { ok: false, error: 'err.setNotFound' }
+    bankVideoKey = set.shadowVideoKey
+    // The example sentence is what the student reads aloud / shadows; carry its 中文.
+    bankSentences = set.chunks.map((c, i) => ({ order: i + 1, text: c.exampleEn || c.english, translation: c.exampleZh || c.chinese }))
+  }
+
+  const phases: PhaseInput[] = []
+  for (let i = 0; i < drafts.length; i++) {
+    const d = drafts[i]
+    if (!hasSubmitKind(d)) return { ok: false, error: 'err.needSubmitKind' }
+    const fromBank = d.useBankSet && bankSentences
+    const sentences: SentenceRow[] = fromBank
+      ? bankSentences!.map((s) => ({ ...s }))
+      : d.typedSentences.map((text, j) => ({ order: j + 1, text, translation: null }))
+    phases.push({
+      order: i + 1,
+      title: d.title,
+      instructions: d.instructions,
+      chunkSetId: fromBank ? chunkSetId : null,
+      shadowVideoKey: fromBank ? bankVideoKey : null,
+      openAt: d.openAt,
+      dueAt: d.dueAt,
+      requireEyesClosed: d.requireEyesClosed,
+      requireText: d.requireText,
+      requireAudio: d.requireAudio,
+      requireVideo: d.requireVideo,
+      requireHandwriting: d.requireHandwriting,
+      graded: d.graded,
+      maxAttempts: d.maxAttempts,
+      sentences,
+    })
+  }
+  return { ok: true, phases }
 }
 
 export type CreateResult = { ok: true; redirectTo: string } | { ok: false; error: string }
 
-// Publish one assignment per selected offering. When `chunkSetId` is set the shadow
-// video + read-aloud sentences come from the bank set instead of the typed list.
+// Publish one assignment per selected offering, each with an ordered list of phases.
+// When a phase `useBankSet`, its sentences + shadow video come from the published set.
 export async function createAssignments(
   prisma: PrismaClient,
   schoolId: number,
-  fields: AssignmentFields,
-  typedSentences: string[],
+  meta: AssignmentMeta,
+  phaseDrafts: PhaseDraft[],
   offeringIds: number[],
   chunkSetId: number | null,
   primaryOfferingId: number | null,
@@ -32,22 +101,14 @@ export async function createAssignments(
   if (offeringIds.length === 0) return { ok: false, error: 'err.needPublishTarget' }
   const validIds = await offerings.findIdsForSchool(prisma, offeringIds, schoolId)
   if (validIds.length === 0) return { ok: false, error: 'err.offeringNotFound' }
-  if (!hasSubmitKind(fields)) return { ok: false, error: 'err.needSubmitKind' }
 
-  let link = { shadowVideoKey: null as string | null, chunkSetId: null as number | null }
-  let sentences: SentenceRow[] = typedSentences.map((text, i) => ({ order: i + 1, text, translation: null }))
-  if (chunkSetId) {
-    const set = await bank.findWithChunksVisible(prisma, chunkSetId, schoolId)
-    if (!set) return { ok: false, error: 'err.setNotFound' }
-    link = { shadowVideoKey: set.shadowVideoKey, chunkSetId: set.id }
-    // The example sentence is what the student reads aloud / shadows.
-    sentences = set.chunks.map((c, i) => ({ order: i + 1, text: c.exampleEn || c.english, translation: c.exampleZh || c.chinese }))
-  }
+  const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)
+  if (!resolved.ok) return { ok: false, error: resolved.error }
 
   // One standalone create per offering (no $transaction: D1 can't resolve the new
-  // assignment's auto-increment id for its nested sentence inserts in a batch).
+  // assignment's auto-increment id for its nested phase/sentence inserts in a batch).
   for (const offeringId of validIds) {
-    await assignments.create(prisma, fields, offeringId, link, sentences)
+    await assignments.createWithPhases(prisma, offeringId, meta, resolved.phases)
   }
 
   // Return to the offering the teacher started from, if it was among the targets.
@@ -61,15 +122,17 @@ export async function updateAssignment(
   prisma: PrismaClient,
   schoolId: number,
   assignmentId: number,
-  fields: AssignmentFields,
-  typedSentences: string[],
+  meta: AssignmentMeta,
+  phaseDrafts: PhaseDraft[],
+  chunkSetId: number | null,
 ): Promise<UpdateResult> {
   const existing = await assignments.findForSchool(prisma, assignmentId, schoolId)
   if (!existing) return { ok: false, error: 'err.assignNotFound' }
-  if (!hasSubmitKind(fields)) return { ok: false, error: 'err.needSubmitKind' }
 
-  const sentences: SentenceRow[] = typedSentences.map((text, i) => ({ order: i + 1, text }))
-  await assignments.updateWithSentences(prisma, assignmentId, fields, sentences)
+  const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)
+  if (!resolved.ok) return { ok: false, error: resolved.error }
+
+  await assignments.updateWithPhases(prisma, assignmentId, meta, resolved.phases)
   return { ok: true }
 }
 

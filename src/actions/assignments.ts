@@ -9,9 +9,10 @@ import {
   createAssignments,
   updateAssignment as updateAssignmentService,
   buildReviewAssignment,
-  type AssignmentFields,
+  type AssignmentMeta,
+  type PhaseDraft,
 } from '@/lib/domain/assignments'
-import { parseForm, reqText, optText, checkbox, intField, z, type ParseResult } from '@/lib/validate'
+import { parseForm, reqText, optText, z, type ParseResult } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -19,57 +20,70 @@ function parseSentences(raw: string): string[] {
   return raw.split('\n').map((l) => l.trim()).filter(Boolean)
 }
 
-function parseDate(value: FormDataEntryValue | null): Date | null {
+function parseDate(value: string | null | undefined): Date | null {
   const s = String(value ?? '').trim()
   if (!s) return null
   const d = new Date(s)
   return isNaN(d.getTime()) ? null : d
 }
 
-const assignmentSchema = z.object({
+// Assignment-level (shared) fields. Each phase's content/requirements/window arrive
+// as a JSON array in the hidden `phasesJson` field (a dynamic list the form edits).
+const metaSchema = z.object({
   title: reqText('err.needTitle', 200),
   category: optText(50),
   monthLabel: optText(20),
-  instructions: optText(5000),
-  requireEyesClosed: checkbox,
-  requireText: checkbox,
-  requireAudio: checkbox,
-  requireVideo: checkbox,
-  requireHandwriting: checkbox,
-  maxAttempts: intField(1, 1, 99),
 })
 
-// Validate the form (zod), then assemble the DB field shape + read-aloud sentences.
-function readFields(formData: FormData): ParseResult<{ fields: AssignmentFields; sentences: string[] }> {
-  const parsed = parseForm(assignmentSchema, formData)
+const phaseJsonSchema = z.object({
+  title: z.string().max(200).optional().default(''),
+  instructions: z.string().max(5000).optional().default(''),
+  useBankSet: z.boolean().optional().default(false),
+  sentences: z.string().max(20000).optional().default(''),
+  openAt: z.string().optional().default(''),
+  dueAt: z.string().optional().default(''),
+  requireEyesClosed: z.boolean().optional().default(false),
+  requireText: z.boolean().optional().default(false),
+  requireAudio: z.boolean().optional().default(false),
+  requireVideo: z.boolean().optional().default(false),
+  requireHandwriting: z.boolean().optional().default(false),
+  graded: z.boolean().optional().default(true),
+  maxAttempts: z.coerce.number().int().min(1).max(99).optional().default(1),
+})
+const phasesJsonSchema = z.array(phaseJsonSchema).min(1).max(20)
+
+// Validate the form (zod) → assignment meta + the parsed phase drafts.
+function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phases: PhaseDraft[] }> {
+  const parsed = parseForm(metaSchema, formData)
   if (!parsed.ok) return parsed
-  const d = parsed.data
-  return {
-    ok: true,
-    data: {
-      fields: {
-        title: d.title,
-        category: d.category,
-        monthLabel: d.monthLabel,
-        instructions: d.instructions,
-        openAt: parseDate(formData.get('openAt')),
-        dueAt: parseDate(formData.get('dueAt')),
-        requireEyesClosed: d.requireEyesClosed,
-        requireText: d.requireText,
-        requireAudio: d.requireAudio,
-        requireVideo: d.requireVideo,
-        requireHandwriting: d.requireHandwriting,
-        maxAttempts: d.maxAttempts,
-      },
-      sentences: parseSentences((formData.get('sentences') as string) ?? ''),
-    },
-  }
+
+  let raw: unknown
+  try { raw = JSON.parse(String(formData.get('phasesJson') ?? '')) } catch { return { ok: false, error: 'err.needPhase' } }
+  const pr = phasesJsonSchema.safeParse(raw)
+  if (!pr.success) return { ok: false, error: 'err.needPhase' }
+
+  const phases: PhaseDraft[] = pr.data.map((p) => ({
+    title: p.title.trim() || null,
+    instructions: p.instructions.trim() || null,
+    useBankSet: p.useBankSet,
+    typedSentences: parseSentences(p.sentences),
+    openAt: parseDate(p.openAt),
+    dueAt: parseDate(p.dueAt),
+    requireEyesClosed: p.requireEyesClosed,
+    requireText: p.requireText,
+    requireAudio: p.requireAudio,
+    requireVideo: p.requireVideo,
+    requireHandwriting: p.requireHandwriting,
+    graded: p.graded,
+    maxAttempts: p.maxAttempts,
+  }))
+  return { ok: true, data: { meta: { title: parsed.data.title, category: parsed.data.category, monthLabel: parsed.data.monthLabel }, phases } }
 }
 
 export async function createAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
   const cx = await staffSchoolContext()
   if (!cx.ok) return { error: cx.error }
-  const fr = readFields(formData)
+  const fr = readForm(formData)
   if (!fr.ok) return { error: cx.t(fr.error) }
 
   // The teacher may publish to several offerings (classes) of the same course.
@@ -77,7 +91,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   const chunkSetId = Number(formData.get('chunkSetId')) || null
   const primaryOfferingId = Number(formData.get('primaryOfferingId')) || null
 
-  const res = await createAssignments(cx.prisma, cx.schoolId, fr.data.fields, fr.data.sentences, offeringIds, chunkSetId, primaryOfferingId)
+  const res = await createAssignments(cx.prisma, cx.schoolId, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId)
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath('/dashboard/teaching')
   redirect(res.redirectTo)
@@ -87,10 +101,11 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
   const cx = await staffSchoolContext()
   if (!cx.ok) return { error: cx.error }
   const assignmentId = Number(formData.get('assignmentId'))
-  const fr = readFields(formData)
+  const chunkSetId = Number(formData.get('chunkSetId')) || null
+  const fr = readForm(formData)
   if (!fr.ok) return { error: cx.t(fr.error) }
 
-  const res = await updateAssignmentService(cx.prisma, cx.schoolId, assignmentId, fr.data.fields, fr.data.sentences)
+  const res = await updateAssignmentService(cx.prisma, cx.schoolId, assignmentId, fr.data.meta, fr.data.phases, chunkSetId)
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   redirect(`/dashboard/assignments/${assignmentId}`)

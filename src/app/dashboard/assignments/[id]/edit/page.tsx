@@ -13,25 +13,37 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const a = await assignmentRepo.findForStaffWithSentences(prisma, assignmentId, user.schoolId)
+  const a = await assignmentRepo.findForStaffWithPhases(prisma, assignmentId, user.schoolId)
   if (!a) notFound()
+
+  // The set this assignment draws from (any phase that uses one — all share it).
+  const bank = a.phases.find((p) => p.chunkSet)?.chunkSet ?? null
 
   const initial: AssignmentInitial = {
     id: a.id,
     title: a.title,
     category: a.category ?? '',
     monthLabel: a.monthLabel ?? '',
-    instructions: a.instructions ?? '',
-    sentences: a.sentences.map((s) => s.text).join('\n'),
-    // Full UTC ISO; the form converts to the teacher's local time for the input.
-    openAt: a.openAt ? a.openAt.toISOString() : '',
-    dueAt: a.dueAt ? a.dueAt.toISOString() : '',
-    maxAttempts: a.maxAttempts,
-    requireEyesClosed: a.requireEyesClosed,
-    requireText: a.requireText,
-    requireAudio: a.requireAudio,
-    requireVideo: a.requireVideo,
-    requireHandwriting: a.requireHandwriting,
+    chunkSetId: bank?.id ?? null,
+    chunkSetName: bank?.name ?? null,
+    chunkSetCount: bank?._count.chunks ?? 0,
+    chunkSetHasVideo: Boolean(bank?.shadowVideoKey),
+    phases: a.phases.map((p) => ({
+      title: p.title ?? '',
+      instructions: p.instructions ?? '',
+      useBankSet: p.chunkSetId != null,
+      sentences: p.sentences.map((s) => s.text).join('\n'),
+      // Full UTC ISO; the form converts to the teacher's local time for the input.
+      openAt: p.openAt ? p.openAt.toISOString() : '',
+      dueAt: p.dueAt ? p.dueAt.toISOString() : '',
+      requireEyesClosed: p.requireEyesClosed,
+      requireText: p.requireText,
+      requireAudio: p.requireAudio,
+      requireVideo: p.requireVideo,
+      requireHandwriting: p.requireHandwriting,
+      graded: p.graded,
+      maxAttempts: p.maxAttempts,
+    })),
   }
 
   return (
