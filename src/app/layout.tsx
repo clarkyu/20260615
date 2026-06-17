@@ -38,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const [locale, user] = await Promise.all([getLocale(), getCurrentUser()])
 
   return (
-    <html lang={locale === 'zh' ? 'zh-CN' : 'en'} className={inter.variable} suppressHydrationWarning>
+    <html lang={locale === 'zh' ? 'zh-CN' : locale} className={inter.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <I18nProvider locale={locale}>

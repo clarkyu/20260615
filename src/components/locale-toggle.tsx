@@ -4,13 +4,17 @@ import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Languages } from 'lucide-react'
 import { setLocale } from '@/actions/locale'
+import { LOCALES } from '@/lib/i18n'
 import { useLocale } from './i18n-provider'
+
+// Cycles 中 → EN → ES → 中. The label shows the NEXT language you'll switch to.
+const LABEL = { zh: '中', en: 'EN', es: 'ES' } as const
 
 export function LocaleToggle() {
   const locale = useLocale()
   const router = useRouter()
   const [pending, start] = useTransition()
-  const next = locale === 'zh' ? 'en' : 'zh'
+  const next = LOCALES[(LOCALES.indexOf(locale) + 1) % LOCALES.length]
 
   return (
     <button
@@ -21,7 +25,7 @@ export function LocaleToggle() {
       className="tap inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground disabled:opacity-50"
     >
       <Languages className="h-3.5 w-3.5" />
-      {locale === 'zh' ? 'EN' : '中'}
+      {LABEL[next]}
     </button>
   )
 }
