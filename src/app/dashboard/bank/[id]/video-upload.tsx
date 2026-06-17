@@ -1,5 +1,6 @@
 'use client'
 
+import { uploadErrorText } from '@/lib/upload-error'
 import { useRef, useState } from 'react'
 import { Video, CheckCircle2, Upload } from 'lucide-react'
 import { getChunkSetVideoUrl } from '@/actions/bank'
@@ -34,7 +35,7 @@ export function VideoUpload({ chunkSetId, hasVideo }: { chunkSetId: number; hasV
       }
       setDone(true)
     } catch (e) {
-      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`)
+      setError(uploadErrorText(e, t))
     } finally {
       setBusy(false)
     }

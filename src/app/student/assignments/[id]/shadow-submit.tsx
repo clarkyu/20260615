@@ -1,5 +1,6 @@
 'use client'
 
+import { uploadErrorText } from '@/lib/upload-error'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Languages, Video, Mic, Square, Check, CheckCircle2 } from 'lucide-react'
@@ -58,7 +59,7 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
       setPhase('idle')
       onRecorded()
     } catch (e) {
-      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`); setPhase('idle')
+      setError(uploadErrorText(e, t)); setPhase('idle')
     }
   }, [assignmentId, order, onRecorded, t])
 

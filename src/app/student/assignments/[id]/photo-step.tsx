@@ -1,5 +1,6 @@
 'use client'
 
+import { uploadErrorText } from '@/lib/upload-error'
 import { useEffect, useRef, useState } from 'react'
 import { Camera, ImageUp } from 'lucide-react'
 import { getUploadUrl, recordMedia } from '@/actions/submissions'
@@ -51,7 +52,7 @@ export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDo
       if ('error' in fin && fin.error) { setError(fin.error); setBusy(false); return }
       onDone()
     } catch (e) {
-      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`); setBusy(false)
+      setError(uploadErrorText(e, t)); setBusy(false)
     }
   }
 
