@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
-import { PackagePlus } from 'lucide-react'
+import { type FormEvent } from 'react'
 import { importPackAction } from '@/actions/bank'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -13,26 +12,17 @@ import { Textarea } from '@/components/ui/textarea'
 import { BankMetaFields } from './bank-meta-fields'
 import { useChunkedImport } from './use-chunked-import'
 
-// Super-admin "build a pack": paste many three-part chunks, name + classify it,
-// auto-split into sets of N, import as global official — no per-pack code. The
+// Controlled "build a pack" panel (super-admin): paste many three-part chunks,
+// name + classify it, auto-split into sets of N, import as global official. The
 // import is bounded + resumable: the form's data is re-submitted until done.
-export function ImportPackForm() {
+export function ImportPackForm({ onClose }: { onClose: () => void }) {
   const t = useT()
-  const [open, setOpen] = useState(false)
   const { run, pending, msg } = useChunkedImport()
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     run(() => importPackAction(null, fd))
-  }
-
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <PackagePlus className="h-4 w-4" />{t('pack.new')}
-      </Button>
-    )
   }
 
   return (
@@ -59,7 +49,7 @@ export function ImportPackForm() {
           {msg ? <FormMessage>{msg}</FormMessage> : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>{pending ? t('bank.importing') : t('pack.import')}</Button>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('stu.cancelClass')}</Button>
+            <Button type="button" variant="ghost" onClick={onClose}>{t('stu.cancelClass')}</Button>
           </div>
         </form>
       </CardContent>
