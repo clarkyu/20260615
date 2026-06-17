@@ -18,9 +18,8 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
   const cls = await classRepo.findDetailForSchool(prisma, classId, user.schoolId)
   if (!cls) notFound()
 
-  const [students, allClasses, majors] = await Promise.all([
+  const [students, majors] = await Promise.all([
     userRepo.listStudentsInClass(prisma, classId),
-    classRepo.listForSchool(prisma, user.schoolId),
     majorRepo.listForSchool(prisma, user.schoolId),
   ])
 
@@ -36,7 +35,6 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
           department: cls.major?.department.name ?? '',
         }}
         students={students.map((s) => ({ id: s.id, studentNo: s.studentNo ?? '', name: s.name ?? '', phone: s.phone ?? '', email: s.email ?? '' }))}
-        allClasses={allClasses}
         majors={majors.map((m) => ({ id: m.id, name: m.name, department: m.department.name }))}
       />
     </div>

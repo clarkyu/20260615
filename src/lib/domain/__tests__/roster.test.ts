@@ -14,7 +14,7 @@ function parsed(rows: RosterRow[]): ParsedRoster {
 // ids for created departments/majors/classes and counts the student writes.
 function rosterFake(opts: { existingStudents?: { id: number; studentNo: string }[]; takenEmails?: string[]; createManyThrows?: boolean; createThrowsFor?: string[] } = {}) {
   let id = 1000
-  const calls = { createMany: 0, userCreate: 0, userUpdate: 0, deptCreate: 0, majorCreate: 0, classCreate: 0 }
+  const calls = { createMany: 0, userCreate: 0, userUpdate: 0, deptCreate: 0, majorCreate: 0, classCreate: 0, scCreateMany: 0, scCreate: 0 }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db: any = {
     _calls: calls,
@@ -33,6 +33,12 @@ function rosterFake(opts: { existingStudents?: { id: number; studentNo: string }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       create: async ({ data }: any) => { calls.userCreate++; if (opts.createThrowsFor?.includes(data.studentNo) && data.email != null) throw new Error('P2002'); return {} },
       update: async () => { calls.userUpdate++; return {} },
+    },
+    studentClass: {
+      findMany: async () => [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      createMany: async ({ data }: any) => { calls.scCreateMany++; return { count: data.length } },
+      create: async () => { calls.scCreate++; return {} },
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     $transaction: async (arr: any[]) => Promise.all(arr),
@@ -58,11 +64,13 @@ describe('importRoster', () => {
     expect(res.skipped).toBe(1)
   })
 
-  it('updates an existing student instead of creating', async () => {
+  it('updates an existing student instead of creating, and ensures class membership', async () => {
     const db = rosterFake({ existingStudents: [{ id: 42, studentNo: '001' }] })
     const res = await importRoster(db, 1, parsed([row({ studentNo: '001' })]))
     expect(res).toMatchObject({ created: 0, updated: 1 })
     expect(db._calls.userUpdate).toBe(1)
+    // The import adds the named class as a membership (never moving existing ones).
+    expect(db._calls.scCreateMany).toBe(1)
   })
 
   it('falls back to per-row inserts when the batch createMany collides', async () => {

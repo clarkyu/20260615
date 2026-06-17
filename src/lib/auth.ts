@@ -9,7 +9,6 @@ export interface CurrentUser {
   email?: string
   studentNo?: string | null
   schoolId?: number | null
-  classId?: number | null
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -22,7 +21,6 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     email: session.email,
     studentNo: session.studentNo,
     schoolId: session.schoolId,
-    classId: session.classId,
   }
 }
 

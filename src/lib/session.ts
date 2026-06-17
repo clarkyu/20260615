@@ -12,7 +12,6 @@ export interface SessionData {
   // Student
   studentNo?: string | null
   schoolId?: number | null
-  classId?: number | null
 }
 
 export async function getSession(): Promise<IronSession<SessionData>> {
