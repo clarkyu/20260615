@@ -7,7 +7,7 @@ import type { CurrentUser } from '@/lib/auth'
 import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
 import { parseChunks, splitIntoSets } from '@/lib/bank'
 import { starterSets, englishFlowSets } from '@/lib/curriculum/starter-bank'
-import { importPack } from '@/lib/domain/bank'
+import { importPack, refreshPack } from '@/lib/domain/bank'
 import * as bankRepo from '@/lib/repo/bank'
 import { parseForm, reqText, optText, reqId, intField, checkbox, z } from '@/lib/validate'
 
@@ -65,6 +65,20 @@ export async function importEnglishFlow(): Promise<ImportState> {
   const existing = await bankRepo.globalSources(prisma)
 
   const res = await importPack(prisma, null, await englishFlowSets(), existing)
+  revalidatePath('/dashboard/bank')
+  return res
+}
+
+// Push the latest source content (notably newly-added Chinese translations) onto the
+// already-imported official English-Flow sets (super-admin only). Idempotent +
+// resumable: only sets whose source now has more Chinese than the live set get
+// rebuilt; re-invoke until `remaining` is 0. Set ids are preserved (replaceChunks),
+// so published assignments that reference these sets keep working.
+export async function refreshEnglishFlow(): Promise<ImportState> {
+  const { user, prisma, t } = await staffContext()
+  if (!isSuper(user)) return { imported: 0, skipped: 0, error: t('err.forbidden') }
+  const coverage = await bankRepo.globalSetZhCoverage(prisma)
+  const res = await refreshPack(prisma, await englishFlowSets(), coverage)
   revalidatePath('/dashboard/bank')
   return res
 }

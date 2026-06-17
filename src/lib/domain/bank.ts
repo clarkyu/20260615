@@ -43,3 +43,33 @@ export async function importPack(
   }
   return { imported, skipped, remaining: todo.length - imported }
 }
+
+// Push source translations onto already-imported official sets: a set is rebuilt
+// from source only when the source now carries more Chinese 中心句 than the live set
+// does, so it's idempotent + resumable (re-run until remaining hits 0) and a synced
+// set is skipped. Bounded per call like importPack. `coverage` maps source →
+// { id, withZh } for the live global sets; sets with no live row are left to import.
+export async function refreshPack(
+  prisma: PrismaClient,
+  sets: PackSet[],
+  coverage: Map<string, { id: number; withZh: number }>,
+  maxChunks: number = MAX_CHUNKS_PER_CALL,
+): Promise<{ imported: number; skipped: number; remaining: number }> {
+  const sourceZh = (s: PackSet) => s.chunks.reduce((n, c) => n + (c.chinese ? 1 : 0), 0)
+  const todo = sets.filter((s) => {
+    const cov = s.meta.source ? coverage.get(s.meta.source) : undefined
+    return cov !== undefined && sourceZh(s) > cov.withZh
+  })
+  const skipped = sets.length - todo.length
+
+  let imported = 0
+  let budget = 0
+  for (const set of todo) {
+    if (imported > 0 && budget + set.chunks.length > maxChunks) break
+    const id = coverage.get(set.meta.source!)!.id
+    await bank.replaceChunks(prisma, id, set.name, set.chunks, set.meta)
+    imported++
+    budget += set.chunks.length
+  }
+  return { imported, skipped, remaining: todo.length - imported }
+}

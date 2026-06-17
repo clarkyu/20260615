@@ -53,6 +53,7 @@ const FLOW_BATCH = 50
 // out of the eagerly-evaluated server module graph (and off the cold path).
 export async function englishFlowSets(): Promise<StarterSet[]> {
   const { ENGLISH_FLOW } = await import('./english-flow')
+  const { ENGLISH_FLOW_ZH } = await import('./english-flow-zh')
   const sets: StarterSet[] = []
   for (let start = 0; start < ENGLISH_FLOW.length; start += FLOW_BATCH) {
     const slice = ENGLISH_FLOW.slice(start, start + FLOW_BATCH)
@@ -60,14 +61,17 @@ export async function englishFlowSets(): Promise<StarterSet[]> {
     const to = String(start + slice.length).padStart(4, '0')
     sets.push({
       name: `English Flow · ${from}–${to}`,
-      chunks: slice.map(([phrase, means, example]) => ({
-        english: phrase,
-        chinese: null,
-        meaningEn: means,
-        meaningZh: null,
-        exampleEn: example,
-        exampleZh: null,
-      })),
+      chunks: slice.map(([phrase, means, example], j) => {
+        const zh = ENGLISH_FLOW_ZH[start + j] // [中心句, 解释句, 情景例句] when translated
+        return {
+          english: phrase,
+          chinese: zh?.[0] ?? null,
+          meaningEn: means,
+          meaningZh: zh?.[1] ?? null,
+          exampleEn: example,
+          exampleZh: zh?.[2] ?? null,
+        }
+      }),
       meta: {
         cefr: null,
         strand: 'english.speaking.shadowing',
