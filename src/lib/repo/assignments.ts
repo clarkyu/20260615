@@ -65,6 +65,18 @@ export function findForStaffWithSentences(prisma: PrismaClient, id: number, scho
   })
 }
 
+// Teacher "preview as student": assignment + sentences + optional shadow chunk set
+// (with chunks), scoped to the teacher's school. No submissions — it's a preview.
+export function findForStaffPreview(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+  return prisma.assignment.findFirst({
+    where: { id, ...inSchool(schoolId) },
+    include: {
+      sentences: { orderBy: { order: 'asc' } },
+      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
+    },
+  })
+}
+
 // One create per offering — the bank link (video + chunk-set id) and the read-aloud
 // sentences are resolved by the caller.
 export function create(
