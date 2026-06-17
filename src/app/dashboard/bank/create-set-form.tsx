@@ -1,7 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { useActionState } from 'react'
 import { createChunkSet } from '@/actions/bank'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -12,18 +11,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { BankMetaFields } from './bank-meta-fields'
 
-export function CreateSetForm({ canPublishGlobal = false }: { canPublishGlobal?: boolean }) {
+// Controlled panel — the bank-actions menu shows/hides it. Success redirects to
+// the new set; cancel calls onClose.
+export function CreateSetForm({ canPublishGlobal = false, onClose }: { canPublishGlobal?: boolean; onClose: () => void }) {
   const t = useT()
-  const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(createChunkSet, null)
-
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" />{t('bank.newSet')}
-      </Button>
-    )
-  }
 
   return (
     <Card>
@@ -51,7 +43,7 @@ export function CreateSetForm({ canPublishGlobal = false }: { canPublishGlobal?:
           {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>{pending ? t('bank.creating') : t('bank.create')}</Button>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('stu.cancelClass')}</Button>
+            <Button type="button" variant="ghost" onClick={onClose}>{t('stu.cancelClass')}</Button>
           </div>
         </form>
       </CardContent>
