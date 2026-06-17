@@ -241,6 +241,17 @@ export async function changePassword(prevState: unknown, formData: FormData): Pr
   if (passwordError) return { error: t(passwordError) }
   if (newPassword !== confirmPassword) return { error: t('err.pwMismatch') }
 
+  // First-login onboarding also captures contact details. Both are optional — a
+  // blank field leaves any existing value untouched (e.g. an email set at import).
+  const emailInput = ((formData.get('email') as string) ?? '').trim()
+  let email: string | null = null
+  if (emailInput) {
+    email = normalizeEmail(emailInput)
+    if (!email) return { error: t('err.invalidEmail') }
+    if (await userRepo.findEmailOwner(prisma, email, current.userId)) return { error: t('err.emailTaken') }
+  }
+  const phone = ((formData.get('phone') as string) ?? '').trim() || null
+
   const user = await prisma.user.findUnique({ where: { id: current.userId } })
   if (!user) return { error: t('err.userNotFound') }
   const valid = await verifyPassword(currentPassword, user.passwordHash)
@@ -248,7 +259,12 @@ export async function changePassword(prevState: unknown, formData: FormData): Pr
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: await hashPassword(newPassword), mustChangePassword: false },
+    data: {
+      passwordHash: await hashPassword(newPassword),
+      mustChangePassword: false,
+      ...(email ? { email } : {}),
+      ...(phone ? { phone } : {}),
+    },
   })
   const session = await getSession()
   session.destroy()
