@@ -169,6 +169,7 @@ export async function login(prevState: unknown, formData: FormData): Promise<Act
 
   await establishSession(user)
   if (user.role === 'STUDENT') redirect(user.mustChangePassword ? '/student/change-password' : '/student')
+  if (user.mustChangePassword) redirect('/change-password')
   redirect('/dashboard')
 }
 

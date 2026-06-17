@@ -1,7 +1,7 @@
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import * as userRepo from '@/lib/repo/users'
-import { ChangePasswordForm } from './change-password-form'
+import { ChangePasswordForm } from '@/components/change-password-form'
 
 // First-login screen: change the initial password and (optionally) capture contact
 // details. Prefilled with anything already on file (e.g. an email set at import).
