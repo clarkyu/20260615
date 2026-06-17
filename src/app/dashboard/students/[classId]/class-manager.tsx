@@ -9,7 +9,7 @@ import {
   deleteClass,
   addStudent,
   updateStudent,
-  deleteStudent,
+  removeStudentFromClass,
   resetStudentPassword,
 } from '@/actions/students'
 import { useT } from '@/components/i18n-provider'
@@ -47,12 +47,10 @@ const SELECT = 'h-10 w-full rounded-xl border border-input bg-background px-3 te
 export function ClassManager({
   cls,
   students,
-  allClasses,
   majors,
 }: {
   cls: Cls
   students: Student[]
-  allClasses: { id: number; name: string }[]
   majors: MajorOpt[]
 }) {
   const t = useT()
@@ -135,7 +133,6 @@ export function ClassManager({
                 {editId === s.id ? (
                   <StudentEdit
                     s={s}
-                    allClasses={allClasses}
                     currentClassId={cls.id}
                     disabled={pending}
                     t={t}
@@ -169,13 +166,14 @@ export function ClassManager({
                         className="text-destructive"
                         disabled={pending && busyId === s.id}
                         onClick={() => {
-                          if (!confirm(t('cls.delConfirm'))) return
+                          if (!confirm(t('cls.removeConfirm'))) return
                           const fd = new FormData()
                           fd.set('studentId', String(s.id))
-                          run(deleteStudent, fd, s.id)
+                          fd.set('classId', String(cls.id))
+                          run(removeStudentFromClass, fd, s.id)
                         }}
                       >
-                        {t('cls.del')}
+                        {t('cls.removeFromClass')}
                       </Button>
                     </div>
                   </div>
@@ -237,7 +235,6 @@ export function ClassManager({
 
 function StudentEdit({
   s,
-  allClasses,
   currentClassId,
   disabled,
   t,
@@ -245,7 +242,6 @@ function StudentEdit({
   onSave,
 }: {
   s: Student
-  allClasses: { id: number; name: string }[]
   currentClassId: number
   disabled: boolean
   t: (k: string) => string
@@ -256,7 +252,6 @@ function StudentEdit({
   const [no, setNo] = useState(s.studentNo)
   const [phone, setPhone] = useState(s.phone)
   const [email, setEmail] = useState(s.email)
-  const [classId, setClassId] = useState(currentClassId)
 
   return (
     <div className="space-y-2">
@@ -268,11 +263,6 @@ function StudentEdit({
         <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('cls.phone')} inputMode="tel" className="h-10" />
         <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('email')} type="email" className="h-10" />
       </div>
-      <select value={classId} onChange={(e) => setClassId(Number(e.target.value))} className={SELECT}>
-        {allClasses.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </select>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" className="flex-1" onClick={onCancel}>{t('back')}</Button>
         <Button
@@ -286,7 +276,7 @@ function StudentEdit({
             fd.set('studentNo', no)
             fd.set('phone', phone)
             fd.set('email', email)
-            fd.set('classId', String(classId))
+            fd.set('classId', String(currentClassId))
             onSave(fd)
           }}
         >

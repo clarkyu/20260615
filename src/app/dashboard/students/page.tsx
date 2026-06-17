@@ -43,7 +43,7 @@ export default async function StudentsPage() {
                 department: c.major?.department.name ?? null,
                 major: c.major?.name ?? null,
                 grade: c.grade,
-                count: c._count.members,
+                count: c._count.studentMemberships,
               }))}
             />
           )}

@@ -124,7 +124,7 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
   if (!cls) return { error: t('err.classNotFound') }
 
   // A student can be in several classes: if this studentNo already exists in the
-  // school, add them to this class too (extra membership) instead of erroring.
+  // school, just add them to this class too instead of erroring.
   const existing = await userRepo.findStudentNoDup(prisma, cls.schoolId, studentNo)
   if (existing) {
     await userRepo.addClassMembership(prisma, existing.id, classId)
@@ -133,15 +133,15 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
   }
   if (email && (await userRepo.findEmailOwner(prisma, email))) return { error: t('err.emailTaken') }
 
-  await userRepo.createStudent(prisma, {
+  const created = await userRepo.createStudent(prisma, {
     schoolId: cls.schoolId,
-    classId,
     studentNo,
     name,
     phone,
     email,
     passwordHash: await hashPassword(studentNo),
   })
+  await userRepo.addClassMembership(prisma, created.id, classId)
   revalidatePath(`/dashboard/students/${classId}`)
   return { success: true }
 }
@@ -160,29 +160,33 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
     formData,
   )
   if (!parsed.ok) return { error: t(parsed.error) }
-  const { studentId, name, studentNo, classId: newClassId, phone } = parsed.data
+  // classId is the roster page being edited (for cache revalidation only) — editing
+  // a student's details never moves their class membership.
+  const { studentId, name, studentNo, classId, phone } = parsed.data
   const email = parsed.data.email?.toLowerCase() ?? null
 
   const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
   if (!stu || stu.schoolId == null) return { error: t('err.studentNotFound') }
-  const cls = await classRepo.findClassForSchool(prisma, newClassId, stu.schoolId)
-  if (!cls) return { error: t('err.classNotFound') }
   if (await userRepo.findStudentNoDup(prisma, stu.schoolId, studentNo, studentId)) return { error: t('err.studentNoExists') }
   if (email && (await userRepo.findEmailOwner(prisma, email, studentId))) return { error: t('err.emailTaken') }
 
-  await userRepo.updateStudent(prisma, studentId, { name, studentNo, classId: newClassId, phone, email })
-  if (stu.classId) revalidatePath(`/dashboard/students/${stu.classId}`)
-  revalidatePath(`/dashboard/students/${newClassId}`)
+  await userRepo.updateStudent(prisma, studentId, { name, studentNo, phone, email })
+  revalidatePath(`/dashboard/students/${classId}`)
   return { success: true }
 }
 
-export async function deleteStudent(formData: FormData): Promise<MutState> {
-  const { user, prisma } = await staffContext()
+// Remove a student from ONE class (not the whole account). If that leaves them in no
+// class at all, the student row is deleted (a classless student can't see anything).
+export async function removeStudentFromClass(formData: FormData): Promise<MutState> {
+  const { user, prisma, t } = await staffContext()
   const studentId = Number(formData.get('studentId'))
+  const classId = Number(formData.get('classId'))
+  const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
+  if (!cls) return { error: t('err.classNotFound') }
   const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
   if (stu) {
-    await userRepo.remove(prisma, studentId)
-    if (stu.classId) revalidatePath(`/dashboard/students/${stu.classId}`)
+    await userRepo.removeClassMembership(prisma, studentId, classId)
+    revalidatePath(`/dashboard/students/${classId}`)
   }
   return { success: true }
 }

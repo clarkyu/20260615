@@ -48,7 +48,6 @@ async function establishSession(user: User) {
   session.email = user.email ?? undefined
   session.studentNo = user.studentNo
   session.schoolId = user.schoolId
-  session.classId = user.classId
   await session.save()
 }
 
