@@ -17,7 +17,8 @@ export default async function StudentHome() {
   const { locale, t } = await getT()
   const me = await userRepo.findById(prisma, user.userId)
   if (me?.mustChangePassword) redirect('/student/change-password')
-  if (!me?.classId) {
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  if (!me || classIds.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
         {locale === 'zh' ? '你的账号还未分配班级，请联系老师。' : 'Your account has no class yet — please contact your teacher.'}
@@ -26,7 +27,7 @@ export default async function StudentHome() {
   }
 
   const [assignments, practiceRows] = await Promise.all([
-    assignmentRepo.listForStudent(prisma, me.classId, user.userId),
+    assignmentRepo.listForStudent(prisma, classIds, user.userId),
     practiceRepo.listScoredForStudent(prisma, user.userId),
   ])
 

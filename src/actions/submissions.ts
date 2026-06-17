@@ -8,6 +8,7 @@ import { scheduleGrading } from '@/lib/domain/jobs'
 import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as userRepo from '@/lib/repo/users'
 
 type MediaKind = 'video' | 'audio' | 'image'
 
@@ -22,7 +23,8 @@ export async function getUploadUrl(assignmentId: number, kind: MediaKind, conten
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
 
-  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
   const key = submissionMediaKey(assignmentId, user.userId, resolved.attempt, kind, ext || 'webm')
@@ -56,12 +58,13 @@ export async function recordMedia(submissionId: number, kind: MediaKind, sizeByt
 export async function finishSubmission(assignmentId: number) {
   const { user, prisma, t } = await studentContext()
 
-  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
   if (!resolved.ok) return { error: t(resolved.error) }
   const submission = await submissionRepo.findOwnAttempt(prisma, assignmentId, user.userId, resolved.attempt)
   if (!submission) return { error: t('err.subNotFound') }
 
-  const assignment = await assignmentRepo.findForClass(prisma, assignmentId, user.classId)
+  const assignment = await assignmentRepo.findForClasses(prisma, assignmentId, classIds)
   if (!assignment) return { error: t('err.assignNotFound') }
   const missing = missingRequiredPart(assignment, submission)
   if (missing) return { error: t(missing) }
@@ -89,7 +92,8 @@ export async function finishSubmission(assignmentId: number) {
 export async function getShadowVideoUrl(assignmentId: number): Promise<{ url?: string; error?: string }> {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const assignment = await assignmentRepo.findShadowVideoForClass(prisma, assignmentId, user.classId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const assignment = await assignmentRepo.findShadowVideoForClasses(prisma, assignmentId, classIds)
   if (!assignment?.shadowVideoKey) return { error: t('err.noVideo') }
   try {
     return { url: await presignDownload(assignment.shadowVideoKey) }
@@ -103,7 +107,8 @@ export async function getShadowVideoUrl(assignmentId: number): Promise<{ url?: s
 export async function getShadowTakeUploadUrl(assignmentId: number, order: number, contentType: string, ext: string) {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
   const key = shadowTakeKey(assignmentId, user.userId, resolved.attempt, order, ext || 'webm')
@@ -120,7 +125,8 @@ export async function getShadowTakeUploadUrl(assignmentId: number, order: number
 // Finish a per-sentence shadowing submission once every sentence has a take.
 export async function finishShadowing(assignmentId: number) {
   const { user, prisma, t } = await studentContext()
-  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
   if (!resolved.ok) return { error: t(resolved.error) }
   const submission = await submissionRepo.findOwnAttemptWithTakeCount(prisma, assignmentId, user.userId, resolved.attempt)
   if (!submission) return { error: t('err.subNotFound') }
@@ -142,7 +148,8 @@ export async function submitRecitedText(assignmentId: number, text: string) {
   if (!trimmed) return { error: t('err.needRecite') }
   if (trimmed.length > 20000) return { error: t('err.textTooLong') }
 
-  const resolved = await resolveAttempt(prisma, user.userId, user.classId ?? null, assignmentId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
   await submissionRepo.upsertRecitedText(prisma, assignmentId, user.userId, resolved.attempt, trimmed)

@@ -117,11 +117,26 @@ model ClassGroup {
   school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   major      Major?   @relation(fields: [majorId], references: [id], onDelete: SetNull)
   members    User[]
+  studentMemberships StudentClass[]
   offerings  CourseOffering[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
   @@index([majorId])
+}
+
+// Extra class memberships for a student beyond their primary (User.classId), so a
+// student can belong to several classes at once. Visibility = primary ∪ memberships.
+model StudentClass {
+  id        Int        @id @default(autoincrement())
+  studentId Int
+  classId   Int
+  student   User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     ClassGroup @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId])
+  @@index([classId])
+  @@index([studentId])
 }
 
 model User {
@@ -152,6 +167,7 @@ model User {
   school      School?      @relation(fields: [schoolId], references: [id], onDelete: SetNull)
   class       ClassGroup?  @relation(fields: [classId], references: [id], onDelete: SetNull)
   department  Department?  @relation("UserDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  classMemberships StudentClass[]
   submissions Submission[]
   practiceAttempts  PracticeAttempt[]
   taughtOfferings   CourseOffering[] @relation("OfferingTeacher")

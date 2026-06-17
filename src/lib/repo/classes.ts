@@ -54,11 +54,27 @@ export function update(prisma: PrismaClient, id: number, data: { name?: string; 
   return prisma.classGroup.update({ where: { id }, data })
 }
 
-// Delete a class and its students iff it belongs to the school; returns success.
+// Delete a class iff it belongs to the school; returns success. Students who only
+// belong to this class are deleted; students who are also in OTHER classes are kept
+// (deleting the class drops their membership/primary link, not the student).
 export async function deleteWithStudents(prisma: PrismaClient, id: number, schoolId: number | null | undefined): Promise<boolean> {
   const cls = await prisma.classGroup.findFirst({ where: { id, schoolId: schoolId ?? -1 }, select: { id: true } })
   if (!cls) return false
-  await prisma.user.deleteMany({ where: { classId: id, role: 'STUDENT' } })
+
+  const students = await prisma.user.findMany({
+    where: { role: 'STUDENT', OR: [{ classId: id }, { classMemberships: { some: { classId: id } } }] },
+    select: { id: true, classId: true, classMemberships: { select: { classId: true } } },
+  })
+  // Deleting the class cascades its memberships and SetNulls a primary classId === id.
   await prisma.classGroup.delete({ where: { id } })
+  // A student is orphaned (delete) only if they have no remaining class at all.
+  const orphans = students
+    .filter((s) => {
+      const others = new Set(s.classMemberships.map((m) => m.classId).filter((c) => c !== id))
+      if (s.classId != null && s.classId !== id) others.add(s.classId)
+      return others.size === 0
+    })
+    .map((s) => s.id)
+  if (orphans.length) await prisma.user.deleteMany({ where: { id: { in: orphans } } })
   return true
 }

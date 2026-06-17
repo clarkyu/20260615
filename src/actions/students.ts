@@ -122,7 +122,15 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
 
   const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
   if (!cls) return { error: t('err.classNotFound') }
-  if (await userRepo.findStudentNoDup(prisma, cls.schoolId, studentNo)) return { error: t('err.studentNoExists') }
+
+  // A student can be in several classes: if this studentNo already exists in the
+  // school, add them to this class too (extra membership) instead of erroring.
+  const existing = await userRepo.findStudentNoDup(prisma, cls.schoolId, studentNo)
+  if (existing) {
+    await userRepo.addClassMembership(prisma, existing.id, classId)
+    revalidatePath(`/dashboard/students/${classId}`)
+    return { success: true }
+  }
   if (email && (await userRepo.findEmailOwner(prisma, email))) return { error: t('err.emailTaken') }
 
   await userRepo.createStudent(prisma, {
