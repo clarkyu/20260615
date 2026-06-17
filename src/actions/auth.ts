@@ -84,15 +84,13 @@ export async function register(prevState: unknown, formData: FormData): Promise<
   const isSuperAdmin = email === normalizeEmail(config.adminEmail() ?? '')
   const role = isSuperAdmin ? 'SUPER_ADMIN' : 'TEACHER'
 
-  const userId = existing
-    ? (await prisma.user.update({ where: { id: existing.id }, data: { passwordHash, name, role } })).id
-    : (await prisma.user.create({ data: { email, passwordHash, name, role, emailVerified: null } })).id
-
-  try {
-    await issueVerificationEmail(userId, email)
-  } catch (err) {
-    console.error('[register] Failed to send verification email:', err)
-    return { error: t('err.emailSendFail') }
+  // Email verification is disabled — accounts are usable immediately, so mark the
+  // address verified on sign-up rather than emailing a confirmation link.
+  const now = new Date()
+  if (existing) {
+    await prisma.user.update({ where: { id: existing.id }, data: { passwordHash, name, role, emailVerified: now } })
+  } else {
+    await prisma.user.create({ data: { email, passwordHash, name, role, emailVerified: now } })
   }
   return { success: true }
 }
@@ -168,7 +166,6 @@ export async function login(prevState: unknown, formData: FormData): Promise<Act
   const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) return { error: t('err.invalidCreds') }
   if (!user.isActive) return { error: t('err.accountDisabled') }
-  if (user.email && !user.emailVerified) return { error: t('err.needVerify'), needsVerification: true }
 
   await establishSession(user)
   if (user.role === 'STUDENT') redirect(user.mustChangePassword ? '/student/change-password' : '/student')
