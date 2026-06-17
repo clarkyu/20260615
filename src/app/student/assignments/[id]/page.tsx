@@ -37,9 +37,10 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   const prisma = await getDb()
   const me = await userRepo.findById(prisma, user.userId)
   if (me?.mustChangePassword) redirect('/student/change-password')
-  if (!me?.classId) notFound()
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  if (classIds.length === 0) notFound()
 
-  const assignment = await assignmentRepo.findForStudentDetail(prisma, assignmentId, me.classId, user.userId)
+  const assignment = await assignmentRepo.findForStudentDetail(prisma, assignmentId, classIds, user.userId)
   if (!assignment) notFound()
 
   const latest = assignment.submissions[0]

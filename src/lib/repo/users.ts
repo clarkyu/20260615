@@ -126,10 +126,39 @@ export function listStaffForSchool(prisma: PrismaClient, schoolId: number | null
   })
 }
 
-// Students in one class (the class roster table).
+// A student belongs to a class if it's their primary class OR an extra membership.
+function inClass(classId: number) {
+  return { OR: [{ classId }, { classMemberships: { some: { classId } } }] }
+}
+
+// All class ids a student belongs to: primary (User.classId) ∪ extra memberships.
+export async function studentClassIds(prisma: PrismaClient, studentId: number): Promise<number[]> {
+  const u = await prisma.user.findUnique({
+    where: { id: studentId },
+    select: { classId: true, classMemberships: { select: { classId: true } } },
+  })
+  if (!u) return []
+  const ids = new Set<number>(u.classMemberships.map((m) => m.classId))
+  if (u.classId != null) ids.add(u.classId)
+  return [...ids]
+}
+
+// Add an extra class membership for an existing student (idempotent; never the
+// primary class, which is already covered).
+export async function addClassMembership(prisma: PrismaClient, studentId: number, classId: number): Promise<void> {
+  const u = await prisma.user.findUnique({ where: { id: studentId }, select: { classId: true } })
+  if (u?.classId === classId) return
+  await prisma.studentClass.upsert({
+    where: { studentId_classId: { studentId, classId } },
+    create: { studentId, classId },
+    update: {},
+  })
+}
+
+// Students in one class (the class roster table) — primary members + extra members.
 export function listStudentsInClass(prisma: PrismaClient, classId: number) {
   return prisma.user.findMany({
-    where: { classId, role: 'STUDENT' },
+    where: { role: 'STUDENT', ...inClass(classId) },
     orderBy: { studentNo: 'asc' },
     select: { id: true, studentNo: true, name: true, phone: true, email: true },
   })
@@ -139,7 +168,7 @@ export function listStudentsInClass(prisma: PrismaClient, classId: number) {
 // + the score export (which only needs id/name/studentNo, not the full user row).
 export function listClassRoster(prisma: PrismaClient, schoolId: number | null | undefined, classId: number) {
   return prisma.user.findMany({
-    where: { schoolId: schoolId ?? -1, classId, role: 'STUDENT' },
+    where: { schoolId: schoolId ?? -1, role: 'STUDENT', ...inClass(classId) },
     select: { id: true, name: true, studentNo: true },
     orderBy: { studentNo: 'asc' },
   })

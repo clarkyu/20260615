@@ -13,11 +13,11 @@ export type AttemptResult = { ok: false; error: string } | { ok: true; attempt: 
 export async function resolveAttempt(
   prisma: PrismaClient,
   studentId: number,
-  classId: number | null,
+  classIds: number[],
   assignmentId: number,
 ): Promise<AttemptResult> {
-  if (!classId) return { ok: false, error: 'err.noClassAssigned' }
-  const assignment = await assignments.findForClass(prisma, assignmentId, classId)
+  if (classIds.length === 0) return { ok: false, error: 'err.noClassAssigned' }
+  const assignment = await assignments.findForClasses(prisma, assignmentId, classIds)
   if (!assignment) return { ok: false, error: 'err.assignNotFound' }
 
   const now = new Date()

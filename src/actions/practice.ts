@@ -8,14 +8,16 @@ import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { withAiKeys } from '@/lib/ai/key-context'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as userRepo from '@/lib/repo/users'
 import * as practiceRepo from '@/lib/repo/practice'
 
 // Presigned URL for a practice audio recording (separate prefix; never counts as a submission).
 export async function getPracticeUploadUrl(assignmentId: number, contentType: string, ext: string) {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  if (!user.classId) return { error: t('err.noClassAssigned') }
-  if (!(await assignmentRepo.findForClass(prisma, assignmentId, user.classId))) return { error: t('err.assignNotFound') }
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  if (classIds.length === 0) return { error: t('err.noClassAssigned') }
+  if (!(await assignmentRepo.findForClasses(prisma, assignmentId, classIds))) return { error: t('err.assignNotFound') }
 
   const key = practiceMediaKey(assignmentId, user.userId, 'audio', ext || 'webm')
   try {
@@ -53,8 +55,9 @@ export async function gradePracticeAttempt(
   payload: { kind: 'audio' | 'text'; mediaKey?: string; recitedText?: string },
 ): Promise<PracticeFeedback> {
   const { user, prisma, t } = await studentContext()
-  if (!user.classId) return { status: 'error', message: t('err.noClassAssigned') }
-  const assignment = await assignmentRepo.findForClassWithSentences(prisma, assignmentId, user.classId)
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  if (classIds.length === 0) return { status: 'error', message: t('err.noClassAssigned') }
+  const assignment = await assignmentRepo.findForClassesWithSentences(prisma, assignmentId, classIds)
   if (!assignment) return { status: 'error', message: t('err.assignNotFound') }
 
   // Security: only presign a key that demonstrably belongs to THIS student under

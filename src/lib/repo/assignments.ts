@@ -156,28 +156,29 @@ export function listWithSentencesForOffering(prisma: PrismaClient, offeringId: n
 
 // ── student-facing reads (scoped to the student's class, not their school) ────
 
-// The assignment iff it targets the student's class (the submission gate).
-export function findForClass(prisma: PrismaClient, id: number, classId: number | null | undefined) {
-  return prisma.assignment.findFirst({ where: { id, offering: { classId: classId ?? -1 } } })
+// The assignment iff it targets one of the student's classes (the submission gate).
+// A student may belong to several classes; an empty list matches nothing.
+export function findForClasses(prisma: PrismaClient, id: number, classIds: number[]) {
+  return prisma.assignment.findFirst({ where: { id, offering: { classId: { in: classIds } } } })
 }
 
 // Same, with ordered reference sentences (the practice gate needs them).
-export function findForClassWithSentences(prisma: PrismaClient, id: number, classId: number | null | undefined) {
+export function findForClassesWithSentences(prisma: PrismaClient, id: number, classIds: number[]) {
   return prisma.assignment.findFirst({
-    where: { id, offering: { classId: classId ?? -1 } },
+    where: { id, offering: { classId: { in: classIds } } },
     include: { sentences: { orderBy: { order: 'asc' } } },
   })
 }
 
-export function findShadowVideoForClass(prisma: PrismaClient, id: number, classId: number | null | undefined) {
-  return prisma.assignment.findFirst({ where: { id, offering: { classId: classId ?? -1 } }, select: { shadowVideoKey: true } })
+export function findShadowVideoForClasses(prisma: PrismaClient, id: number, classIds: number[]) {
+  return prisma.assignment.findFirst({ where: { id, offering: { classId: { in: classIds } } }, select: { shadowVideoKey: true } })
 }
 
-// The student home list: a class's assignments, each with the student's latest
-// submission (take 1), sentence count, and course name.
-export function listForStudent(prisma: PrismaClient, classId: number | null | undefined, studentId: number) {
+// The student home list: the assignments of all the student's classes, each with
+// the student's latest submission (take 1), sentence count, and course name.
+export function listForStudent(prisma: PrismaClient, classIds: number[], studentId: number) {
   return prisma.assignment.findMany({
-    where: { offering: { classId: classId ?? -1 } },
+    where: { offering: { classId: { in: classIds } } },
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { sentences: true } },
@@ -189,9 +190,9 @@ export function listForStudent(prisma: PrismaClient, classId: number | null | un
 
 // One assignment for the student detail/submit screen: sentences, optional bank
 // chunk set (shadowing), and the student's latest submission with its take orders.
-export function findForStudentDetail(prisma: PrismaClient, id: number, classId: number | null | undefined, studentId: number) {
+export function findForStudentDetail(prisma: PrismaClient, id: number, classIds: number[], studentId: number) {
   return prisma.assignment.findFirst({
-    where: { id, offering: { classId: classId ?? -1 } },
+    where: { id, offering: { classId: { in: classIds } } },
     include: {
       sentences: { orderBy: { order: 'asc' } },
       chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
