@@ -60,7 +60,7 @@ export async function englishFlowSets(): Promise<StarterSet[]> {
     const from = String(start + 1).padStart(4, '0')
     const to = String(start + slice.length).padStart(4, '0')
     sets.push({
-      name: `English Flow · ${from}–${to}`,
+      name: `Native English 2000 · ${from}–${to}`,
       chunks: slice.map(([phrase, means, example], j) => {
         const zh = ENGLISH_FLOW_ZH[start + j] // [中心句, 解释句, 情景例句] when translated
         return {
