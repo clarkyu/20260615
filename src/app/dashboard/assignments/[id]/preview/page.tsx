@@ -8,6 +8,7 @@ import * as assignmentRepo from '@/lib/repo/assignments'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { BilingualChunkList } from '@/components/bilingual'
 
 const fmt = (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ')
 
@@ -77,22 +78,7 @@ export default async function AssignmentPreviewPage({ params }: { params: Promis
 
       {/* Shadowing chunks (the per-sentence content students shadow) */}
       {isShadow && a.chunkSet ? (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">{t('preview.sentences')}</h2>
-          <Card>
-            <CardContent className="divide-y divide-border/60 p-0">
-              {a.chunkSet.chunks.map((c) => (
-                <div key={c.id} className="flex gap-3 p-3.5 text-sm">
-                  <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{c.order}</span>
-                  <div className="min-w-0 space-y-1">
-                    <div className="font-semibold">{c.exampleEn || c.english}</div>
-                    {c.exampleZh || c.chinese ? <div className="text-xs text-muted-foreground">{c.exampleZh || c.chinese}</div> : null}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+        <BilingualChunkList chunks={a.chunkSet.chunks} title={t('preview.sentences')} />
       ) : a.sentences.length > 0 ? (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-muted-foreground">{t('preview.sentences')}</h2>

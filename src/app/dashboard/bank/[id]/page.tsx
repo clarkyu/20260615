@@ -13,6 +13,7 @@ import { SubmitButton } from '@/components/submit-button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { deleteChunkSet } from '@/actions/bank'
+import { BilingualChunkList } from '@/components/bilingual'
 import { VideoUpload } from './video-upload'
 import { EditSetForm } from './edit-set-form'
 
@@ -79,36 +80,7 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
       ) : null}
 
       {/* Sentences */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">{t('bank.chunkList')}</h2>
-        <Card>
-          <CardContent className="divide-y divide-border/60 p-0">
-            {set.chunks.map((c) => (
-              <div key={c.id} className="flex gap-3 p-3.5 text-sm">
-                <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{c.order}</span>
-                <div className="min-w-0 space-y-1.5">
-                  <div>
-                    <div className="font-semibold">{c.english}</div>
-                    {c.chinese ? <div className="text-xs text-muted-foreground">{c.chinese}</div> : null}
-                  </div>
-                  {c.meaningEn ? (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">{t('bank.meaning')}：</span>{c.meaningEn}
-                      {c.meaningZh ? <span className="text-muted-foreground"> / {c.meaningZh}</span> : null}
-                    </div>
-                  ) : null}
-                  {c.exampleEn ? (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">{t('bank.example')}：</span>{c.exampleEn}
-                      {c.exampleZh ? <span className="text-muted-foreground"> / {c.exampleZh}</span> : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+      <BilingualChunkList chunks={set.chunks} />
 
       {/* Owner tools */}
       {canEdit ? (
