@@ -11,7 +11,7 @@ function mk(source: string, n: number): PackSet {
   return {
     name: source,
     chunks: Array.from({ length: n }, () => ({ english: 'x', chinese: null, meaningEn: null, meaningZh: null, exampleEn: null, exampleZh: null })),
-    meta: { cefr: null, strand: null, domain: null, tags: null, source },
+    meta: { cefr: null, strand: null, domain: null, tags: null, source, series: null },
   }
 }
 

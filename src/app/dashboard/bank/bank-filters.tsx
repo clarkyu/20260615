@@ -11,7 +11,7 @@ const speakingStrands = STRANDS.filter((s) => s.parent === 'english.speaking')
 // URL-driven filters for the bank index. Each select writes its value into the
 // query string (empty → removed), and the server component re-queries. Kept
 // stateless so the URL is the single source of truth (shareable / back-button).
-export function BankFilters({ cefr, strand, domain }: { cefr?: string; strand?: string; domain?: string }) {
+export function BankFilters({ cefr, strand, domain, series, seriesOptions = [] }: { cefr?: string; strand?: string; domain?: string; series?: string; seriesOptions?: string[] }) {
   const t = useT()
   const router = useRouter()
   const pathname = usePathname()
@@ -25,11 +25,17 @@ export function BankFilters({ cefr, strand, domain }: { cefr?: string; strand?: 
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
-  const active = Boolean(cefr || strand || domain)
+  const active = Boolean(cefr || strand || domain || series)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">{t('bank.filter')}</span>
+      {seriesOptions.length > 0 ? (
+        <select aria-label={t('bank.series')} value={series ?? ''} onChange={(e) => set('series', e.target.value)} className={SELECT}>
+          <option value="">{t('bank.series')}</option>
+          {seriesOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      ) : null}
       <select aria-label={t('bank.level')} value={cefr ?? ''} onChange={(e) => set('cefr', e.target.value)} className={SELECT}>
         <option value="">{t('bank.level')}</option>
         {CEFR_LEVELS.map((l) => <option key={l.band} value={l.band}>{l.label}</option>)}
