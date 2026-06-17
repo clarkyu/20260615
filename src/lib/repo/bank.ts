@@ -17,6 +17,7 @@ export interface ChunkSetMeta {
   domain: string | null
   tags: string | null
   source: string | null
+  series: string | null
 }
 
 // Read scope: own school OR global (schoolId null). Exported for policy tests —
@@ -76,11 +77,13 @@ export interface BankFilters {
   cefr?: string
   strand?: string
   domain?: string
+  series?: string
 }
 
 // Set list for the bank index — own + global, name, video presence, chunk count,
-// level/skill for badges, ownership (schoolId) to badge official + gate edit.
-// Optional curriculum filters (each ANDed when present). Global sets first.
+// level/skill/series for grouping + badges, ownership (schoolId) to badge official
+// + gate edit. Optional filters (each ANDed when present). Grouped by series, then
+// ordered by name so a series' "· NNNN–MMMM" ranges read in order.
 export function listVisible(prisma: PrismaClient, schoolId: number | null | undefined, filters?: BankFilters) {
   return prisma.chunkSet.findMany({
     where: {
@@ -89,11 +92,23 @@ export function listVisible(prisma: PrismaClient, schoolId: number | null | unde
         ...(filters?.cefr ? [{ cefr: filters.cefr }] : []),
         ...(filters?.strand ? [{ strand: filters.strand }] : []),
         ...(filters?.domain ? [{ domain: filters.domain }] : []),
+        ...(filters?.series ? [{ series: filters.series }] : []),
       ],
     },
-    select: { id: true, schoolId: true, name: true, shadowVideoKey: true, cefr: true, strand: true, _count: { select: { chunks: true } } },
-    orderBy: [{ schoolId: 'asc' }, { createdAt: 'desc' }],
+    select: { id: true, schoolId: true, name: true, shadowVideoKey: true, cefr: true, strand: true, series: true, _count: { select: { chunks: true } } },
+    orderBy: [{ series: 'asc' }, { name: 'asc' }],
   })
+}
+
+// Distinct series visible to a school (own + global), for the series filter.
+export async function seriesList(prisma: PrismaClient, schoolId: number | null | undefined): Promise<string[]> {
+  const rows = await prisma.chunkSet.findMany({
+    where: { AND: [visibleWhere(schoolId), { series: { not: null } }] },
+    select: { series: true },
+    distinct: ['series'],
+    orderBy: { series: 'asc' },
+  })
+  return rows.map((r) => r.series).filter((s): s is string => s !== null)
 }
 
 // A set's header summary (no chunk rows) — for the publish-from-set screen.

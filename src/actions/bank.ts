@@ -14,8 +14,9 @@ import { parseForm, reqText, optText, reqId, intField, checkbox, z } from '@/lib
 type ActionState = { error?: string; success?: boolean }
 
 const metaShape = { cefr: optText(20), strand: optText(60), domain: optText(30), tags: optText(300), source: optText(120) }
+// Manually-built sets are standalone (series: null); imports set their own series.
 function metaFrom(d: { cefr?: string | null; strand?: string | null; domain?: string | null; tags?: string | null; source?: string | null }) {
-  return { cefr: d.cefr ?? null, strand: d.strand ?? null, domain: d.domain ?? null, tags: d.tags ?? null, source: d.source ?? null }
+  return { cefr: d.cefr ?? null, strand: d.strand ?? null, domain: d.domain ?? null, tags: d.tags ?? null, source: d.source ?? null, series: null }
 }
 
 const isSuper = (user: CurrentUser) => user.role === 'SUPER_ADMIN'
@@ -83,10 +84,11 @@ export async function importPackAction(prevState: unknown, formData: FormData): 
   if (chunks.length === 0) return { error: t('err.needChunks') }
 
   const meta = metaFrom(parsed.data)
+  // The pack name is its series, so all its sets group together in the bank.
   const sets = splitIntoSets(parsed.data.name, chunks, parsed.data.perSet).map((s) => ({
     name: s.name,
     chunks: s.chunks,
-    meta: { ...meta, source: s.sourceKey },
+    meta: { ...meta, source: s.sourceKey, series: parsed.data.name },
   }))
   const existing = await bankRepo.globalSources(prisma)
   const res = await importPack(prisma, null, sets, existing)

@@ -51,6 +51,7 @@ model ChunkSet {
   domain         String?  // general / academic / industry / occupational
   tags           String?  // comma-separated feature/topic tags
   source         String?
+  series         String?  // collection this set belongs to (e.g. "Native English 2000"); null = standalone
   createdAt      DateTime @default(now())
   school         School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   chunks         Chunk[]

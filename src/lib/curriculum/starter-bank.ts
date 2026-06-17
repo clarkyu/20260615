@@ -39,6 +39,7 @@ export function starterSets(): StarterSet[] {
       domain: item.domain,
       tags: item.tags.join(','),
       source: item.id,
+      series: '官方样题',
     },
   }))
 }
@@ -73,6 +74,7 @@ export async function englishFlowSets(): Promise<StarterSet[]> {
         domain: 'general',
         tags: 'daily,conversational,english-flow',
         source: `englishflow:${from}-${to}`,
+        series: 'Native English 2000',
       },
     })
   }
