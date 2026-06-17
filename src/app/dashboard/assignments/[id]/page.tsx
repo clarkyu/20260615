@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Eye } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -48,10 +48,15 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
 
   return (
     <div>
-      <Link href={`/dashboard/teaching/${assignment.offeringId}`} className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ChevronLeft className="h-4 w-4" />
-        {assignment.offering.course.name} · {assignment.offering.class.name} · {assignment.offering.year} {sem}
-      </Link>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <Link href={`/dashboard/teaching/${assignment.offeringId}`} className="inline-flex min-w-0 items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronLeft className="h-4 w-4 shrink-0" />
+          <span className="truncate">{assignment.offering.course.name} · {assignment.offering.class.name} · {assignment.offering.year} {sem}</span>
+        </Link>
+        <Link href={`/dashboard/assignments/${assignment.id}/preview`} className="tap inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
+          <Eye className="h-3.5 w-3.5" />{t('preview.view')}
+        </Link>
+      </div>
       <GradingClient
         assignmentId={assignment.id}
         title={assignment.title}
