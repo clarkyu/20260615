@@ -1,5 +1,6 @@
 'use client'
 
+import { uploadErrorText } from '@/lib/upload-error'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, ListChecks, Video, Mic } from 'lucide-react'
 import { getUploadUrl, recordMedia } from '@/actions/submissions'
@@ -193,7 +194,7 @@ export function Recorder(props: {
       if ('error' in fin && fin.error) { setError(fin.error); setPhase('recorded'); return }
       props.onDone()
     } catch (e) {
-      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`); setPhase('recorded')
+      setError(uploadErrorText(e, t)); setPhase('recorded')
     }
   }, [props, elapsed, violations, t, isAudio])
 
