@@ -3,9 +3,10 @@
 import { uploadErrorText } from '@/lib/upload-error'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Languages, Video, Mic, Square, Check, CheckCircle2 } from 'lucide-react'
+import { Video, Mic, Square, Check, CheckCircle2 } from 'lucide-react'
 import { getShadowVideoUrl, getShadowTakeUploadUrl, finishShadowing } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
+import { useChunkLang, ChunkLangToggle, BilingualChunk } from '@/components/bilingual'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -114,7 +115,7 @@ export function ShadowSubmit(props: {
 }) {
   const t = useT()
   const [url, setUrl] = useState<string | null>(null)
-  const [showZh, setShowZh] = useState(true)
+  const [lang, setLang] = useChunkLang()
   const [recorded, setRecorded] = useState<Set<number>>(() => new Set(props.initialRecorded))
   const [phase, setPhase] = useState<'doing' | 'finishing' | 'done'>('doing')
   const [redo, setRedo] = useState(false)
@@ -209,9 +210,7 @@ export function ShadowSubmit(props: {
         <CardContent className="space-y-3 p-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-sm font-semibold"><Video className="h-4 w-4 text-primary" />{t('shadow.title')}</span>
-            <button type="button" aria-pressed={showZh} onClick={() => setShowZh((v) => !v)} className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-              <Languages className="h-3.5 w-3.5" />{showZh ? t('shadow.hideZh') : t('shadow.showZh')}
-            </button>
+            <ChunkLangToggle value={lang} onChange={setLang} />
           </div>
           {url ? (
             <video src={url} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
@@ -237,9 +236,10 @@ export function ShadowSubmit(props: {
           const order = i + 1
           return (
             <li key={order} id={`shadow-s-${order}`} className="scroll-mt-16 rounded-xl border border-border/70 p-3 text-sm">
-              <div className="font-semibold">{order}. {c.english}</div>
-              {showZh && c.chinese ? <div className="mt-0.5 text-xs text-muted-foreground">{c.chinese}</div> : null}
-              {c.exampleEn ? <div className="mt-0.5 text-xs italic">{c.exampleEn}{showZh && c.exampleZh ? <span className="not-italic text-muted-foreground"> / {c.exampleZh}</span> : null}</div> : null}
+              <div className="flex gap-2">
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{order}.</span>
+                <BilingualChunk chunk={c} lang={lang} />
+              </div>
               <SentenceRecorder assignmentId={props.assignmentId} order={order} recorded={recorded.has(order)} onRecorded={() => markRecorded(order)} />
             </li>
           )
