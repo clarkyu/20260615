@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 import { CEFR_LEVELS, STRANDS, DOMAINS } from '@/lib/curriculum/taxonomy'
 import { useT } from '@/components/i18n-provider'
 
-const SELECT = 'h-9 rounded-lg border border-input bg-background px-2.5 text-sm'
+const SELECT = 'h-9 shrink-0 rounded-lg border border-input bg-background px-2.5 text-sm'
 const speakingStrands = STRANDS.filter((s) => s.parent === 'english.speaking')
 
 // URL-driven filters for the bank index. Each select writes its value into the
@@ -28,8 +28,8 @@ export function BankFilters({ cefr, strand, domain, series, seriesOptions = [] }
   const active = Boolean(cefr || strand || domain || series)
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">{t('bank.filter')}</span>
+    <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <span className="shrink-0 text-xs text-muted-foreground">{t('bank.filter')}</span>
       {seriesOptions.length > 0 ? (
         <select aria-label={t('bank.series')} value={series ?? ''} onChange={(e) => set('series', e.target.value)} className={SELECT}>
           <option value="">{t('bank.series')}</option>
@@ -52,7 +52,7 @@ export function BankFilters({ cefr, strand, domain, series, seriesOptions = [] }
         <button
           type="button"
           onClick={() => router.replace(pathname)}
-          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />{t('bank.filterClear')}
         </button>

@@ -6,7 +6,6 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
 import { BankActions } from './bank-actions'
-import { BankFilters } from './bank-filters'
 import { BankList } from './bank-list'
 
 export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string; series?: string }> }) {
@@ -29,17 +28,25 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
       <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" />{t('back')}
       </Link>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">{t('bank.title')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('bank.desc')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('bank.pickHint')}</p>
         </div>
-        <BankActions isSuperAdmin={isSuperAdmin} />
+        <div className="shrink-0">
+          <BankActions isSuperAdmin={isSuperAdmin} />
+        </div>
       </div>
 
-      <BankFilters cefr={cefr} strand={strand} domain={domain} series={series} seriesOptions={allSeries} />
-
-      <BankList sets={sets} filtered={filtered} />
+      <BankList
+        sets={sets}
+        filtered={filtered}
+        cefr={cefr}
+        strand={strand}
+        domain={domain}
+        series={series}
+        seriesOptions={allSeries}
+      />
     </div>
   )
 }

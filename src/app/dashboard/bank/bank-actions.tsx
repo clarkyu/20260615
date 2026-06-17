@@ -9,24 +9,34 @@ import { useChunkedImport } from './use-chunked-import'
 import { CreateSetForm } from './create-set-form'
 import { ImportPackForm } from './import-pack-form'
 
-// Single entry point for all bank create/import actions — one "新建 / 导入"
-// dropdown instead of a row of buttons. Built-in imports run via the chunked
-// (resumable) hook; create / pack open an inline panel below.
+// Bank create/import entry. A teacher only needs to make their own set — the
+// official content is already globally visible, and a teacher "import" would just
+// duplicate it — so teachers get a single "新建句集" button. A super-admin curates
+// the global pool, so they get the full "新建 / 导入" menu.
 export function BankActions({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const t = useT()
   const [menu, setMenu] = useState(false)
   const [panel, setPanel] = useState<null | 'create' | 'pack'>(null)
   const { run, pending, msg } = useChunkedImport()
 
+  if (!isSuperAdmin) {
+    return (
+      <div className="space-y-3">
+        {panel !== 'create' ? (
+          <Button size="sm" variant="outline" onClick={() => setPanel('create')}>
+            <Plus className="h-4 w-4" />{t('bank.newSet')}
+          </Button>
+        ) : null}
+        {panel === 'create' ? <CreateSetForm canPublishGlobal={false} onClose={() => setPanel(null)} /> : null}
+      </div>
+    )
+  }
+
   const items = [
     { icon: FilePlus2, label: t('bank.newSet'), act: () => setPanel('create') },
     { icon: Sparkles, label: t('bank.importStarter'), act: () => run(importStarterBank) },
-    ...(isSuperAdmin
-      ? [
-          { icon: PackagePlus, label: t('pack.new'), act: () => setPanel('pack') },
-          { icon: BookOpen, label: t('bank.importFlow'), act: () => run(importEnglishFlow) },
-        ]
-      : []),
+    { icon: PackagePlus, label: t('pack.new'), act: () => setPanel('pack') },
+    { icon: BookOpen, label: t('bank.importFlow'), act: () => run(importEnglishFlow) },
   ]
 
   return (
@@ -38,7 +48,7 @@ export function BankActions({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         {menu ? (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-            <div className="absolute left-0 z-20 mt-1 w-60 overflow-hidden rounded-xl border border-input bg-background shadow-lg">
+            <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-xl border border-input bg-background shadow-lg">
               {items.map((it) => (
                 <button
                   key={it.label}
@@ -55,7 +65,7 @@ export function BankActions({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       </div>
 
       {msg ? <p className="text-xs text-muted-foreground">{msg}</p> : null}
-      {panel === 'create' ? <CreateSetForm canPublishGlobal={isSuperAdmin} onClose={() => setPanel(null)} /> : null}
+      {panel === 'create' ? <CreateSetForm canPublishGlobal onClose={() => setPanel(null)} /> : null}
       {panel === 'pack' ? <ImportPackForm onClose={() => setPanel(null)} /> : null}
     </div>
   )
