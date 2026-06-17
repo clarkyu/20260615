@@ -1,3 +1,7 @@
+// SECURITY/SUPPLY-CHAIN: `xlsx` (SheetJS) is pinned in package.json to the
+// vendor CDN tarball (cdn.sheetjs.com), not the npm registry — by SheetJS's own
+// distribution model. It's integrity-locked in package-lock.json, but `npm audit`
+// won't see it and updates are a manual URL bump. Review releases periodically.
 import * as XLSX from 'xlsx'
 
 export interface RosterRow {
@@ -52,7 +56,7 @@ export interface ParsedRoster {
   headerError?: string
 }
 
-function toUint8(buffer: ArrayBuffer | Buffer): Uint8Array {
+function toUint8(buffer: ArrayBuffer | Uint8Array): Uint8Array {
   if (buffer instanceof Uint8Array) return buffer
   return new Uint8Array(buffer)
 }
@@ -81,7 +85,7 @@ export function extractGrade(raw: string): string | undefined {
   return undefined
 }
 
-export function parseRoster(buffer: ArrayBuffer | Buffer): ParsedRoster {
+export function parseRoster(buffer: ArrayBuffer | Uint8Array): ParsedRoster {
   try {
     return parseRosterUnsafe(buffer)
   } catch (err) {
@@ -90,7 +94,7 @@ export function parseRoster(buffer: ArrayBuffer | Buffer): ParsedRoster {
   }
 }
 
-function parseRosterUnsafe(buffer: ArrayBuffer | Buffer): ParsedRoster {
+function parseRosterUnsafe(buffer: ArrayBuffer | Uint8Array): ParsedRoster {
   let wb: XLSX.WorkBook
   try {
     wb = XLSX.read(toUint8(buffer), { type: 'array' })
