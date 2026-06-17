@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft, ClipboardPen } from 'lucide-react'
+import { ChevronLeft, ClipboardPen, Video } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
 import { serializeChunks } from '@/lib/bank'
+import { presignDownload, storageConfigured } from '@/lib/storage'
 import { CEFR_LEVELS, STRANDS } from '@/lib/curriculum/taxonomy'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/submit-button'
@@ -34,6 +35,11 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
   const isGlobal = set.schoolId === null
   const canEdit = isGlobal ? isSuperAdmin : set.schoolId === user.schoolId
 
+  // Presigned playback URL so EVERY viewer (super-admin / teacher / any bank
+  // viewer) can watch the uploaded shadowing video — not just the owner who
+  // uploaded it. Upload/replace stays owner-only below.
+  const videoUrl = set.shadowVideoKey && storageConfigured() ? await presignDownload(set.shadowVideoKey) : null
+
   return (
     <div className="space-y-4 py-2">
       <Link href="/dashboard/bank" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -61,6 +67,15 @@ export default async function ChunkSetPage({ params }: { params: Promise<{ id: s
           />
         ) : null}
       </div>
+
+      {videoUrl ? (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium"><Video className="h-4 w-4 text-primary" />{t('shadow.title')}</div>
+            <video src={videoUrl} controls playsInline preload="metadata" className="max-h-[60vh] w-full rounded-xl bg-black" />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {canEdit ? <VideoUpload chunkSetId={set.id} hasVideo={Boolean(set.shadowVideoKey)} /> : null}
 
