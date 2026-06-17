@@ -56,6 +56,7 @@ model ChunkSet {
   school         School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   chunks         Chunk[]
   assignments    Assignment[]
+  phases         Phase[]
 
   @@index([schoolId])
 }
@@ -246,8 +247,47 @@ model Assignment {
   sentences   Sentence[]
   submissions Submission[]
   practiceAttempts PracticeAttempt[]
+  phases      Phase[]
 
   @@index([offeringId])
+}
+
+// 环节（多环节作业·增量㉘）：一份作业 = 一串有序环节，每个环节各自带 内容来源
+// （题库套题或自填句子）、提交要求、起止时间、是否计分、提交次数。承载了原先直接
+// 挂在 Assignment 上的那套每环节配置；老作业迁移时各回填成一个 order=1 的环节。
+model Phase {
+  id           Int       @id @default(autoincrement())
+  assignmentId Int
+  order        Int       @default(1)
+  title        String?
+  category     String?
+  instructions String?
+  rubric       String?
+  shadowVideoKey String?
+  chunkSetId   Int?
+  referenceAudioKey String?
+  openAt       DateTime?
+  dueAt        DateTime?
+  requireEyesClosed Boolean @default(true)
+  requireText  Boolean @default(true)
+  requireAudio Boolean @default(false)
+  requireVideo Boolean @default(true)
+  requireHandwriting Boolean @default(false)
+  graded       Boolean @default(true)  // false → 仅练习、不计分
+  maxAttempts  Int      @default(1)
+  defaultPerceptionModel String?
+  defaultJudgeModel      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  chunkSet     ChunkSet?  @relation(fields: [chunkSetId], references: [id], onDelete: SetNull)
+  sentences    Sentence[]
+  submissions  Submission[]
+  practiceAttempts PracticeAttempt[]
+
+  @@index([assignmentId])
+  @@index([chunkSetId])
 }
 
 // 练习记录：学生正式提交前的"练一练"，AI即时点评，不计入提交次数。
@@ -255,6 +295,7 @@ model Assignment {
 model PracticeAttempt {
   id           Int      @id @default(autoincrement())
   assignmentId Int
+  phaseId      Int?
   studentId    Int
   kind         String   // 'audio'（朗读）| 'text'（默写）
   mediaKey     String?
@@ -266,27 +307,33 @@ model PracticeAttempt {
   createdAt    DateTime @default(now())
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  phase      Phase?     @relation(fields: [phaseId], references: [id], onDelete: Cascade)
   student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([assignmentId, studentId])
+  @@index([phaseId])
   @@index([studentId])
 }
 
 model Sentence {
   id                Int     @id @default(autoincrement())
   assignmentId      Int
+  phaseId           Int?
   order             Int
   text              String
   translation       String?
   referenceAudioKey String?
   assignment        Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  phase             Phase?     @relation(fields: [phaseId], references: [id], onDelete: Cascade)
 
   @@index([assignmentId])
+  @@index([phaseId])
 }
 
 model Submission {
   id           Int              @id @default(autoincrement())
   assignmentId Int
+  phaseId      Int?
   studentId    Int
   attempt      Int              @default(1)
   status       SubmissionStatus @default(DRAFT)
@@ -318,6 +365,7 @@ model Submission {
   updatedAt DateTime @updatedAt
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  phase      Phase?     @relation(fields: [phaseId], references: [id], onDelete: Cascade)
   student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   gradedBy   User?      @relation("SubmissionGradedBy", fields: [gradedById], references: [id], onDelete: SetNull)
   shadowTakes ShadowTake[]
@@ -325,6 +373,7 @@ model Submission {
 
   @@unique([assignmentId, studentId, attempt])
   @@index([assignmentId])
+  @@index([phaseId])
   @@index([studentId])
 }
 
