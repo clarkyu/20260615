@@ -70,7 +70,6 @@ export function setGradingDefaults(prisma: PrismaClient, id: number, data: { def
 
 export interface NewStudent {
   schoolId: number
-  classId: number
   studentNo: string
   name: string
   phone: string | null
@@ -78,6 +77,8 @@ export interface NewStudent {
   passwordHash: string
 }
 
+// Create a student row (without any class — membership is added separately via
+// addClassMembership, the single source of truth for class membership).
 export function createStudent(prisma: PrismaClient, data: NewStudent) {
   return prisma.user.create({ data: { role: 'STUDENT', mustChangePassword: true, ...data } })
 }
@@ -85,7 +86,7 @@ export function createStudent(prisma: PrismaClient, data: NewStudent) {
 export function updateStudent(
   prisma: PrismaClient,
   id: number,
-  data: { name: string; studentNo: string; classId: number; phone: string | null; email: string | null },
+  data: { name: string; studentNo: string; phone: string | null; email: string | null },
 ) {
   return prisma.user.update({ where: { id }, data })
 }
@@ -105,13 +106,17 @@ export function findWithSchool(prisma: PrismaClient, id: number) {
   return prisma.user.findUnique({ where: { id }, include: { school: true } })
 }
 
-// The signed-in user with everything the profile screen shows.
+// The signed-in user with everything the profile screen shows (a student may be in
+// several classes, so the profile lists them all).
 export function findProfile(prisma: PrismaClient, id: number) {
   return prisma.user.findUnique({
     where: { id },
     include: {
       school: true,
-      class: { include: { major: { include: { department: { select: { name: true } } } } } },
+      classMemberships: {
+        include: { class: { include: { major: { include: { department: { select: { name: true } } } } } } },
+        orderBy: { class: { name: 'asc' } },
+      },
       department: { select: { name: true } },
     },
   })
@@ -126,28 +131,20 @@ export function listStaffForSchool(prisma: PrismaClient, schoolId: number | null
   })
 }
 
-// A student belongs to a class if it's their primary class OR an extra membership.
+// A student belongs to a class iff they have a membership row for it.
 function inClass(classId: number) {
-  return { OR: [{ classId }, { classMemberships: { some: { classId } } }] }
+  return { classMemberships: { some: { classId } } }
 }
 
-// All class ids a student belongs to: primary (User.classId) ∪ extra memberships.
+// Every class a student belongs to (the union of their memberships).
 export async function studentClassIds(prisma: PrismaClient, studentId: number): Promise<number[]> {
-  const u = await prisma.user.findUnique({
-    where: { id: studentId },
-    select: { classId: true, classMemberships: { select: { classId: true } } },
-  })
-  if (!u) return []
-  const ids = new Set<number>(u.classMemberships.map((m) => m.classId))
-  if (u.classId != null) ids.add(u.classId)
-  return [...ids]
+  const rows = await prisma.studentClass.findMany({ where: { studentId }, select: { classId: true } })
+  return rows.map((r) => r.classId)
 }
 
-// Add an extra class membership for an existing student (idempotent; never the
-// primary class, which is already covered).
+// Add a class membership for a student (idempotent — all classes are equal, there
+// is no special "primary").
 export async function addClassMembership(prisma: PrismaClient, studentId: number, classId: number): Promise<void> {
-  const u = await prisma.user.findUnique({ where: { id: studentId }, select: { classId: true } })
-  if (u?.classId === classId) return
   await prisma.studentClass.upsert({
     where: { studentId_classId: { studentId, classId } },
     create: { studentId, classId },
@@ -155,7 +152,15 @@ export async function addClassMembership(prisma: PrismaClient, studentId: number
   })
 }
 
-// Students in one class (the class roster table) — primary members + extra members.
+// Remove a student from one class. If that leaves them in no class at all, delete the
+// student row (a student with no class can't see or do anything). Returns nothing.
+export async function removeClassMembership(prisma: PrismaClient, studentId: number, classId: number): Promise<void> {
+  await prisma.studentClass.deleteMany({ where: { studentId, classId } })
+  const remaining = await prisma.studentClass.count({ where: { studentId } })
+  if (remaining === 0) await prisma.user.deleteMany({ where: { id: studentId, role: 'STUDENT' } })
+}
+
+// Students in one class (the class roster table).
 export function listStudentsInClass(prisma: PrismaClient, classId: number) {
   return prisma.user.findMany({
     where: { role: 'STUDENT', ...inClass(classId) },
@@ -174,7 +179,7 @@ export function listClassRoster(prisma: PrismaClient, schoolId: number | null | 
   })
 }
 
-// The signed-in user, no relations (auth gate checks: mustChangePassword/classId).
+// The signed-in user, no relations (auth gate checks: mustChangePassword).
 export function findById(prisma: PrismaClient, id: number) {
   return prisma.user.findUnique({ where: { id } })
 }

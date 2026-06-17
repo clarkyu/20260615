@@ -93,14 +93,14 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
     else emailByNo.set(r.studentNo, null)
   }
 
-  // 5) Create new students in a single batch (lighter initial-password hash).
+  // 5) Create new students in a single batch (lighter initial-password hash). No
+  //    class here — class membership is set via StudentClass in step 7.
   let created = 0
   if (toCreate.length > 0) {
     const data = await Promise.all(
       toCreate.map(async (r) => ({
         role: 'STUDENT' as const,
         schoolId,
-        classId: classIdByName.get(r.className)!,
         studentNo: r.studentNo,
         name: r.name,
         phone: r.phone ?? null,
@@ -132,16 +132,54 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
     }
   }
 
-  // 6) Update existing students (name / class / phone-if-provided) in one batch.
+  // 6) Update existing students (name / phone-if-provided) in one batch. Class is a
+  //    membership now: the import only ever ADDS the named class (step 7), never
+  //    moves a student out of classes they're also in.
   if (toUpdate.length > 0) {
     await prisma.$transaction(
       toUpdate.map((r) =>
         prisma.user.update({
           where: { id: idByNo.get(r.studentNo)! },
-          data: { name: r.name, classId: classIdByName.get(r.className)!, ...(r.phone ? { phone: r.phone } : {}) },
+          data: { name: r.name, ...(r.phone ? { phone: r.phone } : {}) },
         }),
       ),
     )
+  }
+
+  // 7) Ensure every imported student is a member of the class named in their row.
+  //    Re-read ids so the just-created students are included; add only the missing
+  //    (studentId, classId) pairs (existing memberships are kept).
+  const all = await prisma.user.findMany({
+    where: { schoolId, role: 'STUDENT', studentNo: { in: valid.map((r) => r.studentNo) } },
+    select: { id: true, studentNo: true },
+  })
+  const idByNoAll = new Map(all.map((e) => [e.studentNo!, e.id]))
+  const wanted = valid
+    .map((r) => {
+      const studentId = idByNoAll.get(r.studentNo)
+      const classId = classIdByName.get(r.className)
+      return studentId && classId ? { studentId, classId } : null
+    })
+    .filter((x): x is { studentId: number; classId: number } => x !== null)
+  if (wanted.length > 0) {
+    const studentIds = [...new Set(wanted.map((w) => w.studentId))]
+    const existingMems = await prisma.studentClass.findMany({
+      where: { studentId: { in: studentIds } },
+      select: { studentId: true, classId: true },
+    })
+    const have = new Set(existingMems.map((m) => `${m.studentId}:${m.classId}`))
+    const toAdd = wanted.filter((w) => !have.has(`${w.studentId}:${w.classId}`))
+    if (toAdd.length > 0) {
+      try {
+        await prisma.studentClass.createMany({ data: toAdd })
+      } catch {
+        // A concurrent import may have inserted some pairs between our read and
+        // write; fall back to per-row inserts and ignore the ones that now exist.
+        for (const m of toAdd) {
+          try { await prisma.studentClass.create({ data: m }) } catch { /* already a member */ }
+        }
+      }
+    }
   }
 
   return { created, updated: toUpdate.length, skipped, classesTouched: classNames.length }

@@ -22,7 +22,10 @@ export default async function ProfilePage() {
   }
 
   const isStaff = user.role !== 'STUDENT'
-  const stuMajor = user.class?.major
+  // A student can be in several classes (all equal) — show them all; derive 专业/院系
+  // from the first class that has a major.
+  const stuClasses = user.classMemberships.map((m) => m.class)
+  const stuMajor = stuClasses.find((c) => c.major)?.major
   const departments = isStaff && user.schoolId ? await departmentRepo.listForSchool(prisma, user.schoolId) : []
 
   const rows = [
@@ -33,7 +36,7 @@ export default async function ProfilePage() {
     user.phone ? { k: t('prof.phone'), v: user.phone } : null,
     user.school ? { k: locale === 'zh' ? '学校' : 'School', v: user.school.name } : null,
     user.department ? { k: t('prof.department'), v: user.department.name } : null,
-    user.class ? { k: locale === 'zh' ? '班级' : 'Class', v: user.class.name } : null,
+    stuClasses.length ? { k: locale === 'zh' ? '班级' : 'Class', v: stuClasses.map((c) => c.name).join(locale === 'zh' ? '、' : ', ') } : null,
     stuMajor ? { k: locale === 'zh' ? '专业' : 'Major', v: stuMajor.name } : null,
     stuMajor ? { k: t('prof.department'), v: stuMajor.department.name } : null,
   ].filter(Boolean) as { k: string; v: string }[]
