@@ -29,12 +29,12 @@ export function VideoUpload({ chunkSetId, hasVideo }: { chunkSetId: number; hasV
       }
       const put = await fetch(res.url, { method: 'PUT', body: file, headers: { 'Content-Type': type } })
       if (!put.ok) {
-        setError(t('rec.uploadFail'))
+        setError(`${t('rec.uploadFail')} (${put.status})`)
         return
       }
       setDone(true)
-    } catch {
-      setError(t('rec.uploadFail'))
+    } catch (e) {
+      setError(`${t('rec.uploadFail')} · ${e instanceof Error ? e.name : 'network'}`)
     } finally {
       setBusy(false)
     }
