@@ -25,10 +25,11 @@ import { createAssignments, updateAssignment, type PhaseDraft } from '@/lib/doma
 import * as assignmentsRepo from '@/lib/repo/assignments'
 
 const prisma = {} as never
-const meta = { title: 'T', category: null, monthLabel: null }
+const meta = { title: 'T', monthLabel: null }
 const draft = (over: Partial<PhaseDraft> = {}): PhaseDraft => ({
   id: null,
   title: null,
+  category: null,
   instructions: null,
   useBankSet: false,
   typedSentences: [],

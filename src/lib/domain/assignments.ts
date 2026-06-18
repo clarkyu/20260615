@@ -18,6 +18,7 @@ export type { AssignmentMeta }
 export interface PhaseDraft {
   id: number | null // existing phase id (edit) — null for a newly added phase
   title: string | null
+  category: string | null
   instructions: string | null
   useBankSet: boolean
   typedSentences: string[]
@@ -69,6 +70,7 @@ async function resolvePhases(
       id: d.id,
       order: i + 1,
       title: d.title,
+      category: d.category,
       instructions: d.instructions,
       chunkSetId: fromBank ? chunkSetId : null,
       shadowVideoKey: fromBank ? bankVideoKey : null,

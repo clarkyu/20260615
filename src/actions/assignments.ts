@@ -31,13 +31,13 @@ function parseDate(value: string | null | undefined): Date | null {
 // as a JSON array in the hidden `phasesJson` field (a dynamic list the form edits).
 const metaSchema = z.object({
   title: reqText('err.needTitle', 200),
-  category: optText(50),
   monthLabel: optText(20),
 })
 
 const phaseJsonSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   title: z.string().max(200).optional().default(''),
+  category: z.string().max(50).optional().default(''),
   instructions: z.string().max(5000).optional().default(''),
   useBankSet: z.boolean().optional().default(false),
   sentences: z.string().max(20000).optional().default(''),
@@ -66,6 +66,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
   const phases: PhaseDraft[] = pr.data.map((p) => ({
     id: p.id ?? null,
     title: p.title.trim() || null,
+    category: p.category.trim() || null,
     instructions: p.instructions.trim() || null,
     useBankSet: p.useBankSet,
     typedSentences: parseSentences(p.sentences),
@@ -79,7 +80,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
     graded: p.graded,
     maxAttempts: p.maxAttempts,
   }))
-  return { ok: true, data: { meta: { title: parsed.data.title, category: parsed.data.category, monthLabel: parsed.data.monthLabel }, phases } }
+  return { ok: true, data: { meta: { title: parsed.data.title, monthLabel: parsed.data.monthLabel }, phases } }
 }
 
 export async function createAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {

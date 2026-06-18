@@ -22,7 +22,6 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
   const initial: AssignmentInitial = {
     id: a.id,
     title: a.title,
-    category: a.category ?? '',
     monthLabel: a.monthLabel ?? '',
     chunkSetId: bank?.id ?? null,
     chunkSetName: bank?.name ?? null,
@@ -31,6 +30,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
     phases: a.phases.map((p) => ({
       id: p.id,
       title: p.title ?? '',
+      category: p.category ?? '',
       instructions: p.instructions ?? '',
       useBankSet: p.chunkSetId != null,
       sentences: p.sentences.map((s) => s.text).join('\n'),

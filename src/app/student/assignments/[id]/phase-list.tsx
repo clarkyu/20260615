@@ -54,8 +54,9 @@ export async function PhaseList({ assignment }: { assignment: PhaseListData }) {
                       {done ? <CheckCircle2 className="h-6 w-6 text-success" /> : notOpen ? <Lock className="h-6 w-6 text-muted-foreground" /> : <Circle className="h-6 w-6 text-muted-foreground" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium text-muted-foreground">{t('phase.nth', { n: i + 1 })}</span>
+                        {p.category ? <Badge tone="primary">{p.category}</Badge> : null}
                         {!p.graded ? <Badge>{t('phase.practiceOnly')}</Badge> : null}
                       </div>
                       <div className="truncate font-medium">{label}</div>
