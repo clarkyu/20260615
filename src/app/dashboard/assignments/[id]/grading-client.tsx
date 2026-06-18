@@ -43,6 +43,7 @@ export function GradingClient(props: {
   title: string
   category?: string | null
   sentenceCount: number
+  studentCount: number
   classes: { id: number; name: string }[]
   rows: Row[]
   presets: Preset[]
@@ -149,7 +150,7 @@ export function GradingClient(props: {
         <div>
           {props.category ? <Badge tone="primary" className="mb-1">{props.category}</Badge> : null}
           <h1 className="text-2xl font-bold tracking-tight">{props.title}</h1>
-          <p className="text-sm text-muted-foreground">{props.sentenceCount} {t('asg.sentences')} · {props.rows.length} {t('grade.students')}</p>
+          <p className="text-sm text-muted-foreground">{props.sentenceCount} {t('asg.sentences')} · {props.studentCount} {t('grade.students')}</p>
         </div>
         <Link href={`/dashboard/assignments/${props.assignmentId}/edit`}>
           <Button variant="outline" size="sm"><Pencil className="h-4 w-4" />{t('asg.edit')}</Button>

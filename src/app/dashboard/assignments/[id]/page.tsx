@@ -70,6 +70,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
         title={assignment.title}
         category={assignment.category}
         sentenceCount={assignment._count.sentences}
+        studentCount={new Set([...latestByStudentPhase.values()].map((s) => s.studentId)).size}
         classes={[{ id: assignment.offering.class.id, name: assignment.offering.class.name }]}
         rows={rows}
         presets={PRESETS}
