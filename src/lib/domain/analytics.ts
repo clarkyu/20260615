@@ -248,6 +248,41 @@ export function weakSentences(submissions: PhaseSubmission[], limit = 5): WeakSe
     .slice(0, limit)
 }
 
+// One sentence a student keeps getting wrong — the building block of 「我的薄弱点」.
+export interface MyWeakPoint {
+  assignmentId: number
+  phaseId: number | null
+  order: number
+  text: string
+  avgAccuracy: number
+  samples: number
+}
+
+// A single student's weakest lines across all their own graded submissions, joined to
+// the sentence text. Reuses `weakSentences` (phase-aware) over just this student's
+// rows, keeps only those below `threshold`, and drops any without resolvable text.
+export function studentWeakPoints(
+  rows: PhaseSubmission[],
+  sentences: { assignmentId: number; phaseId: number | null; order: number; text: string }[],
+  opts: { limit?: number; threshold?: number } = {},
+): MyWeakPoint[] {
+  const limit = opts.limit ?? 12
+  const threshold = opts.threshold ?? 0.7
+  const text = new Map(sentences.map((s) => [`${s.assignmentId}:${s.phaseId ?? 0}:${s.order}`, s.text]))
+  return weakSentences(rows, Number.MAX_SAFE_INTEGER)
+    .filter((w) => w.avgAccuracy < threshold)
+    .map((w) => ({
+      assignmentId: w.assignmentId,
+      phaseId: w.phaseId,
+      order: w.order,
+      avgAccuracy: w.avgAccuracy,
+      samples: w.samples,
+      text: text.get(`${w.assignmentId}:${w.phaseId ?? 0}:${w.order}`) ?? '',
+    }))
+    .filter((w) => w.text)
+    .slice(0, limit)
+}
+
 export interface OfferingSummary {
   students: number
   assignments: number

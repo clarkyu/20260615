@@ -90,6 +90,16 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
   })
 }
 
+// One student's own non-DRAFT submissions in the analytics (RawPhaseRow) shape —
+// powers the student's personal 「我的薄弱点」 profile. Latest attempt first per phase.
+export function listForStudentLatestFirst(prisma: PrismaClient, studentId: number) {
+  return prisma.submission.findMany({
+    where: { studentId, status: { not: 'DRAFT' } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } }, assignment: { select: { title: true } } },
+    orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
+  })
+}
+
 // ── grading pipeline (the AI grading state machine; called by the job queue /
 //    grading services, keyed by submission id — system-wide, not tenant-scoped) ──
 
