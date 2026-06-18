@@ -35,6 +35,7 @@ model School {
   majors      Major[]
   chunkSets   ChunkSet[]
   templates   AssignmentTemplate[]
+  invites     SchoolInvite[]
 }
 
 // 题库：一套跟读句集 = 一个整套跟读视频 + 若干双语句子，可复用来发布作业。
@@ -446,6 +447,21 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// 学校教师邀请：校管生成一条带哈希 token 的限时邀请，老师凭链接设姓名+邮箱+密码
+// 加入该校（角色 TEACHER）。只存 token 哈希；一次性（usedAt）+ 过期（expiresAt）。
+model SchoolInvite {
+  id          Int       @id @default(autoincrement())
+  tokenHash   String    @unique
+  schoolId    Int
+  createdById Int
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
 }
 
 // 老师自带密钥（BYOK）：各家 API key 加密后按 (userId, provider) 存放。provider 是

@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AddTeacherForm } from './add-teacher-form'
+import { InviteTeacher } from './invite-teacher'
 
 export default async function TeachersPage() {
   const user = await requireStaff()
@@ -31,6 +32,7 @@ export default async function TeachersPage() {
       </div>
 
       {viewerIsAdmin ? <AddTeacherForm /> : null}
+      {viewerIsAdmin ? <InviteTeacher /> : null}
 
       <Card>
         <CardContent className="divide-y divide-border/60 p-0">
