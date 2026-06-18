@@ -34,6 +34,7 @@ model School {
   departments Department[]
   majors      Major[]
   chunkSets   ChunkSet[]
+  templates   AssignmentTemplate[]
 }
 
 // 题库：一套跟读句集 = 一个整套跟读视频 + 若干双语句子，可复用来发布作业。
@@ -175,6 +176,7 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
   aiKeys                  AiKey[]
+  createdTemplates        AssignmentTemplate[] @relation("UserTemplates")
 
   @@unique([schoolId, studentNo])
   @@unique([schoolId, staffNo])
@@ -460,4 +462,22 @@ model RateLimit {
   resetAt DateTime
 
   @@index([resetAt])
+}
+
+// 作业模板：把一次作业发布的配置（标题 + 各环节）存起来，供本人下次、或同校
+// 其他老师复用并修改后再发布。payload 是作业级 + 环节级配置的 JSON（不含具体
+// 起止时间——每次发布另设）。schoolId=null 表示平台级（超管），否则属于该校、
+// 校内老师共享。
+model AssignmentTemplate {
+  id          Int      @id @default(autoincrement())
+  schoolId    Int?
+  name        String
+  createdById Int?
+  payload     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  school      School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation("UserTemplates", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([schoolId])
 }

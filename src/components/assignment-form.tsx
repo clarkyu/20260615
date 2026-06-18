@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
 export interface PhaseInitial {
-  id: number
+  id?: number // present when editing an existing phase; absent for a template prefill
   title: string
   category: string
   instructions: string
@@ -32,7 +32,7 @@ export interface PhaseInitial {
 }
 
 export interface AssignmentInitial {
-  id: number
+  id?: number // present when editing; absent when prefilling a new publish from a template
   title: string
   monthLabel: string
   chunkSetId: number | null
@@ -117,7 +117,9 @@ export function AssignmentForm({
   chunkSet?: { id: number; name: string; count: number; hasVideo: boolean }
 }) {
   const t = useT()
-  const editing = Boolean(initial)
+  // `initial` with an id = editing an existing assignment; `initial` without an id =
+  // prefilling a NEW publish from a template (still create mode).
+  const editing = Boolean(initial?.id)
   // The published bank set this assignment draws from (publish flow, or editing a
   // bank-published assignment): its phases can pull sentences + shadow video from it.
   const bankInfo = chunkSet ?? (initial?.chunkSetId ? { id: initial.chunkSetId, name: initial.chunkSetName ?? '', count: initial.chunkSetCount, hasVideo: initial.chunkSetHasVideo } : null)
@@ -126,6 +128,9 @@ export function AssignmentForm({
 
   // Assignment-level fields (controlled so the AI draft can fill them).
   const [title, setTitle] = useState(initial?.title ?? '')
+  // Save-as-template (publish flow only).
+  const [saveTemplate, setSaveTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState('')
 
   const [phases, setPhases] = useState<PhaseState[]>(() =>
     initial?.phases?.length
@@ -225,7 +230,7 @@ export function AssignmentForm({
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
-            {editing ? <input type="hidden" name="assignmentId" value={initial!.id} /> : <input type="hidden" name="primaryOfferingId" value={singleOfferingId ?? ''} />}
+            {editing ? <input type="hidden" name="assignmentId" value={initial!.id ?? ""} /> : <input type="hidden" name="primaryOfferingId" value={singleOfferingId ?? ''} />}
             {!editing && !multi ? <input type="hidden" name="offeringId" value={singleOfferingId ?? ''} /> : null}
             {bankInfo ? <input type="hidden" name="chunkSetId" value={bankInfo.id} /> : null}
             <input type="hidden" name="phasesJson" value={phasesJson} />
@@ -305,6 +310,19 @@ export function AssignmentForm({
               </Button>
             </div>
 
+            {!editing ? (
+              <div className="space-y-2 rounded-xl border border-input p-3">
+                <label className="flex items-center gap-2.5 text-sm">
+                  <input type="checkbox" name="saveTemplate" checked={saveTemplate} onChange={(e) => setSaveTemplate(e.target.checked)} className="h-4 w-4 accent-primary" />
+                  {t('tmpl.saveAs')}
+                </label>
+                {saveTemplate ? (
+                  <Input name="templateName" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder={t('tmpl.namePh')} maxLength={100} />
+                ) : null}
+                <p className="text-xs text-muted-foreground">{t('tmpl.saveHint')}</p>
+              </div>
+            ) : null}
+
             {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
             <Button type="submit" disabled={isPending} size="lg" className="w-full">
               {isPending ? (editing ? t('asg.saving') : t('asg.publishing')) : editing ? t('asg.save') : t('asg.publish')}
@@ -317,7 +335,7 @@ export function AssignmentForm({
         <Card className="border-destructive/40">
           <CardContent className="p-4">
             <form action={deleteAssignment} onSubmit={(e) => { if (!confirm(t('asg.deleteConfirm'))) e.preventDefault() }}>
-              <input type="hidden" name="assignmentId" value={initial!.id} />
+              <input type="hidden" name="assignmentId" value={initial!.id ?? ""} />
               <SubmitButton variant="destructive" className="w-full">{t('asg.delete')}</SubmitButton>
             </form>
           </CardContent>
