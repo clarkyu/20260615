@@ -22,6 +22,7 @@ export interface AssignmentMeta {
 // sentences), submission requirements, time window, attempts, and whether it counts
 // toward the grade. `graded: false` = practice-only. Sentences come resolved.
 export interface PhaseInput {
+  id: number | null // existing phase id (edit) — null for a newly added phase
   order: number
   title: string | null
   instructions: string | null
@@ -91,14 +92,6 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
   })
 }
 
-// The edit screen: assignment + its ordered sentences.
-export function findForStaffWithSentences(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
-  return prisma.assignment.findFirst({
-    where: { id, ...inSchool(schoolId) },
-    include: { sentences: { orderBy: { order: 'asc' } } },
-  })
-}
-
 // Teacher "preview as student": assignment + sentences + optional shadow chunk set
 // (with chunks), scoped to the teacher's school. No submissions — it's a preview.
 export function findForStaffPreview(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
@@ -111,6 +104,26 @@ export function findForStaffPreview(prisma: PrismaClient, id: number, schoolId: 
   })
 }
 
+// The Phase column data shared by create + update (everything except id/sentences).
+function phaseData(p: PhaseInput) {
+  return {
+    order: p.order,
+    title: p.title,
+    instructions: p.instructions,
+    chunkSetId: p.chunkSetId,
+    shadowVideoKey: p.shadowVideoKey,
+    openAt: p.openAt,
+    dueAt: p.dueAt,
+    requireEyesClosed: p.requireEyesClosed,
+    requireText: p.requireText,
+    requireAudio: p.requireAudio,
+    requireVideo: p.requireVideo,
+    requireHandwriting: p.requireHandwriting,
+    graded: p.graded,
+    maxAttempts: p.maxAttempts,
+  }
+}
+
 // Create the Phase rows (+ their sentences) for an assignment. Each phase is a
 // standalone create so D1 can resolve its autoincrement id for the nested sentence
 // inserts (interactive/batched transactions can't on D1).
@@ -119,20 +132,7 @@ async function createPhases(prisma: PrismaClient, assignmentId: number, phases: 
     await prisma.phase.create({
       data: {
         assignmentId,
-        order: p.order,
-        title: p.title,
-        instructions: p.instructions,
-        chunkSetId: p.chunkSetId,
-        shadowVideoKey: p.shadowVideoKey,
-        openAt: p.openAt,
-        dueAt: p.dueAt,
-        requireEyesClosed: p.requireEyesClosed,
-        requireText: p.requireText,
-        requireAudio: p.requireAudio,
-        requireVideo: p.requireVideo,
-        requireHandwriting: p.requireHandwriting,
-        graded: p.graded,
-        maxAttempts: p.maxAttempts,
+        ...phaseData(p),
         sentences: { create: p.sentences.map((s) => ({ assignmentId, order: s.order, text: s.text, translation: s.translation ?? null })) },
       },
     })
@@ -149,16 +149,35 @@ export async function createWithPhases(prisma: PrismaClient, offeringId: number,
   return assignment
 }
 
-// Replace an assignment's phases (and all its sentences) and refresh its legacy
-// columns from the new phase 1. Clear is one atomic batch; the per-phase recreate
-// follows (standalone creates — see createPhases).
+// Edit an assignment's phases, RECONCILING by phase id so a phase the teacher kept is
+// updated in place — never deleted-and-recreated. This is critical: Submission /
+// PracticeAttempt cascade-delete with their Phase, so deleting a phase would destroy
+// every student's graded work. So: update kept phases in place (replacing only their
+// sentences), create newly-added phases, and delete only phases the teacher removed
+// (which intentionally drops that phase's submissions).
 export async function updateWithPhases(prisma: PrismaClient, id: number, meta: AssignmentMeta, phases: PhaseInput[]) {
-  await prisma.$transaction([
-    prisma.phase.deleteMany({ where: { assignmentId: id } }), // cascades phase sentences
-    prisma.sentence.deleteMany({ where: { assignmentId: id } }), // any phaseId-null leftovers
-    prisma.assignment.update({ where: { id }, data: { ...meta, ...legacyColumnsFromPrimary(phases[0]) } }),
-  ])
-  await createPhases(prisma, id, phases)
+  const existing = await prisma.phase.findMany({ where: { assignmentId: id }, select: { id: true } })
+  const existingIds = new Set(existing.map((p) => p.id))
+  const keptIds = new Set(phases.map((p) => p.id).filter((x): x is number => x != null && existingIds.has(x)))
+
+  await prisma.assignment.update({ where: { id }, data: { ...meta, ...legacyColumnsFromPrimary(phases[0]) } })
+
+  for (const p of phases) {
+    if (p.id != null && existingIds.has(p.id)) {
+      // Update in place + replace its sentences (sentences have no children to cascade).
+      await prisma.$transaction([
+        prisma.phase.update({ where: { id: p.id }, data: phaseData(p) }),
+        prisma.sentence.deleteMany({ where: { phaseId: p.id } }),
+        prisma.sentence.createMany({ data: p.sentences.map((s) => ({ assignmentId: id, phaseId: p.id, order: s.order, text: s.text, translation: s.translation ?? null })) }),
+      ])
+    } else {
+      await createPhases(prisma, id, [p])
+    }
+  }
+
+  // Phases the teacher removed — only these cascade-delete their submissions.
+  const removed = existing.filter((p) => !keptIds.has(p.id)).map((p) => p.id)
+  if (removed.length > 0) await prisma.phase.deleteMany({ where: { id: { in: removed } } })
 }
 
 // The edit screen: assignment + its ordered phases, each with sentences + chunk-set name.
@@ -182,6 +201,7 @@ export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolI
 export function createReview(prisma: PrismaClient, offeringId: number, title: string, sentences: SentenceRow[]) {
   return createWithPhases(prisma, offeringId, { title, category: '复习作业', monthLabel: null }, [
     {
+      id: null,
       order: 1,
       title: null,
       instructions: null,

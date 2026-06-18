@@ -36,6 +36,7 @@ const metaSchema = z.object({
 })
 
 const phaseJsonSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
   title: z.string().max(200).optional().default(''),
   instructions: z.string().max(5000).optional().default(''),
   useBankSet: z.boolean().optional().default(false),
@@ -63,6 +64,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
   if (!pr.success) return { ok: false, error: 'err.needPhase' }
 
   const phases: PhaseDraft[] = pr.data.map((p) => ({
+    id: p.id ?? null,
     title: p.title.trim() || null,
     instructions: p.instructions.trim() || null,
     useBankSet: p.useBankSet,
