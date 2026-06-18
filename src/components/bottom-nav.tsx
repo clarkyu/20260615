@@ -2,28 +2,38 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, GraduationCap, BookOpenCheck, User, Library, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, Users, GraduationCap, BookOpenCheck, User, Library, ClipboardList, MessageSquarePlus } from 'lucide-react'
 import type { Role } from '@prisma/client'
 import { useT } from './i18n-provider'
 
 export function BottomNav({ role, newScores = false }: { role: Role; newScores?: boolean }) {
   const t = useT()
   const path = usePathname()
-  const staff = role !== 'STUDENT'
 
-  const items = staff
-    ? [
-        { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, dot: false },
-        { href: '/dashboard/assignments', label: t('nav.assignments'), icon: ClipboardList, dot: false },
-        { href: '/dashboard/teaching', label: t('nav.teaching'), icon: GraduationCap, dot: false },
-        { href: '/dashboard/students', label: t('nav.students'), icon: Users, dot: false },
-        { href: '/dashboard/bank', label: t('nav.bank'), icon: Library, dot: false },
-        { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
-      ]
-    : [
-        { href: '/student', label: t('nav.myWork'), icon: BookOpenCheck, dot: newScores },
-        { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
-      ]
+  // Role-tailored tabs: a super-admin has no school, so the teacher tabs
+  // (assignments/teaching/students) would point at empty screens — give them the
+  // platform console, bank and the feedback review queue instead.
+  const items =
+    role === 'STUDENT'
+      ? [
+          { href: '/student', label: t('nav.myWork'), icon: BookOpenCheck, dot: newScores },
+          { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
+        ]
+      : role === 'SUPER_ADMIN'
+        ? [
+            { href: '/dashboard', label: t('nav.console'), icon: LayoutDashboard, dot: false },
+            { href: '/dashboard/bank', label: t('nav.bank'), icon: Library, dot: false },
+            { href: '/feedback', label: t('nav.feedback'), icon: MessageSquarePlus, dot: false },
+            { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
+          ]
+        : [
+            { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, dot: false },
+            { href: '/dashboard/assignments', label: t('nav.assignments'), icon: ClipboardList, dot: false },
+            { href: '/dashboard/teaching', label: t('nav.teaching'), icon: GraduationCap, dot: false },
+            { href: '/dashboard/students', label: t('nav.students'), icon: Users, dot: false },
+            { href: '/dashboard/bank', label: t('nav.bank'), icon: Library, dot: false },
+            { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
+          ]
 
   const isActive = (href: string) =>
     href === '/dashboard' ? path === '/dashboard' : path === href || path.startsWith(href + '/')

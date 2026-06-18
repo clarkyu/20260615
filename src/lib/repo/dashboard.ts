@@ -32,7 +32,7 @@ export async function loadStaffDashboard(prisma: PrismaClient, schoolId: number,
   const needRows = ids.length
     ? await prisma.assignment.findMany({
         where: { id: { in: ids } },
-        select: { id: true, title: true, category: true, offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } } },
+        select: { id: true, title: true, category: true, offering: { select: { course: { select: { name: true } }, class: { select: { name: true } }, teacher: { select: { name: true } } } } },
       })
     : []
 

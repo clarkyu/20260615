@@ -50,9 +50,10 @@ export default async function DashboardPage() {
 
   const { students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups, needRows } =
     await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.role)
+  const isAdmin = user.role === 'SCHOOL_ADMIN'
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows
-    .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, pending: countById.get(a.id) ?? 0 }))
+    .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, teacher: a.offering.teacher?.name ?? null, pending: countById.get(a.id) ?? 0 }))
     .sort((a, b) => b.pending - a.pending)
 
   const stats = [
@@ -66,6 +67,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{me.school.name}</h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <Badge tone={isAdmin ? 'primary' : 'muted'}>{isAdmin ? t('dash.scopeAdmin') : t('dash.scopeTeacher')}</Badge>
           <span>{t('dash.codeLabel')}</span>
           <span className="rounded-lg bg-accent px-2 py-0.5 font-mono text-sm font-bold tracking-wider text-accent-foreground">
             {me.school.code}
@@ -154,14 +156,16 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/dashboard/teachers">
-          <Card className="tap h-full hover:shadow-card">
-            <CardContent className="flex flex-col gap-1.5 p-4">
-              <UserCog className="h-5 w-5 text-accent-foreground" />
-              <p className="text-sm font-semibold">{t('teacher.title')}</p>
-            </CardContent>
-          </Card>
-        </Link>
+        {isAdmin ? (
+          <Link href="/dashboard/teachers">
+            <Card className="tap h-full hover:shadow-card">
+              <CardContent className="flex flex-col gap-1.5 p-4">
+                <UserCog className="h-5 w-5 text-accent-foreground" />
+                <p className="text-sm font-semibold">{t('teacher.title')}</p>
+              </CardContent>
+            </Card>
+          </Link>
+        ) : null}
       </div>
 
       {/* Needs-grading board */}
@@ -181,7 +185,7 @@ export default async function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
                     <p className="truncate font-semibold leading-snug">{a.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{a.course} · {a.cls}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{a.course} · {a.cls}{isAdmin && a.teacher ? ` · ${a.teacher}` : ''}</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
                     {t('dash.pendingN', { n: a.pending })}
