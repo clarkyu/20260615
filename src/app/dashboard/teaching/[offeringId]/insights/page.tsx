@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft, AlertTriangle, TrendingUp, RefreshCw, FileSpreadsheet } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, RefreshCw, FileSpreadsheet } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -105,20 +105,25 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
               <Card><CardContent className="py-6 text-center text-sm text-success">{t('insights.noRisk')}</CardContent></Card>
             ) : (
               profiles.filter((p) => p.atRisk).map((p) => (
-                <Card key={p.id}>
-                  <CardContent className="flex items-center justify-between gap-3 p-3.5">
-                    <div className="min-w-0">
-                      <div className="font-medium">{p.name} <span className="text-muted-foreground">{p.studentNo}</span></div>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {p.riskReasons.map((r) => <Badge key={r} tone="warning">{t(r)}</Badge>)}
+                <Link key={p.id} href={`/dashboard/teaching/${offering.id}/students/${p.id}`}>
+                  <Card className="tap hover:shadow-card">
+                    <CardContent className="flex items-center justify-between gap-3 p-3.5">
+                      <div className="min-w-0">
+                        <div className="font-medium">{p.name} <span className="text-muted-foreground">{p.studentNo}</span></div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {p.riskReasons.map((r) => <Badge key={r} tone="warning">{t(r)}</Badge>)}
+                        </div>
                       </div>
-                    </div>
-                    <div className="shrink-0 text-right text-xs text-muted-foreground">
-                      <div>{t('insights.daily')} {p.dailyScore == null ? '—' : p.dailyScore}</div>
-                      <div>{t('insights.exam')} {p.avgScore == null ? '—' : p.avgScore}</div>
-                    </div>
-                  </CardContent>
-                </Card>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <div className="text-right text-xs text-muted-foreground">
+                          <div>{t('insights.daily')} {p.dailyScore == null ? '—' : p.dailyScore}</div>
+                          <div>{t('insights.exam')} {p.avgScore == null ? '—' : p.avgScore}</div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))
             )}
           </section>
@@ -174,14 +179,14 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
                   <span className="w-12 shrink-0 text-center">{t('insights.completion')}</span>
                 </div>
                 {[...profiles].sort((a, b) => a.studentNo.localeCompare(b.studentNo)).map((p) => (
-                  <div key={p.id} className="flex items-center gap-2 px-3 py-2.5 text-sm">
+                  <Link key={p.id} href={`/dashboard/teaching/${offering.id}/students/${p.id}`} className="tap flex items-center gap-2 px-3 py-2.5 text-sm active:bg-secondary/40">
                     <div className="min-w-0 flex-1 truncate">
                       {p.name} <span className="text-xs text-muted-foreground">{p.studentNo}</span>
                     </div>
                     <span className="w-12 shrink-0 text-center tabular-nums">{p.dailyScore == null ? '—' : p.dailyScore}</span>
                     <span className="w-12 shrink-0 text-center tabular-nums">{p.avgScore == null ? '—' : p.avgScore}</span>
                     <span className="w-12 shrink-0 text-center text-xs text-muted-foreground tabular-nums">{p.submitted}/{p.totalAssignments}</span>
-                  </div>
+                  </Link>
                 ))}
               </CardContent>
             </Card>
