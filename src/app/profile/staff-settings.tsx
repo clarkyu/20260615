@@ -18,12 +18,14 @@ export function StaffSettings({
   departments,
   schoolName,
   hasSchool,
+  isAdmin,
 }: {
   staffNo: string
   departmentId: number | null
   departments: { id: number; name: string }[]
   schoolName: string
   hasSchool: boolean
+  isAdmin: boolean
 }) {
   const t = useT()
   const [pState, pAction, pPending] = useActionState(updateStaffProfile, null)
@@ -58,7 +60,7 @@ export function StaffSettings({
         </CardContent>
       </Card>
 
-      {hasSchool ? (
+      {hasSchool && isAdmin ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t('prof.schoolName')}</CardTitle>

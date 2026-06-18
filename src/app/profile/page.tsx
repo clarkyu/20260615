@@ -98,6 +98,7 @@ export default async function ProfilePage() {
           departments={departments}
           schoolName={user.school?.name ?? ''}
           hasSchool={Boolean(user.school)}
+          isAdmin={user.role === 'SCHOOL_ADMIN' || user.role === 'SUPER_ADMIN'}
         />
       ) : null}
       {isStaff ? (
