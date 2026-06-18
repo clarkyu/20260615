@@ -24,8 +24,11 @@ export async function gradeShadowTake(audioUrl: string, sentenceText: string, pe
   if (!provider) throw unavailable('感知 provider 未实现')
   const perception = await provider.perceive({ audioUrl, referenceSentences: [{ order: 1, text: sentenceText }], requireEyesClosed: false }, model.id)
   const ps = perception.perSentence[0]
-  const accuracy = ps ? Math.max(0, Math.min(1, ps.accuracy)) : 0
-  const completeness = ps ? Math.max(0, Math.min(1, ps.completeness)) : 0
+  // Clamp + sanitize: a non-finite accuracy/completeness from the model must not
+  // become a NaN score persisted to the DB (Math.min/max don't filter NaN).
+  const clamp01 = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, Math.min(1, n as number)) : 0)
+  const accuracy = clamp01(ps?.accuracy)
+  const completeness = clamp01(ps?.completeness)
   return { score: Math.round((accuracy * 0.7 + completeness * 0.3) * 100), spokenText: ps?.spokenText || perception.transcript || '' }
 }
 

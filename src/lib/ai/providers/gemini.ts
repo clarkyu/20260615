@@ -161,6 +161,11 @@ export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
 
 // ── Network ───────────────────────────────────────────────────────────────────
 
+// A stalled upstream must not pin a Worker isolate until the platform wall-clock
+// limit — every provider fetch carries an abort timeout.
+const GEN_TIMEOUT_MS = 180_000
+const NET_TIMEOUT_MS = 60_000
+
 async function generate(model: string, parts: Part[], schema: unknown): Promise<unknown> {
   const res = await fetch(`${baseUrl()}/v1beta/models/${model}:generateContent?key=${apiKey()}`, {
     method: 'POST',
@@ -169,6 +174,7 @@ async function generate(model: string, parts: Part[], schema: unknown): Promise<
       contents: [{ role: 'user', parts }],
       generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2 },
     }),
+    signal: AbortSignal.timeout(GEN_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`)
   return extractJson(await res.json())
@@ -193,6 +199,7 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ file: { display_name: 'recitation' } }),
+    signal: AbortSignal.timeout(NET_TIMEOUT_MS),
   })
   if (!start.ok) throw new Error(`Gemini 文件上传初始化失败 ${start.status}`)
   const uploadUrl = start.headers.get('X-Goog-Upload-URL')
@@ -202,6 +209,7 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
     method: 'POST',
     headers: { 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
     body,
+    signal: AbortSignal.timeout(GEN_TIMEOUT_MS),
     // Streaming request body requires half-duplex.
     ...({ duplex: 'half' } as Record<string, unknown>),
   })
@@ -209,8 +217,12 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
   let file = (await up.json() as { file?: { uri?: string; name?: string; state?: string } }).file
   for (let i = 0; i < 30 && file?.state === 'PROCESSING'; i++) {
     await sleep(2000)
-    const poll = await fetch(`${baseUrl()}/v1beta/${file.name}?key=${key}`)
-    file = (await poll.json()) as { uri?: string; name?: string; state?: string }
+    // A transient poll error/timeout shouldn't abort the whole upload — keep waiting.
+    try {
+      const poll = await fetch(`${baseUrl()}/v1beta/${file.name}?key=${key}`, { signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
+      if (!poll.ok) continue
+      file = (await poll.json()) as { uri?: string; name?: string; state?: string }
+    } catch { /* keep polling */ }
   }
   if (file?.state !== 'ACTIVE' || !file.uri) throw new Error(`Gemini 文件未就绪（${file?.state ?? 'unknown'}）`)
   return file.uri
@@ -226,7 +238,7 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 async function mediaPart(mediaUrl: string): Promise<Part> {
-  const resp = await fetch(mediaUrl)
+  const resp = await fetch(mediaUrl, { signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
   if (!resp.ok || !resp.body) throw new Error(`无法获取视频（${resp.status}）`)
   const mimeType = resp.headers.get('content-type') || 'video/webm'
   const declaredLen = Number(resp.headers.get('content-length') || '0')
