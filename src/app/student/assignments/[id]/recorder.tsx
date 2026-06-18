@@ -248,7 +248,7 @@ export function Recorder(props: {
               {phase === 'recording' ? (
                 <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-semibold text-white">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{elapsed}s
-                  {violations.length > 0 ? <span className="text-amber-300">· ⚠️ {violations.length}</span> : null}
+                  {/* Anti-cheat 违规仍在后台记录，但不在录制中显示——闪烁的计数会让学生紧张。 */}
                 </div>
               ) : null}
               {phase === 'recording' ? (
