@@ -48,10 +48,12 @@ export function ClassManager({
   cls,
   students,
   majors,
+  isAdmin,
 }: {
   cls: Cls
   students: Student[]
   majors: MajorOpt[]
+  isAdmin: boolean
 }) {
   const t = useT()
   const router = useRouter()
@@ -86,35 +88,42 @@ export function ClassManager({
 
       <Card>
         <CardHeader>
-          <CardTitle>{t('cls.manage')}</CardTitle>
+          <CardTitle>{isAdmin ? t('cls.manage') : cls.name}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={classAction} className="space-y-3">
-            <input type="hidden" name="classId" value={cls.id} />
-            <div className="space-y-1.5">
-              <Label htmlFor="cn">{t('cls.className')}</Label>
-              <Input id="cn" name="name" required defaultValue={cls.name} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          {isAdmin ? (
+            <form action={classAction} className="space-y-3">
+              <input type="hidden" name="classId" value={cls.id} />
               <div className="space-y-1.5">
-                <Label htmlFor="grd">{t('cls.grade')}</Label>
-                <Input id="grd" name="grade" defaultValue={cls.grade} placeholder="2025" inputMode="numeric" />
+                <Label htmlFor="cn">{t('cls.className')}</Label>
+                <Input id="cn" name="name" required defaultValue={cls.name} />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="maj">{t('cls.major')}</Label>
-                <select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className={SELECT}>
-                  <option value="">{t('cls.noMajor')}</option>
-                  {majors.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}（{m.department}）</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="grd">{t('cls.grade')}</Label>
+                  <Input id="grd" name="grade" defaultValue={cls.grade} placeholder="2025" inputMode="numeric" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="maj">{t('cls.major')}</Label>
+                  <select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className={SELECT}>
+                    <option value="">{t('cls.noMajor')}</option>
+                    {majors.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}（{m.department}）</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">{t('cls.majorHint')}</p>
+              {classState?.error ? <FormMessage>{classState.error}</FormMessage> : null}
+              {classState?.success ? <FormMessage tone="success">{t('done')}</FormMessage> : null}
+              <Button type="submit" disabled={classPending}>{t('cls.save')}</Button>
+            </form>
+          ) : (
+            <div className="space-y-1 text-sm text-muted-foreground">
+              {cls.grade ? <div>{t('cls.grade')}：{cls.grade}</div> : null}
+              {cls.major ? <div>{t('cls.major')}：{cls.major}（{cls.department}）</div> : null}
             </div>
-            <p className="text-xs text-muted-foreground">{t('cls.majorHint')}</p>
-            {classState?.error ? <FormMessage>{classState.error}</FormMessage> : null}
-            {classState?.success ? <FormMessage tone="success">{t('done')}</FormMessage> : null}
-            <Button type="submit" disabled={classPending}>{t('cls.save')}</Button>
-          </form>
+          )}
         </CardContent>
       </Card>
 
@@ -145,37 +154,39 @@ export function ClassManager({
                       <div className="font-medium">{s.name}</div>
                       <div className="text-xs text-muted-foreground">{s.studentNo}{s.phone ? ` · ${s.phone}` : ''}</div>
                     </div>
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      <Button size="sm" variant="outline" onClick={() => setEditId(s.id)}>{t('cls.edit')}</Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={pending && busyId === s.id}
-                        onClick={() => {
-                          if (!confirm(t('cls.resetPwConfirm'))) return
-                          const fd = new FormData()
-                          fd.set('studentId', String(s.id))
-                          run(resetStudentPassword, fd, s.id)
-                        }}
-                      >
-                        {t('cls.resetPw')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive"
-                        disabled={pending && busyId === s.id}
-                        onClick={() => {
-                          if (!confirm(t('cls.removeConfirm'))) return
-                          const fd = new FormData()
-                          fd.set('studentId', String(s.id))
-                          fd.set('classId', String(cls.id))
-                          run(removeStudentFromClass, fd, s.id)
-                        }}
-                      >
-                        {t('cls.removeFromClass')}
-                      </Button>
-                    </div>
+                    {isAdmin ? (
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <Button size="sm" variant="outline" onClick={() => setEditId(s.id)}>{t('cls.edit')}</Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={pending && busyId === s.id}
+                          onClick={() => {
+                            if (!confirm(t('cls.resetPwConfirm'))) return
+                            const fd = new FormData()
+                            fd.set('studentId', String(s.id))
+                            run(resetStudentPassword, fd, s.id)
+                          }}
+                        >
+                          {t('cls.resetPw')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          disabled={pending && busyId === s.id}
+                          onClick={() => {
+                            if (!confirm(t('cls.removeConfirm'))) return
+                            const fd = new FormData()
+                            fd.set('studentId', String(s.id))
+                            fd.set('classId', String(cls.id))
+                            run(removeStudentFromClass, fd, s.id)
+                          }}
+                        >
+                          {t('cls.removeFromClass')}
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -184,6 +195,7 @@ export function ClassManager({
         </CardContent>
       </Card>
 
+      {isAdmin ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t('cls.addStudent')}</CardTitle>
@@ -220,7 +232,9 @@ export function ClassManager({
           </form>
         </CardContent>
       </Card>
+      ) : null}
 
+      {isAdmin ? (
       <Card className="border-destructive/40">
         <CardContent className="p-4">
           <form action={deleteClass} onSubmit={(e) => { if (!confirm(t('cls.deleteClassConfirm'))) e.preventDefault() }}>
@@ -229,6 +243,7 @@ export function ClassManager({
           </form>
         </CardContent>
       </Card>
+      ) : null}
     </div>
   )
 }

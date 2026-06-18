@@ -15,6 +15,7 @@ export default async function StudentsPage() {
   const { t } = await getT()
   const me = await userRepo.findWithSchool(prisma, user.userId)
   if (!me?.school) redirect('/dashboard')
+  const isAdmin = user.role === 'SCHOOL_ADMIN' || user.role === 'SUPER_ADMIN'
 
   const classes = await classRepo.listWithCountsForSchool(prisma, me.school.id)
 
@@ -25,12 +26,12 @@ export default async function StudentsPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t('stu.loginHint', { code: me.school.code })}</p>
       </div>
 
-      <ImportClient />
+      {isAdmin ? <ImportClient /> : null}
 
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">{t('stu.classes')}（{classes.length}）</CardTitle>
-          <NewClassForm />
+          {isAdmin ? <NewClassForm /> : null}
         </CardHeader>
         <CardContent>
           {classes.length === 0 ? (

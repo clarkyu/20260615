@@ -30,7 +30,7 @@ export default async function TeachersPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t('teacher.desc')}</p>
       </div>
 
-      <AddTeacherForm />
+      {viewerIsAdmin ? <AddTeacherForm /> : null}
 
       <Card>
         <CardContent className="divide-y divide-border/60 p-0">
