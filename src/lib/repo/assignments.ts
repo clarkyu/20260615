@@ -222,7 +222,7 @@ const staffScope = (schoolId: number | null | undefined, userId: number, role: R
 const NEEDS_TEACHER: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
 // All assignments the staff member can see, newest first, with course/class, due
-// date, phase count, and how many submissions are in (non-DRAFT).
+// date, and phase count.
 export function listForStaff(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findMany({
     where: { offering: staffScope(schoolId, userId, role) },
@@ -230,9 +230,20 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
     select: {
       id: true, title: true, category: true, dueAt: true, monthLabel: true,
       offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } },
-      _count: { select: { phases: true, submissions: { where: { status: { not: 'DRAFT' } } } } },
+      _count: { select: { phases: true } },
     },
   })
+}
+
+// Submitted (non-DRAFT) submission count per assignment — a plain groupBy (the D1
+// adapter doesn't do filtered relation `_count`s).
+export async function submittedCountByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<Map<number, number>> {
+  const groups = await prisma.submission.groupBy({
+    by: ['assignmentId'],
+    where: { status: { not: 'DRAFT' }, assignment: { offering: staffScope(schoolId, userId, role) } },
+    _count: { _all: true },
+  })
+  return new Map(groups.map((g) => [g.assignmentId, g._count._all]))
 }
 
 // Pending-review count per assignment (the actionable chip on the 作业 menu).

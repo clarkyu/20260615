@@ -53,7 +53,11 @@ export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: s
   const windowOpen = windowState === 'open'
 
   const sentences = phase.sentences.map((s) => ({ order: s.order, text: s.text }))
-  const shadowChunks = phase.shadowVideoKey && phase.chunkSet
+  // A phase is per-sentence SHADOWING (看视频逐句录音) only when it draws from a bank
+  // video AND isn't an eyes-closed phase. A bank-sourced phase that requires eyes
+  // closed (闭眼背诵) must use the recitation flow instead — otherwise every phase
+  // built from the same set would render identically as shadowing.
+  const shadowChunks = !phase.requireEyesClosed && phase.shadowVideoKey && phase.chunkSet
     ? phase.chunkSet.chunks.map((c) => ({
         english: c.english,
         chinese: c.chinese,

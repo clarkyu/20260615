@@ -27,9 +27,10 @@ export default async function StaffAssignmentsPage() {
     )
   }
 
-  const [list, pending] = await Promise.all([
+  const [list, pending, submitted] = await Promise.all([
     assignmentRepo.listForStaff(prisma, user.schoolId, user.userId, user.role),
     assignmentRepo.pendingReviewByAssignment(prisma, user.schoolId, user.userId, user.role),
+    assignmentRepo.submittedCountByAssignment(prisma, user.schoolId, user.userId, user.role),
   ])
 
   return (
@@ -61,7 +62,7 @@ export default async function StaffAssignmentsPage() {
                       {a._count.phases > 1 ? ` · ${a._count.phases} ${t('phase.unit')}` : ''}
                       {a.dueAt ? ` · ${t('asg.due')} ${a.dueAt.toISOString().slice(0, 10)}` : ''}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{t('asgList.submittedN', { n: a._count.submissions })}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{t('asgList.submittedN', { n: submitted.get(a.id) ?? 0 })}</p>
                   </div>
                   {pend > 0 ? (
                     <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
