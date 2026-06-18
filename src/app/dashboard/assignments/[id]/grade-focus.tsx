@@ -79,12 +79,24 @@ export function GradeFocus({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId])
 
-  // Close on Escape — the overlay covers the page, so keyboard users need a way out.
+  // Power-user keyboard shortcuts for fast grading. Ignored while typing in a field
+  // (except Escape). ← → navigate · S save & next · A accept AI · R run AI.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      const k = e.key.toLowerCase()
+      if (e.key === 'ArrowLeft') { if (index > 0) setIndex(index - 1) }
+      else if (e.key === 'ArrowRight') { if (index < rows.length - 1) setIndex(index + 1) }
+      else if (k === 's') { e.preventDefault(); if (!busy) void save(true) }
+      else if (k === 'a') { if (cur && cur.aiScore != null) { setScore(String(cur.aiScore)); if (cur.feedback) setFeedback(cur.feedback) } }
+      else if (k === 'r') { if (!busy) void runAi() }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, rows.length, onClose, cur, busy, score, feedback])
 
   if (!cur) return null
 
@@ -203,10 +215,13 @@ export function GradeFocus({
         {error ? <FormMessage>{error}</FormMessage> : null}
       </div>
 
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 border-t border-border/60 p-3">
-        <Button variant="outline" size="icon" disabled={index <= 0} onClick={() => setIndex(index - 1)}><ChevronLeft className="h-5 w-5" /></Button>
-        <Button size="lg" disabled={busy} onClick={() => save(true)}>{t('grade.saveNext')}</Button>
-        <Button variant="outline" size="icon" disabled={index >= rows.length - 1} onClick={() => setIndex(index + 1)}><ChevronRight className="h-5 w-5" /></Button>
+      <div className="border-t border-border/60 p-3">
+        <p className="mb-2 hidden text-center text-[11px] text-muted-foreground sm:block">{t('grade.shortcuts')}</p>
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+          <Button variant="outline" size="icon" disabled={index <= 0} onClick={() => setIndex(index - 1)}><ChevronLeft className="h-5 w-5" /></Button>
+          <Button size="lg" disabled={busy} onClick={() => save(true)}>{t('grade.saveNext')}</Button>
+          <Button variant="outline" size="icon" disabled={index >= rows.length - 1} onClick={() => setIndex(index + 1)}><ChevronRight className="h-5 w-5" /></Button>
+        </div>
       </div>
     </div>
   )

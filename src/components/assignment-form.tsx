@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Check } from 'lucide-react'
+import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Check, Video, Eye, Mic, PenLine, Camera } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
 import { useT } from '@/components/i18n-provider'
@@ -424,6 +424,13 @@ function PhaseCard({
     phase.requireHandwriting && t('asg.kindHandwriting'),
   ].filter(Boolean).join(' / ')
   const summary = [phase.title.trim() || phase.category.trim(), kinds].filter(Boolean).join(' · ')
+  // Live preview of what the student will hand in (video carries its eyes-closed note).
+  const submitParts = [
+    phase.requireVideo && (t('asg.kindVideo') + (phase.requireEyesClosed ? `（${t('rec.eyesClosed')}）` : '')),
+    phase.requireAudio && t('asg.kindAudio'),
+    phase.requireText && t('asg.kindText'),
+    phase.requireHandwriting && t('asg.kindHandwriting'),
+  ].filter(Boolean)
   return (
     <div className="rounded-xl border border-input p-3">
       <div className="flex items-center justify-between gap-2">
@@ -489,24 +496,31 @@ function PhaseCard({
         <div className="space-y-2.5 rounded-xl border border-input p-3 text-sm">
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={phase.requireVideo} onChange={(e) => onPatch({ requireVideo: e.target.checked })} className="h-4 w-4 accent-primary" />
-            {t('asg.kindVideo')}
+            <Video className="h-4 w-4 text-muted-foreground" />{t('asg.kindVideo')}
           </label>
-          <label className="flex items-center gap-2.5 pl-6 text-muted-foreground">
-            <input type="checkbox" checked={phase.requireEyesClosed} onChange={(e) => onPatch({ requireEyesClosed: e.target.checked })} className="h-4 w-4 accent-primary" />
-            {t('asg.fEyes')}
-          </label>
+          {phase.requireVideo ? (
+            <label className="flex items-center gap-2.5 pl-7 text-muted-foreground">
+              <input type="checkbox" checked={phase.requireEyesClosed} onChange={(e) => onPatch({ requireEyesClosed: e.target.checked })} className="h-4 w-4 accent-primary" />
+              <Eye className="h-4 w-4" />{t('asg.fEyes')}
+            </label>
+          ) : null}
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={phase.requireAudio} onChange={(e) => onPatch({ requireAudio: e.target.checked })} className="h-4 w-4 accent-primary" />
-            {t('asg.kindAudio')}
+            <Mic className="h-4 w-4 text-muted-foreground" />{t('asg.kindAudio')}
           </label>
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={phase.requireText} onChange={(e) => onPatch({ requireText: e.target.checked })} className="h-4 w-4 accent-primary" />
-            {t('asg.kindText')}
+            <PenLine className="h-4 w-4 text-muted-foreground" />{t('asg.kindText')}
           </label>
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={phase.requireHandwriting} onChange={(e) => onPatch({ requireHandwriting: e.target.checked })} className="h-4 w-4 accent-primary" />
-            {t('asg.kindHandwriting')}
+            <Camera className="h-4 w-4 text-muted-foreground" />{t('asg.kindHandwriting')}
           </label>
+          {submitParts.length > 0 ? (
+            <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">{t('asg.willSubmit')}{submitParts.join(' + ')}</p>
+          ) : (
+            <p className="border-t border-border/50 pt-2 text-xs text-[hsl(var(--warning))]">{t('asg.needKind')}</p>
+          )}
         </div>
       </div>
 
