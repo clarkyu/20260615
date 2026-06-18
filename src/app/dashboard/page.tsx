@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library } from 'lucide-react'
 import { requireStaff, availablePanels } from '@/lib/auth'
+import { parseTzOffset } from '@/lib/time'
 import { getDb } from '@/lib/db'
 import { runAfterResponse } from '@/lib/cf'
 import { drainGradingJobs } from '@/lib/domain/jobs'
@@ -57,8 +59,9 @@ export default async function DashboardPage() {
   // not outlive the response (mirrors scheduleGrading's getDb()).
   await runAfterResponse(async () => drainGradingJobs(await getDb()))
 
+  const tzo = parseTzOffset((await cookies()).get('tzo')?.value)
   const { students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups, needRows } =
-    await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.panelRole)
+    await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.panelRole, tzo)
   const isAdmin = user.panelRole === 'SCHOOL_ADMIN'
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows

@@ -13,6 +13,7 @@ import { Badge, statusTone } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { ScoreTrend } from './score-trend'
 import { MarkScoresSeen } from './mark-scores-seen'
+import { LocalDate } from '@/components/local-date'
 
 export default async function StudentHome() {
   const user = await requireRole('STUDENT')
@@ -193,7 +194,7 @@ export default async function StudentHome() {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {a.offering.course.name} · {sentenceCount} {t('asg.sentences')}
                       {!single ? ` · ${totalPhases} ${t('phase.unit')}` : ''}
-                      {a.dueAt ? ` · ${t('asg.due')} ${a.dueAt.toISOString().slice(0, 10)}` : ''}
+                      {a.dueAt ? <> · {t('asg.due')} <LocalDate iso={a.dueAt.toISOString()} /></> : null}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
