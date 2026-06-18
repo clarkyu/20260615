@@ -61,7 +61,9 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   if (!submission || submission.shadowTakes.length === 0) return
   // Owner = assignment teacher: their default model + BYOK key.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
-  const textByOrder = new Map(submission.assignment.sentences.map((s) => [s.order, s.text]))
+  // Reference sentences come from the phase (its own content); assignment is the
+  // single-phase fallback.
+  const textByOrder = new Map((submission.phase ?? submission.assignment).sentences.map((s) => [s.order, s.text]))
   const perceptionModel = submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL
 
   const revert = () => submissionRepo.revertToQueue(prisma, submissionId, 'UPLOADED')

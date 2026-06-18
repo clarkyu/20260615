@@ -19,16 +19,16 @@ function keyFieldFor(kind: MediaKind, key: string): submissionRepo.MediaKeyField
 }
 
 // Presigned URL for a video or audio recording; saves the key on the (draft) submission.
-export async function getUploadUrl(assignmentId: number, kind: MediaKind, contentType: string, ext: string) {
+export async function getUploadUrl(phaseId: number, kind: MediaKind, contentType: string, ext: string) {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
 
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
-  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
-  const key = submissionMediaKey(assignmentId, user.userId, resolved.attempt, kind, ext || 'webm')
-  const submission = await submissionRepo.upsertDraftWithMedia(prisma, assignmentId, user.userId, resolved.attempt, keyFieldFor(kind, key))
+  const key = submissionMediaKey(resolved.assignmentId, phaseId, user.userId, resolved.attempt, kind, ext || 'webm')
+  const submission = await submissionRepo.upsertDraftWithMedia(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, keyFieldFor(kind, key))
 
   try {
     const url = await presignUpload(key, contentType)
@@ -55,18 +55,16 @@ export async function recordMedia(submissionId: number, kind: MediaKind, sizeByt
 }
 
 // Mark the whole submission done once every required part is present.
-export async function finishSubmission(assignmentId: number) {
+export async function finishSubmission(phaseId: number) {
   const { user, prisma, t } = await studentContext()
 
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
-  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
-  const submission = await submissionRepo.findOwnAttempt(prisma, assignmentId, user.userId, resolved.attempt)
+  const submission = await submissionRepo.findOwnAttempt(prisma, phaseId, user.userId, resolved.attempt)
   if (!submission) return { error: t('err.subNotFound') }
 
-  const assignment = await assignmentRepo.findForClasses(prisma, assignmentId, classIds)
-  if (!assignment) return { error: t('err.assignNotFound') }
-  const missing = missingRequiredPart(assignment, submission)
+  const missing = missingRequiredPart(resolved.requirements, submission)
   if (missing) return { error: t(missing) }
 
   const status = hasAntiCheatViolation(submission.violations) ? 'FLAGGED' : 'UPLOADED'
@@ -88,15 +86,15 @@ export async function finishSubmission(assignmentId: number) {
   return { success: true }
 }
 
-// Presigned playback URL for the shadowing video of a bank-based assignment.
-export async function getShadowVideoUrl(assignmentId: number): Promise<{ url?: string; error?: string }> {
+// Presigned playback URL for the shadowing video of a bank-based phase.
+export async function getShadowVideoUrl(phaseId: number): Promise<{ url?: string; error?: string }> {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
-  const assignment = await assignmentRepo.findShadowVideoForClasses(prisma, assignmentId, classIds)
-  if (!assignment?.shadowVideoKey) return { error: t('err.noVideo') }
+  const phase = await assignmentRepo.findPhaseShadowVideoForClasses(prisma, phaseId, classIds)
+  if (!phase?.shadowVideoKey) return { error: t('err.noVideo') }
   try {
-    return { url: await presignDownload(assignment.shadowVideoKey) }
+    return { url: await presignDownload(phase.shadowVideoKey) }
   } catch {
     return { error: t('err.videoUrlFail') }
   }
@@ -104,15 +102,15 @@ export async function getShadowVideoUrl(assignmentId: number): Promise<{ url?: s
 
 // Per-sentence shadowing: presigned URL for one sentence's take; records it on the
 // (draft) submission so progress survives a reload.
-export async function getShadowTakeUploadUrl(assignmentId: number, order: number, contentType: string, ext: string) {
+export async function getShadowTakeUploadUrl(phaseId: number, order: number, contentType: string, ext: string) {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
-  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
-  const key = shadowTakeKey(assignmentId, user.userId, resolved.attempt, order, ext || 'webm')
-  const submission = await submissionRepo.upsertDraft(prisma, assignmentId, user.userId, resolved.attempt)
+  const key = shadowTakeKey(resolved.assignmentId, phaseId, user.userId, resolved.attempt, order, ext || 'webm')
+  const submission = await submissionRepo.upsertDraft(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt)
   await submissionRepo.upsertShadowTake(prisma, submission.id, order, key)
   try {
     return { url: await presignUpload(key, contentType), key, order }
@@ -123,14 +121,14 @@ export async function getShadowTakeUploadUrl(assignmentId: number, order: number
 }
 
 // Finish a per-sentence shadowing submission once every sentence has a take.
-export async function finishShadowing(assignmentId: number) {
+export async function finishShadowing(phaseId: number) {
   const { user, prisma, t } = await studentContext()
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
-  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
-  const submission = await submissionRepo.findOwnAttemptWithTakeCount(prisma, assignmentId, user.userId, resolved.attempt)
+  const submission = await submissionRepo.findOwnAttemptWithTakeCount(prisma, phaseId, user.userId, resolved.attempt)
   if (!submission) return { error: t('err.subNotFound') }
-  const sentenceCount = await assignmentRepo.countSentences(prisma, assignmentId)
+  const sentenceCount = await assignmentRepo.countPhaseSentences(prisma, phaseId)
   if (sentenceCount === 0 || submission._count.shadowTakes < sentenceCount) return { error: t('err.shadowIncomplete') }
 
   const flipped = await submissionRepo.flipDraft(prisma, submission.id, 'UPLOADED')
@@ -142,17 +140,17 @@ export async function finishShadowing(assignmentId: number) {
 }
 
 // Step 1: the student's recited text (from memory).
-export async function submitRecitedText(assignmentId: number, text: string) {
+export async function submitRecitedText(phaseId: number, text: string) {
   const { user, prisma, t } = await studentContext()
   const trimmed = (text ?? '').trim()
   if (!trimmed) return { error: t('err.needRecite') }
   if (trimmed.length > 20000) return { error: t('err.textTooLong') }
 
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
-  const resolved = await resolveAttempt(prisma, user.userId, classIds, assignmentId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
-  await submissionRepo.upsertRecitedText(prisma, assignmentId, user.userId, resolved.attempt, trimmed)
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, trimmed)
   revalidatePath('/student')
   return { success: true }
 }

@@ -265,13 +265,15 @@ export function listForStudent(prisma: PrismaClient, classIds: number[], student
 }
 
 // One assignment for the student detail/submit screen: sentences, optional bank
-// chunk set (shadowing), and the student's latest submission with its take orders.
+// chunk set (shadowing), the ordered phase ids, and the student's latest submission
+// with its take orders.
 export function findForStudentDetail(prisma: PrismaClient, id: number, classIds: number[], studentId: number) {
   return prisma.assignment.findFirst({
     where: { id, offering: { classId: { in: classIds } } },
     include: {
       sentences: { orderBy: { order: 'asc' } },
       chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true } },
       submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, include: { shadowTakes: { select: { order: true } } } },
     },
   })
@@ -279,4 +281,40 @@ export function findForStudentDetail(prisma: PrismaClient, id: number, classIds:
 
 export function countSentences(prisma: PrismaClient, assignmentId: number) {
   return prisma.sentence.count({ where: { assignmentId } })
+}
+
+// ── per-phase student reads (a phase is the unit a student submits to) ──────────
+
+// The phase iff it belongs to one of the student's classes (the submission gate),
+// carrying its time window, attempt cap, owning assignment, and submit requirements.
+export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, classIds: number[]) {
+  return prisma.phase.findFirst({
+    where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },
+    select: {
+      id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true,
+      requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
+    },
+  })
+}
+
+export function findPhaseShadowVideoForClasses(prisma: PrismaClient, phaseId: number, classIds: number[]) {
+  return prisma.phase.findFirst({
+    where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },
+    select: { shadowVideoKey: true },
+  })
+}
+
+// A phase + its ordered sentences (+ the assignment's rubric/models) — the practice gate.
+export function findPhaseWithSentencesForClasses(prisma: PrismaClient, phaseId: number, classIds: number[]) {
+  return prisma.phase.findFirst({
+    where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },
+    include: {
+      sentences: { orderBy: { order: 'asc' } },
+      assignment: { select: { id: true, rubric: true, defaultPerceptionModel: true, defaultJudgeModel: true } },
+    },
+  })
+}
+
+export function countPhaseSentences(prisma: PrismaClient, phaseId: number) {
+  return prisma.sentence.count({ where: { phaseId } })
 }

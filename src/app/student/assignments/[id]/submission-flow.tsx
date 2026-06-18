@@ -51,7 +51,7 @@ function Steps({ steps, idx }: { steps: Kind[]; idx: number }) {
   )
 }
 
-function TextStep({ assignmentId, initial, onDone }: { assignmentId: number; initial: string; onDone: () => void }) {
+function TextStep({ phaseId, initial, onDone }: { phaseId: number; initial: string; onDone: () => void }) {
   const t = useT()
   const [text, setText] = useState(initial)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +60,7 @@ function TextStep({ assignmentId, initial, onDone }: { assignmentId: number; ini
   function submit() {
     setError(null)
     start(async () => {
-      const res = await submitRecitedText(assignmentId, text)
+      const res = await submitRecitedText(phaseId, text)
       if (res.error) setError(res.error)
       else onDone()
     })
@@ -84,7 +84,7 @@ function TextStep({ assignmentId, initial, onDone }: { assignmentId: number; ini
 }
 
 export function SubmissionFlow(props: {
-  assignmentId: number
+  phaseId: number
   title: string
   category: string | null
   instructions: string | null
@@ -129,7 +129,7 @@ export function SubmissionFlow(props: {
   function finish() {
     setPhase('finishing'); setError(null)
     startFinish(async () => {
-      const res = await finishSubmission(props.assignmentId)
+      const res = await finishSubmission(props.phaseId)
       if (res.error) { setError(res.error); setPhase('error') }
       else setPhase('done')
     })
@@ -243,12 +243,12 @@ export function SubmissionFlow(props: {
           </CardContent>
         </Card>
       ) : current === 'text' ? (
-        <TextStep assignmentId={props.assignmentId} initial={props.initialRecitedText} onDone={advance} />
+        <TextStep phaseId={props.phaseId} initial={props.initialRecitedText} onDone={advance} />
       ) : current === 'handwriting' ? (
-        <PhotoStep assignmentId={props.assignmentId} onDone={advance} />
+        <PhotoStep phaseId={props.phaseId} onDone={advance} />
       ) : (
         <Recorder
-          assignmentId={props.assignmentId}
+          phaseId={props.phaseId}
           sentences={props.sentences}
           requireEyesClosed={props.requireEyesClosed}
           attemptsLeft={props.attemptsLeft}

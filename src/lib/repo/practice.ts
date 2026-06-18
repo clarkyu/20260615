@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client'
 
 export interface NewPracticeAttempt {
   assignmentId: number
+  phaseId: number
   studentId: number
   kind: string
   mediaKey: string | null

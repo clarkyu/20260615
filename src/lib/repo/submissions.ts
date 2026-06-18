@@ -10,7 +10,10 @@ const inSchool = (schoolId: number | null | undefined) => ({ assignment: { offer
 export function findForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
   return prisma.submission.findFirst({
     where: { id, ...inSchool(schoolId) },
-    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
+    include: {
+      phase: { include: { sentences: { orderBy: { order: 'asc' } } } },
+      assignment: { include: { sentences: { orderBy: { order: 'asc' } } } },
+    },
   })
 }
 
@@ -78,19 +81,25 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
 // ── grading pipeline (the AI grading state machine; called by the job queue /
 //    grading services, keyed by submission id — system-wide, not tenant-scoped) ──
 
-// One submission to auto-grade, with its assignment + ordered reference sentences.
+// The reference sentences + eyes-closed flag a grader scores against come from the
+// submission's PHASE (each phase owns its own content). The assignment is still
+// included for the rubric / pinned models / owning teacher; sentences fall back to
+// the assignment for any legacy row without a phase.
+const gradingInclude = {
+  phase: { include: { sentences: { orderBy: { order: 'asc' as const } } } },
+  assignment: { include: { sentences: { orderBy: { order: 'asc' as const } } } },
+}
+
+// One submission to auto-grade, with its phase/assignment + ordered reference sentences.
 export function findGradable(prisma: PrismaClient, id: number) {
-  return prisma.submission.findUnique({
-    where: { id },
-    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } } },
-  })
+  return prisma.submission.findUnique({ where: { id }, include: gradingInclude })
 }
 
 // Same, plus the per-sentence shadow takes (for the shadowing grader).
 export function findGradableShadow(prisma: PrismaClient, id: number) {
   return prisma.submission.findUnique({
     where: { id },
-    include: { assignment: { include: { sentences: { orderBy: { order: 'asc' } } } }, shadowTakes: { orderBy: { order: 'asc' } } },
+    include: { ...gradingInclude, shadowTakes: { orderBy: { order: 'asc' } } },
   })
 }
 
@@ -147,29 +156,34 @@ export function setShadowTakeScore(prisma: PrismaClient, takeId: number, data: {
 // grading error after submit still consumed the attempt), else a student would
 // get a free extra try whenever AI grading errored.
 const ACTIVE_STATUSES: SubmissionStatus[] = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED', 'FAILED']
-const byAttempt = (assignmentId: number, studentId: number, attempt: number) => ({ assignmentId_studentId_attempt: { assignmentId, studentId, attempt } })
+// A submission is identified per PHASE now: the unique key is
+// (assignmentId, phaseId, studentId, attempt) so the phases of one assignment each
+// get their own independent attempts/grades.
+const byAttempt = (assignmentId: number, phaseId: number, studentId: number, attempt: number) =>
+  ({ assignmentId_phaseId_studentId_attempt: { assignmentId, phaseId, studentId, attempt } })
 export type MediaKeyField = { videoKey?: string; audioKey?: string; imageKey?: string }
 
-// Attempts already used (anything past DRAFT) — drives the maxAttempts gate.
-export function countActiveAttempts(prisma: PrismaClient, assignmentId: number, studentId: number) {
-  return prisma.submission.count({ where: { assignmentId, studentId, status: { in: ACTIVE_STATUSES } } })
+// Attempts already used for this phase (anything past DRAFT) — drives the per-phase
+// maxAttempts gate.
+export function countActiveAttempts(prisma: PrismaClient, phaseId: number, studentId: number) {
+  return prisma.submission.count({ where: { phaseId, studentId, status: { in: ACTIVE_STATUSES } } })
 }
 
 // Upsert the draft for an attempt, stamping a media key (re-recording overwrites it).
-export function upsertDraftWithMedia(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number, keyField: MediaKeyField) {
+export function upsertDraftWithMedia(prisma: PrismaClient, assignmentId: number, phaseId: number, studentId: number, attempt: number, keyField: MediaKeyField) {
   return prisma.submission.upsert({
-    where: byAttempt(assignmentId, studentId, attempt),
+    where: byAttempt(assignmentId, phaseId, studentId, attempt),
     update: { ...keyField, status: 'DRAFT' },
-    create: { assignmentId, studentId, attempt, ...keyField, status: 'DRAFT' },
+    create: { assignmentId, phaseId, studentId, attempt, ...keyField, status: 'DRAFT' },
   })
 }
 
 // Ensure a draft row exists for the attempt (no media yet — used by shadowing).
-export function upsertDraft(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number) {
+export function upsertDraft(prisma: PrismaClient, assignmentId: number, phaseId: number, studentId: number, attempt: number) {
   return prisma.submission.upsert({
-    where: byAttempt(assignmentId, studentId, attempt),
+    where: byAttempt(assignmentId, phaseId, studentId, attempt),
     update: { status: 'DRAFT' },
-    create: { assignmentId, studentId, attempt, status: 'DRAFT' },
+    create: { assignmentId, phaseId, studentId, attempt, status: 'DRAFT' },
   })
 }
 
@@ -177,13 +191,13 @@ export function findOwn(prisma: PrismaClient, id: number, studentId: number) {
   return prisma.submission.findFirst({ where: { id, studentId } })
 }
 
-export function findOwnAttempt(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number) {
-  return prisma.submission.findFirst({ where: { assignmentId, studentId, attempt } })
+export function findOwnAttempt(prisma: PrismaClient, phaseId: number, studentId: number, attempt: number) {
+  return prisma.submission.findFirst({ where: { phaseId, studentId, attempt } })
 }
 
-export function findOwnAttemptWithTakeCount(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number) {
+export function findOwnAttemptWithTakeCount(prisma: PrismaClient, phaseId: number, studentId: number, attempt: number) {
   return prisma.submission.findFirst({
-    where: { assignmentId, studentId, attempt },
+    where: { phaseId, studentId, attempt },
     include: { _count: { select: { shadowTakes: true } } },
   })
 }
@@ -206,10 +220,10 @@ export function upsertShadowTake(prisma: PrismaClient, submissionId: number, ord
   })
 }
 
-export function upsertRecitedText(prisma: PrismaClient, assignmentId: number, studentId: number, attempt: number, text: string) {
+export function upsertRecitedText(prisma: PrismaClient, assignmentId: number, phaseId: number, studentId: number, attempt: number, text: string) {
   return prisma.submission.upsert({
-    where: byAttempt(assignmentId, studentId, attempt),
+    where: byAttempt(assignmentId, phaseId, studentId, attempt),
     update: { recitedText: text, textSubmittedAt: new Date() },
-    create: { assignmentId, studentId, attempt, recitedText: text, textSubmittedAt: new Date(), status: 'DRAFT' },
+    create: { assignmentId, phaseId, studentId, attempt, recitedText: text, textSubmittedAt: new Date(), status: 'DRAFT' },
   })
 }

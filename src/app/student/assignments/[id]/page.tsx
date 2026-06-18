@@ -43,8 +43,13 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
   const assignment = await assignmentRepo.findForStudentDetail(prisma, assignmentId, classIds, user.userId)
   if (!assignment) notFound()
 
+  // A submission belongs to a phase. Every assignment has at least one (migration
+  // 0027 backfilled existing ones; new ones are created with their phases).
+  const phaseId = assignment.phases[0]?.id
+  if (!phaseId) notFound()
+
   const latest = assignment.submissions[0]
-  const usedAttempts = await submissionRepo.countActiveAttempts(prisma, assignmentId, user.userId)
+  const usedAttempts = await submissionRepo.countActiveAttempts(prisma, phaseId, user.userId)
 
   const now = new Date()
   const notOpen = assignment.openAt ? now < assignment.openAt : false
@@ -68,7 +73,7 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
     const initialRecorded = latest?.status === 'DRAFT' ? latest.shadowTakes.map((tk) => tk.order) : []
     return (
       <ShadowSubmit
-        assignmentId={assignment.id}
+        phaseId={phaseId}
         title={assignment.title}
         category={assignment.category}
         instructions={assignment.instructions}
@@ -87,12 +92,12 @@ export default async function StudentAssignmentPage({ params }: { params: Promis
 
   return (
     <SubmissionFlow
-      assignmentId={assignment.id}
+      phaseId={phaseId}
       title={assignment.title}
       category={assignment.category}
       instructions={assignment.instructions}
       shadowing={null}
-      practice={windowOpen && sentences.length > 0 ? <PracticePanel assignmentId={assignment.id} sentences={sentences} /> : null}
+      practice={windowOpen && sentences.length > 0 ? <PracticePanel phaseId={phaseId} sentences={sentences} /> : null}
       sentences={sentences}
       requireEyesClosed={assignment.requireEyesClosed}
       requireText={assignment.requireText}

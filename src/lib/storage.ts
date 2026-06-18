@@ -40,19 +40,22 @@ export async function presignDownload(key: string, expiresIn = 3600): Promise<st
   return presign(key, 'GET', expiresIn)
 }
 
-export function submissionMediaKey(assignmentId: number, studentId: number, attempt: number, kind: 'video' | 'audio' | 'image', ext: string): string {
-  return `submissions/${assignmentId}/${studentId}/attempt-${attempt}-${kind}.${ext}`
+// Media keys carry the phaseId so the per-phase submissions of one assignment never
+// collide on the same attempt number. (A single-phase assignment still has exactly
+// one phase, so this is just an extra path segment.)
+export function submissionMediaKey(assignmentId: number, phaseId: number, studentId: number, attempt: number, kind: 'video' | 'audio' | 'image', ext: string): string {
+  return `submissions/${assignmentId}/${phaseId}/${studentId}/attempt-${attempt}-${kind}.${ext}`
 }
 
 // One per-sentence shadowing take.
-export function shadowTakeKey(assignmentId: number, studentId: number, attempt: number, order: number, ext: string): string {
-  return `submissions/${assignmentId}/${studentId}/attempt-${attempt}-shadow-${order}.${ext}`
+export function shadowTakeKey(assignmentId: number, phaseId: number, studentId: number, attempt: number, order: number, ext: string): string {
+  return `submissions/${assignmentId}/${phaseId}/${studentId}/attempt-${attempt}-shadow-${order}.${ext}`
 }
 
 // Practice recordings live under their own prefix and are timestamped, since a
 // student may practice many times before a formal submission.
-export function practiceMediaKey(assignmentId: number, studentId: number, kind: 'audio' | 'video', ext: string): string {
-  return `practice/${assignmentId}/${studentId}/${Date.now()}-${kind}.${ext}`
+export function practiceMediaKey(assignmentId: number, phaseId: number, studentId: number, kind: 'audio' | 'video', ext: string): string {
+  return `practice/${assignmentId}/${phaseId}/${studentId}/${Date.now()}-${kind}.${ext}`
 }
 
 // The single shadowing video for an item-bank chunk set.

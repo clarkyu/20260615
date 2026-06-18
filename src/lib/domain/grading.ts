@@ -62,8 +62,14 @@ export function hasAntiCheatViolation(violations: string | null | undefined): bo
   return countViolations(violations) > 0
 }
 
-// The shape the orchestrator needs — structurally satisfied by a Prisma
-// `submission` loaded with its assignment + sentences.
+// The shape the orchestrator needs — structurally satisfied by a Prisma `submission`
+// loaded with its phase + assignment (each carrying its sentences). Reference
+// sentences + the eyes-closed flag come from the PHASE; the assignment is the
+// fallback for any legacy row without a phase.
+interface GradingContent {
+  requireEyesClosed: boolean
+  sentences: { order: number; text: string }[]
+}
 export interface GradableSubmission {
   id: number
   assignmentId: number
@@ -73,10 +79,14 @@ export interface GradableSubmission {
   recitedText: string | null
   teacherScore: number | null
   violations: string | null
-  assignment: {
-    requireEyesClosed: boolean
-    sentences: { order: number; text: string }[]
-  }
+  phase: GradingContent | null
+  assignment: GradingContent
+}
+
+// The phase owns the content a submission is graded against; single-phase legacy
+// rows fall back to the assignment.
+function gradingContent(s: GradableSubmission): GradingContent {
+  return s.phase ?? s.assignment
 }
 
 export interface AutoGradeOptions {
@@ -122,14 +132,15 @@ export async function autoGradeSubmission(
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
 
+  const content = gradingContent(submission)
   try {
     const result = await withAiKeys(keys, () => gradeSubmission({
       perceptionModelId: opts.perceptionModel,
       judgeModelId: opts.judgeModel,
       rubric: opts.rubric,
       maxScore: opts.maxScore ?? DEFAULT_MAX_SCORE,
-      referenceSentences: submission.assignment.sentences.map((s) => ({ order: s.order, text: s.text })),
-      requireEyesClosed: submission.assignment.requireEyesClosed,
+      referenceSentences: content.sentences.map((s) => ({ order: s.order, text: s.text })),
+      requireEyesClosed: content.requireEyesClosed,
       videoUrl,
       audioUrl,
       recitedText: submission.recitedText ?? undefined,
@@ -177,7 +188,7 @@ export async function autoGradeById(prisma: PrismaClient, submissionId: number):
   const submission = await submissionRepo.findGradable(prisma, submissionId)
   if (!submission) return null
   if (!submission.videoKey && !submission.audioKey) return null
-  if (submission.assignment.sentences.length === 0) return null
+  if ((submission.phase ?? submission.assignment).sentences.length === 0) return null
   // Model resolution: assignment-pinned → the teacher's own default → platform default.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   return autoGradeSubmission(prisma, submission, {

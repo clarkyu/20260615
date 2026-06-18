@@ -371,7 +371,7 @@ model Submission {
   shadowTakes ShadowTake[]
   gradingJob  GradingJob?
 
-  @@unique([assignmentId, studentId, attempt])
+  @@unique([assignmentId, phaseId, studentId, attempt])
   @@index([assignmentId])
   @@index([phaseId])
   @@index([studentId])

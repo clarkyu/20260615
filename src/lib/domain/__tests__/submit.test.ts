@@ -29,15 +29,19 @@ describe('missingRequiredPart', () => {
 })
 
 // ── resolveAttempt (gating logic, fake prisma) ───────────────────────────────
+// A submission is per-phase now: resolveAttempt gates on the PHASE's window +
+// attempt cap (repo reads prisma.phase.findFirst), and returns the owning
+// assignment id + the phase's submit requirements.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fakePrisma(assignment: any, usedCount = 0): any {
+function fakePrisma(phase: any, usedCount = 0): any {
   return {
-    assignment: { findFirst: async () => assignment },
+    phase: { findFirst: async () => phase },
     submission: { count: async () => usedCount },
   }
 }
-const A = (over: Record<string, unknown> = {}) => ({ id: 1, maxAttempts: 3, openAt: null, dueAt: null, ...over })
+const REQS = { requireText: false, requireVideo: true, requireAudio: false, requireHandwriting: false }
+const A = (over: Record<string, unknown> = {}) => ({ id: 5, assignmentId: 9, maxAttempts: 3, openAt: null, dueAt: null, ...REQS, ...over })
 
 describe('resolveAttempt', () => {
   it('rejects a student with no class', async () => {
@@ -56,10 +60,16 @@ describe('resolveAttempt', () => {
   })
 
   it('rejects when all attempts are used', async () => {
-    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 2 }), 2), 7, [2], 1)).toEqual({ ok: false, error: 'err.attemptsUsed' })
+    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 2 }), 2), 7, [2], 5)).toEqual({ ok: false, error: 'err.attemptsUsed' })
   })
 
-  it('returns the next attempt number on the happy path', async () => {
-    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 3 }), 1), 7, [2], 1)).toEqual({ ok: true, attempt: 2 })
+  it('returns the next attempt number + assignment id + phase requirements on the happy path', async () => {
+    expect(await resolveAttempt(fakePrisma(A({ maxAttempts: 3 }), 1), 7, [2], 5)).toEqual({
+      ok: true,
+      attempt: 2,
+      assignmentId: 9,
+      phaseId: 5,
+      requirements: REQS,
+    })
   })
 })

@@ -28,7 +28,7 @@ function pickAudioMime(): { mime: string; ext: string } {
 
 // "练一练": record a reading, get instant AI feedback, retry as much as you like.
 // Never consumes a formal submission attempt.
-export function PracticePanel({ assignmentId, sentences }: { assignmentId: number; sentences: Sentence[] }) {
+export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentences: Sentence[] }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -54,7 +54,7 @@ export function PracticePanel({ assignmentId, sentences }: { assignmentId: numbe
       setError(null)
       try {
         const type = blob.type || 'audio/webm'
-        const up = await getPracticeUploadUrl(assignmentId, type, blob.type.includes('mp4') ? 'm4a' : ext)
+        const up = await getPracticeUploadUrl(phaseId, type, blob.type.includes('mp4') ? 'm4a' : ext)
         if ('error' in up || !up.url) {
           setError(up.error ?? t('rec.uploadFail'))
           setPhase('idle')
@@ -66,7 +66,7 @@ export function PracticePanel({ assignmentId, sentences }: { assignmentId: numbe
           setPhase('idle')
           return
         }
-        const fb = await gradePracticeAttempt(assignmentId, { kind: 'audio', mediaKey: up.key })
+        const fb = await gradePracticeAttempt(phaseId, { kind: 'audio', mediaKey: up.key })
         setResult(fb)
         setPhase('feedback')
       } catch {
@@ -74,7 +74,7 @@ export function PracticePanel({ assignmentId, sentences }: { assignmentId: numbe
         setPhase('idle')
       }
     },
-    [assignmentId, t],
+    [phaseId, t],
   )
 
   const start = useCallback(async () => {
