@@ -19,10 +19,12 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   const { cefr, strand, domain, series, video } = await searchParams
   const hasVideo = video === '1'
   const filtered = Boolean(cefr || strand || domain || series || hasVideo)
-  const [sets, allSeries, recent] = await Promise.all([
+  const [sets, allSeries, recent, favorites, favoriteIds] = await Promise.all([
     bankRepo.listVisible(prisma, user.schoolId, { cefr, strand, domain, series, hasVideo }),
     bankRepo.seriesList(prisma, user.schoolId),
     bankRepo.listRecentlyUsedByTeacher(prisma, user.schoolId, user.userId),
+    bankRepo.listFavorites(prisma, user.schoolId, user.userId),
+    bankRepo.favoriteSetIds(prisma, user.userId),
   ])
 
   return (
@@ -43,6 +45,8 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
       <BankList
         sets={sets}
         recent={recent}
+        favorites={favorites}
+        favoriteIds={favoriteIds}
         filtered={filtered}
         cefr={cefr}
         strand={strand}

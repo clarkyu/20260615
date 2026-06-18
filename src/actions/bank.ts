@@ -13,6 +13,17 @@ import { parseForm, reqText, optText, reqId, intField, checkbox, z } from '@/lib
 
 type ActionState = { error?: string; success?: boolean }
 
+// Star/unstar a bank set for the current teacher. Only sets visible to them.
+export async function toggleBankFavorite(setId: number): Promise<{ favorited?: boolean; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(setId)) return { error: t('err.setNotFound') }
+  const set = await bankRepo.findSummaryVisible(prisma, setId, user.schoolId)
+  if (!set) return { error: t('err.setNotFound') }
+  const favorited = await bankRepo.toggleFavorite(prisma, user.userId, setId)
+  revalidatePath('/dashboard/bank')
+  return { favorited }
+}
+
 const metaShape = { cefr: optText(20), strand: optText(60), domain: optText(30), tags: optText(300), source: optText(120) }
 // Manually-built sets are standalone (series: null); imports set their own series.
 function metaFrom(d: { cefr?: string | null; strand?: string | null; domain?: string | null; tags?: string | null; source?: string | null }) {

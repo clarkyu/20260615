@@ -59,8 +59,22 @@ model ChunkSet {
   chunks         Chunk[]
   assignments    Assignment[]
   phases         Phase[]
+  favorites      BankFavorite[]
 
   @@index([schoolId])
+}
+
+// A teacher's starred bank sets — per (user, set), pinned to the top of the bank list.
+model BankFavorite {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  chunkSetId Int
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunkSet   ChunkSet @relation(fields: [chunkSetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chunkSetId])
+  @@index([userId])
 }
 
 // 句子（chunk）：三段式——中心句(english/chinese) + 解释句(meaning) + 情境例句(example)，
@@ -182,6 +196,7 @@ model User {
   aiKeys                  AiKey[]
   createdTemplates        AssignmentTemplate[] @relation("UserTemplates")
   feedback                Feedback[]
+  bankFavorites           BankFavorite[]
 
   @@unique([schoolId, studentNo])
   @@unique([schoolId, staffNo])
