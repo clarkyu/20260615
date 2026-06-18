@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Role, SubmissionStatus } from '@prisma/client'
 
 // Tenant-scoped data access for assignments. An assignment belongs to a school
 // through its offering, so every scope check goes via `offering.schoolId`.
@@ -212,6 +212,37 @@ export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId
 // Assignments of an offering as {id, title}, oldest first — the gradebook columns.
 export function listForOfferingBrief(prisma: PrismaClient, offeringId: number) {
   return prisma.assignment.findMany({ where: { offeringId }, select: { id: true, title: true }, orderBy: { createdAt: 'asc' } })
+}
+
+// ── the staff "作业" menu: every assignment in the actor's scope ──────────────────
+// A teacher sees their own offerings; an admin sees the whole school.
+const staffScope = (schoolId: number | null | undefined, userId: number, role: Role) =>
+  ({ schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) })
+
+const NEEDS_TEACHER: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
+
+// All assignments the staff member can see, newest first, with course/class, due
+// date, phase count, and how many submissions are in (non-DRAFT).
+export function listForStaff(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.assignment.findMany({
+    where: { offering: staffScope(schoolId, userId, role) },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, title: true, category: true, dueAt: true, monthLabel: true,
+      offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } },
+      _count: { select: { phases: true, submissions: { where: { status: { not: 'DRAFT' } } } } },
+    },
+  })
+}
+
+// Pending-review count per assignment (the actionable chip on the 作业 menu).
+export async function pendingReviewByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<Map<number, number>> {
+  const groups = await prisma.submission.groupBy({
+    by: ['assignmentId'],
+    where: { needsReview: true, status: { in: NEEDS_TEACHER }, assignment: { offering: staffScope(schoolId, userId, role) } },
+    _count: { _all: true },
+  })
+  return new Map(groups.map((g) => [g.assignmentId, g._count._all]))
 }
 
 // Same with each assignment's sentences {order, text} — the insights weak-line map.

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, GraduationCap, BookOpenCheck, User, Library } from 'lucide-react'
+import { LayoutDashboard, Users, GraduationCap, BookOpenCheck, User, Library, ClipboardList } from 'lucide-react'
 import type { Role } from '@prisma/client'
 import { useT } from './i18n-provider'
 
@@ -14,6 +14,7 @@ export function BottomNav({ role }: { role: Role }) {
   const items = staff
     ? [
         { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+        { href: '/dashboard/assignments', label: t('nav.assignments'), icon: ClipboardList },
         { href: '/dashboard/teaching', label: t('nav.teaching'), icon: GraduationCap },
         { href: '/dashboard/students', label: t('nav.students'), icon: Users },
         { href: '/dashboard/bank', label: t('nav.bank'), icon: Library },
