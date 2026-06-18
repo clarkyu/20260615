@@ -20,6 +20,8 @@ interface Row {
   studentName: string
   studentNo: string
   className: string
+  phaseOrder?: number
+  phaseLabel?: string
   status: string
   needsReview: boolean
   aiScore: number | null
@@ -288,6 +290,7 @@ export function GradingClient(props: {
                     <div className="font-medium">{r.studentName} <span className="text-muted-foreground">{r.studentNo}</span></div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{r.className}</span>
+                      {r.phaseLabel ? <Badge tone="primary">{r.phaseLabel}</Badge> : null}
                       <Badge tone={statusTone(r.status)}>{t('st.' + r.status)}</Badge>
                       {r.needsReview && r.status !== 'DRAFT' ? <Badge tone="warning">{t('grade.needsReview')}</Badge> : null}
                       {r.violations > 0 ? <span className="text-[hsl(var(--warning))]">⚠️ {r.violations} {t('grade.leftCount')}</span> : null}

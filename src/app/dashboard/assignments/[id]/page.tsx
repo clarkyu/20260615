@@ -22,27 +22,35 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   const assignment = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId)
   if (!assignment) notFound()
 
-  const latestByStudent = new Map<number, (typeof assignment.submissions)[number]>()
+  // A submission is per-phase: keep the latest attempt per (student, phase). When the
+  // assignment has several phases, label each row with its phase.
+  const multiPhase = assignment.phases.length > 1
+  const latestByStudentPhase = new Map<string, (typeof assignment.submissions)[number]>()
   for (const s of assignment.submissions) {
-    if (!latestByStudent.has(s.studentId)) latestByStudent.set(s.studentId, s)
+    const key = `${s.studentId}:${s.phaseId ?? 0}`
+    if (!latestByStudentPhase.has(key)) latestByStudentPhase.set(key, s)
   }
 
-  const rows = [...latestByStudent.values()].map((s) => ({
-    id: s.id,
-    studentName: s.student.name ?? '',
-    studentNo: s.student.studentNo ?? '',
-    className: assignment.offering.class.name,
-    status: s.status,
-    needsReview: s.needsReview,
-    aiScore: s.aiScore,
-    finalScore: s.finalScore,
-    feedback: s.feedback ?? '',
-    hasVideo: Boolean(s.videoKey),
-    hasAudio: Boolean(s.audioKey),
-    hasImage: Boolean(s.imageKey),
-    recitedText: s.recitedText ?? '',
-    violations: countViolations(s.violations),
-  }))
+  const rows = [...latestByStudentPhase.values()]
+    .map((s) => ({
+      id: s.id,
+      studentName: s.student.name ?? '',
+      studentNo: s.student.studentNo ?? '',
+      className: assignment.offering.class.name,
+      phaseOrder: s.phase?.order ?? 0,
+      phaseLabel: multiPhase ? (s.phase?.title?.trim() || t('phase.nth', { n: s.phase?.order ?? 0 })) : undefined,
+      status: s.status,
+      needsReview: s.needsReview,
+      aiScore: s.aiScore,
+      finalScore: s.finalScore,
+      feedback: s.feedback ?? '',
+      hasVideo: Boolean(s.videoKey),
+      hasAudio: Boolean(s.audioKey),
+      hasImage: Boolean(s.imageKey),
+      recitedText: s.recitedText ?? '',
+      violations: countViolations(s.violations),
+    }))
+    .sort((a, b) => a.studentNo.localeCompare(b.studentNo) || a.phaseOrder - b.phaseOrder)
 
   const sem = assignment.offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 

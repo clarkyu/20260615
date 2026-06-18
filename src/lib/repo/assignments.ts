@@ -82,8 +82,9 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
     include: {
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true } },
       submissions: {
-        include: { student: { select: { name: true, studentNo: true } } },
+        include: { student: { select: { name: true, studentNo: true } }, phase: { select: { order: true, title: true } } },
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
       },
     },
@@ -232,24 +233,6 @@ export function listWithSentencesForOffering(prisma: PrismaClient, offeringId: n
 
 // ── student-facing reads (scoped to the student's class, not their school) ────
 
-// The assignment iff it targets one of the student's classes (the submission gate).
-// A student may belong to several classes; an empty list matches nothing.
-export function findForClasses(prisma: PrismaClient, id: number, classIds: number[]) {
-  return prisma.assignment.findFirst({ where: { id, offering: { classId: { in: classIds } } } })
-}
-
-// Same, with ordered reference sentences (the practice gate needs them).
-export function findForClassesWithSentences(prisma: PrismaClient, id: number, classIds: number[]) {
-  return prisma.assignment.findFirst({
-    where: { id, offering: { classId: { in: classIds } } },
-    include: { sentences: { orderBy: { order: 'asc' } } },
-  })
-}
-
-export function findShadowVideoForClasses(prisma: PrismaClient, id: number, classIds: number[]) {
-  return prisma.assignment.findFirst({ where: { id, offering: { classId: { in: classIds } } }, select: { shadowVideoKey: true } })
-}
-
 // The student home list: the assignments of all the student's classes, each with
 // the student's latest submission (take 1), sentence count, and course name.
 export function listForStudent(prisma: PrismaClient, classIds: number[], studentId: number) {
@@ -257,30 +240,18 @@ export function listForStudent(prisma: PrismaClient, classIds: number[], student
     where: { offering: { classId: { in: classIds } } },
     orderBy: { createdAt: 'desc' },
     include: {
-      _count: { select: { sentences: true } },
       offering: { include: { course: { select: { name: true } } } },
-      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1 },
+      phases: {
+        orderBy: { order: 'asc' },
+        select: {
+          id: true,
+          graded: true,
+          _count: { select: { sentences: true } },
+          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, select: { status: true, finalScore: true, feedback: true, recitedText: true } },
+        },
+      },
     },
   })
-}
-
-// One assignment for the student detail/submit screen: sentences, optional bank
-// chunk set (shadowing), the ordered phase ids, and the student's latest submission
-// with its take orders.
-export function findForStudentDetail(prisma: PrismaClient, id: number, classIds: number[], studentId: number) {
-  return prisma.assignment.findFirst({
-    where: { id, offering: { classId: { in: classIds } } },
-    include: {
-      sentences: { orderBy: { order: 'asc' } },
-      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
-      phases: { orderBy: { order: 'asc' }, select: { id: true } },
-      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, include: { shadowTakes: { select: { order: true } } } },
-    },
-  })
-}
-
-export function countSentences(prisma: PrismaClient, assignmentId: number) {
-  return prisma.sentence.count({ where: { assignmentId } })
 }
 
 // ── per-phase student reads (a phase is the unit a student submits to) ──────────
@@ -317,4 +288,38 @@ export function findPhaseWithSentencesForClasses(prisma: PrismaClient, phaseId: 
 
 export function countPhaseSentences(prisma: PrismaClient, phaseId: number) {
   return prisma.sentence.count({ where: { phaseId } })
+}
+
+// The assignment's phases as an overview list for the student: each phase's label,
+// schedule, whether it counts, sentence count, and the student's latest submission
+// status/score. Drives the multi-phase landing screen.
+export function findForStudentPhaseList(prisma: PrismaClient, id: number, classIds: number[], studentId: number) {
+  return prisma.assignment.findFirst({
+    where: { id, offering: { classId: { in: classIds } } },
+    include: {
+      offering: { include: { course: { select: { name: true } } } },
+      phases: {
+        orderBy: { order: 'asc' },
+        include: {
+          _count: { select: { sentences: true } },
+          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, select: { status: true, finalScore: true } },
+        },
+      },
+    },
+  })
+}
+
+// One phase with everything its submit screen needs: its content (sentences + bank
+// chunk set), the owning assignment's title/category, and the student's submissions
+// for this phase (latest first, with shadow-take orders).
+export function findPhaseDetailForStudent(prisma: PrismaClient, phaseId: number, classIds: number[], studentId: number) {
+  return prisma.phase.findFirst({
+    where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },
+    include: {
+      sentences: { orderBy: { order: 'asc' } },
+      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
+      assignment: { select: { id: true, title: true, category: true } },
+      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, include: { shadowTakes: { select: { order: true } } } },
+    },
+  })
 }
