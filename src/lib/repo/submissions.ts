@@ -90,6 +90,14 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
   })
 }
 
+// How many of a student's graded submissions are newer than they've seen — drives the
+// in-app "new score" red dot. `since` null → everything graded is new.
+export function countNewlyGraded(prisma: PrismaClient, studentId: number, since: Date | null) {
+  return prisma.submission.count({
+    where: { studentId, status: 'GRADED', gradedAt: since ? { gt: since } : { not: null } },
+  })
+}
+
 // One student's own non-DRAFT submissions in the analytics (RawPhaseRow) shape —
 // powers the student's personal 「我的薄弱点」 profile. Latest attempt first per phase.
 export function listForStudentLatestFirst(prisma: PrismaClient, studentId: number) {

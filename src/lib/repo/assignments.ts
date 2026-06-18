@@ -322,7 +322,7 @@ export function listForStudent(prisma: PrismaClient, classIds: number[], student
           id: true,
           graded: true,
           _count: { select: { sentences: true } },
-          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, select: { status: true, finalScore: true, feedback: true, recitedText: true } },
+          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, select: { status: true, finalScore: true, feedback: true, recitedText: true, gradedAt: true } },
         },
       },
     },

@@ -183,3 +183,12 @@ export function listClassRoster(prisma: PrismaClient, schoolId: number | null | 
 export function findById(prisma: PrismaClient, id: number) {
   return prisma.user.findUnique({ where: { id } })
 }
+
+// 学生「看过成绩」：把 scoresSeenAt 推进到 now，清掉未读提示。
+export function markScoresSeen(prisma: PrismaClient, studentId: number, at: Date) {
+  return prisma.user.update({ where: { id: studentId }, data: { scoresSeenAt: at } })
+}
+
+export function scoresSeenAt(prisma: PrismaClient, studentId: number) {
+  return prisma.user.findUnique({ where: { id: studentId }, select: { scoresSeenAt: true } })
+}
