@@ -6,11 +6,11 @@ import { updateWithPhases, type PhaseInput } from '@/lib/repo/assignments'
 // PracticeAttempts (which cascade-delete with their Phase) survive the edit.
 
 const phase = (over: Partial<PhaseInput> = {}): PhaseInput => ({
-  id: null, order: 1, title: null, instructions: null, chunkSetId: null, shadowVideoKey: null,
+  id: null, order: 1, title: null, category: null, instructions: null, chunkSetId: null, shadowVideoKey: null,
   openAt: null, dueAt: null, requireEyesClosed: false, requireText: false, requireAudio: true,
   requireVideo: false, requireHandwriting: false, graded: true, maxAttempts: 1, sentences: [], ...over,
 })
-const meta = { title: 'T', category: null, monthLabel: null }
+const meta = { title: 'T', monthLabel: null }
 
 function fakePrisma(existingPhaseIds: number[]) {
   const calls = { phaseUpdate: [] as number[], phaseCreate: 0, phaseDeleteMany: [] as number[][], assignmentUpdate: 0 }

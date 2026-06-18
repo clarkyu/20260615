@@ -75,7 +75,7 @@ export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: s
       <ShadowSubmit
         phaseId={phase.id}
         title={heading}
-        category={phase.assignment.category}
+        category={phase.category}
         instructions={phase.instructions}
         chunks={shadowChunks}
         attemptsLeft={attemptsLeft}
@@ -93,7 +93,7 @@ export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: s
     <SubmissionFlow
       phaseId={phase.id}
       title={heading}
-      category={phase.assignment.category}
+      category={phase.category}
       instructions={phase.instructions}
       shadowing={null}
       practice={windowOpen && sentences.length > 0 ? <PracticePanel phaseId={phase.id} sentences={sentences} /> : null}

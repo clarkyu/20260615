@@ -38,8 +38,9 @@ async function PhaseSection({ phase, single, index }: { phase: PhasePreview; sin
   return (
     <div className="space-y-3">
       {!single ? (
-        <div className="flex items-center gap-2 border-t border-border/60 pt-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
           <span className="text-sm font-bold">{phase.title?.trim() || t('phase.nth', { n: index + 1 })}</span>
+          {phase.category ? <Badge tone="primary">{phase.category}</Badge> : null}
           {!phase.graded ? <Badge>{t('phase.practiceOnly')}</Badge> : null}
         </div>
       ) : null}

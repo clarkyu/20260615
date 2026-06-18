@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 export interface PhaseInitial {
   id: number
   title: string
+  category: string
   instructions: string
   useBankSet: boolean
   sentences: string
@@ -33,7 +34,6 @@ export interface PhaseInitial {
 export interface AssignmentInitial {
   id: number
   title: string
-  category: string
   monthLabel: string
   chunkSetId: number | null
   chunkSetName: string | null
@@ -64,6 +64,7 @@ function localToIso(local: string): string {
 interface PhaseState {
   id?: number // existing phase id (edit) so the server reconciles in place, not delete+recreate
   title: string
+  category: string
   instructions: string
   useBankSet: boolean
   sentences: string
@@ -83,6 +84,7 @@ interface PhaseState {
 function newPhase(bank: boolean, recite = false): PhaseState {
   return {
     title: '',
+    category: '',
     instructions: '',
     useBankSet: bank,
     sentences: '',
@@ -124,7 +126,6 @@ export function AssignmentForm({
 
   // Assignment-level fields (controlled so the AI draft can fill them).
   const [title, setTitle] = useState(initial?.title ?? '')
-  const [category, setCategory] = useState(initial?.category ?? '')
 
   const [phases, setPhases] = useState<PhaseState[]>(() =>
     initial?.phases?.length
@@ -154,8 +155,14 @@ export function AssignmentForm({
 
   function applyDraft(d: DraftFields) {
     if (d.title) setTitle(d.title)
-    if (d.category) setCategory(d.category)
-    if (d.instructions || d.sentences) patchPhase(0, { ...(d.instructions ? { instructions: d.instructions } : {}), ...(d.sentences ? { sentences: d.sentences } : {}) })
+    // The AI draft's type/instructions/sentences fill the first phase (category is per-phase now).
+    if (d.category || d.instructions || d.sentences) {
+      patchPhase(0, {
+        ...(d.category ? { category: d.category } : {}),
+        ...(d.instructions ? { instructions: d.instructions } : {}),
+        ...(d.sentences ? { sentences: d.sentences } : {}),
+      })
+    }
   }
 
   // Serialize phases for the server (local times → UTC ISO).
@@ -163,6 +170,7 @@ export function AssignmentForm({
     phases.map((p) => ({
       ...(p.id ? { id: p.id } : {}),
       title: p.title,
+      category: p.category,
       instructions: p.instructions,
       useBankSet: hasBank && p.useBankSet,
       sentences: hasBank && p.useBankSet ? '' : p.sentences,
@@ -256,16 +264,13 @@ export function AssignmentForm({
               </div>
             ) : null}
 
+            {/* 作业类型（category）现按环节设置，见下方各环节卡片。 */}
+            <datalist id="category-presets">
+              {CATEGORY_PRESETS.map((c) => <option key={c} value={c} />)}
+            </datalist>
             <div className="space-y-1.5">
               <Label htmlFor="title">{t('asg.fTitle')}</Label>
               <Input id="title" name="title" required value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="category">{t('asg.fCategory')}</Label>
-              <Input id="category" name="category" list="category-presets" value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('asg.fCategoryPh')} />
-              <datalist id="category-presets">
-                {CATEGORY_PRESETS.map((c) => <option key={c} value={c} />)}
-              </datalist>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>
@@ -358,6 +363,11 @@ function PhaseCard({
       </div>
 
       <Input value={phase.title} onChange={(e) => onPatch({ title: e.target.value })} placeholder={t('asg.phaseTitlePh')} />
+
+      <div className="space-y-1.5">
+        <Label>{t('asg.fCategory')}</Label>
+        <Input list="category-presets" value={phase.category} onChange={(e) => onPatch({ category: e.target.value })} placeholder={t('asg.fCategoryPh')} />
+      </div>
 
       {/* Content source */}
       {bank ? (

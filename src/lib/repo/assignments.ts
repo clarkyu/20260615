@@ -11,20 +11,21 @@ export interface SentenceRow {
   translation?: string | null
 }
 
-// Assignment-level (shared by all phases): identity + scheduling label.
+// Assignment-level (shared by all phases): identity + scheduling label. The category
+// (作业类型) lives per-phase now; the assignment's column mirrors phase 1.
 export interface AssignmentMeta {
   title: string
-  category: string | null
   monthLabel: string | null
 }
 
-// One ordered 环节 (phase) of an assignment: its own content (bank set or typed
-// sentences), submission requirements, time window, attempts, and whether it counts
-// toward the grade. `graded: false` = practice-only. Sentences come resolved.
+// One ordered 环节 (phase) of an assignment: its own type (category), content (bank set
+// or typed sentences), submission requirements, time window, attempts, and whether it
+// counts toward the grade. `graded: false` = practice-only. Sentences come resolved.
 export interface PhaseInput {
   id: number | null // existing phase id (edit) — null for a newly added phase
   order: number
   title: string | null
+  category: string | null
   instructions: string | null
   chunkSetId: number | null
   shadowVideoKey: string | null
@@ -42,10 +43,10 @@ export interface PhaseInput {
 
 // The assignment's legacy columns mirror its FIRST phase, so the (still
 // phase-unaware) student + grading pipeline keeps working unchanged — a single-phase
-// assignment is byte-for-byte what it was before phases existed. Phase 3 switches the
-// student/grading reads to iterate every phase.
+// assignment is byte-for-byte what it was before phases existed.
 function legacyColumnsFromPrimary(p: PhaseInput) {
   return {
+    category: p.category,
     instructions: p.instructions,
     chunkSetId: p.chunkSetId,
     shadowVideoKey: p.shadowVideoKey,
@@ -114,6 +115,7 @@ function phaseData(p: PhaseInput) {
   return {
     order: p.order,
     title: p.title,
+    category: p.category,
     instructions: p.instructions,
     chunkSetId: p.chunkSetId,
     shadowVideoKey: p.shadowVideoKey,
@@ -204,11 +206,12 @@ export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolI
 // A bare review assignment (默认音频背诵、可多次) seeded from the picked sentences — one
 // graded phase.
 export function createReview(prisma: PrismaClient, offeringId: number, title: string, sentences: SentenceRow[]) {
-  return createWithPhases(prisma, offeringId, { title, category: '复习作业', monthLabel: null }, [
+  return createWithPhases(prisma, offeringId, { title, monthLabel: null }, [
     {
       id: null,
       order: 1,
       title: null,
+      category: '复习作业',
       instructions: null,
       chunkSetId: null,
       shadowVideoKey: null,
