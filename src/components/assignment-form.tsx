@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { Sparkles, ImageUp, ChevronUp, ChevronDown, Trash2, Plus } from 'lucide-react'
+import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
 import { useT } from '@/components/i18n-provider'
@@ -140,6 +140,9 @@ export function AssignmentForm({
       ? initial.phases.map((p) => ({ ...p, openAt: p.openAt ? toLocalInput(p.openAt) : '', dueAt: p.dueAt ? toLocalInput(p.dueAt) : '' }))
       : [newPhase(hasBank)],
   )
+  // Phases are an accordion — only one expanded at a time so a multi-phase form isn't
+  // a wall of inputs. -1 = all collapsed.
+  const [openPhase, setOpenPhase] = useState(0)
 
   function patchPhase(i: number, patch: Partial<PhaseState>) {
     setPhases((prev) => prev.map((p, j) => (j === i ? { ...p, ...patch } : p)))
@@ -147,9 +150,11 @@ export function AssignmentForm({
   function addPhase() {
     // Offer the natural second step for a bank set: an eyes-closed recitation.
     setPhases((prev) => [...prev, newPhase(hasBank, hasBank && prev.length === 1)])
+    setOpenPhase(phases.length) // expand the newly added phase
   }
   function removePhase(i: number) {
     setPhases((prev) => (prev.length <= 1 ? prev : prev.filter((_, j) => j !== i)))
+    setOpenPhase((o) => (o >= i ? Math.max(0, o - 1) : o))
   }
   function movePhase(i: number, dir: -1 | 1) {
     setPhases((prev) => {
@@ -304,6 +309,8 @@ export function AssignmentForm({
                   total={phases.length}
                   phase={p}
                   bank={bankInfo}
+                  open={openPhase === i}
+                  onToggle={() => setOpenPhase(openPhase === i ? -1 : i)}
                   onPatch={(patch) => patchPhase(i, patch)}
                   onMove={(dir) => movePhase(i, dir)}
                   onRemove={() => removePhase(i)}
@@ -354,6 +361,8 @@ function PhaseCard({
   total,
   phase,
   bank,
+  open,
+  onToggle,
   onPatch,
   onMove,
   onRemove,
@@ -362,15 +371,29 @@ function PhaseCard({
   total: number
   phase: PhaseState
   bank: { id: number; name: string; count: number; hasVideo: boolean } | null
+  open: boolean
+  onToggle: () => void
   onPatch: (patch: Partial<PhaseState>) => void
   onMove: (dir: -1 | 1) => void
   onRemove: () => void
 }) {
   const t = useT()
+  // One-line summary shown when the phase is collapsed.
+  const kinds = [
+    phase.requireVideo && t('asg.kindVideo'),
+    phase.requireAudio && t('asg.kindAudio'),
+    phase.requireText && t('asg.kindText'),
+    phase.requireHandwriting && t('asg.kindHandwriting'),
+  ].filter(Boolean).join(' / ')
+  const summary = [phase.title.trim() || phase.category.trim(), kinds].filter(Boolean).join(' · ')
   return (
-    <div className="space-y-3 rounded-xl border border-input p-3">
+    <div className="rounded-xl border border-input p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">{t('asg.phase')} {index + 1}</span>
+        <button type="button" onClick={onToggle} className="tap flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm font-semibold">
+          {open ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+          <span className="shrink-0">{t('asg.phase')} {index + 1}</span>
+          {!open && summary ? <span className="truncate text-xs font-normal text-muted-foreground">· {summary}</span> : null}
+        </button>
         <div className="flex items-center gap-1">
           <button type="button" disabled={index === 0} onClick={() => onMove(-1)} className="tap rounded-lg p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label={t('asg.moveUp')}>
             <ChevronUp className="h-4 w-4" />
@@ -384,6 +407,7 @@ function PhaseCard({
         </div>
       </div>
 
+      <div className={open ? 'mt-3 space-y-3' : 'hidden'}>
       <Input value={phase.title} onChange={(e) => onPatch({ title: e.target.value })} placeholder={t('asg.phaseTitlePh')} />
 
       <div className="space-y-1.5">
@@ -475,6 +499,7 @@ function PhaseCard({
         <input type="checkbox" checked={phase.isFormalTest} onChange={(e) => onPatch({ isFormalTest: e.target.checked })} className="mt-0.5 h-4 w-4 accent-primary" />
         <span>{t('asg.formalTest')}<span className="block text-xs text-muted-foreground">{t('asg.formalTestHint')}</span></span>
       </label>
+      </div>
     </div>
   )
 }
