@@ -23,6 +23,83 @@ export interface AnalyticsSubmission {
   perSentence: { order: number; accuracy: number; completeness: number }[]
 }
 
+// A submission is per-PHASE now. The raw row (one per submitted phase attempt) the
+// repo hands the analytics layer; `phase.graded` says whether the phase counts.
+export interface RawPhaseRow {
+  studentId: number
+  assignmentId: number
+  phaseId: number | null
+  status: string
+  finalScore: number | null
+  needsReview: boolean
+  aiResult: string | null
+  phase: { graded: boolean } | null
+}
+
+// The latest non-DRAFT submission per (student, assignment, phase). `rows` arrive
+// ordered with the latest attempt first within each phase group.
+export interface PhaseSubmission {
+  studentId: number
+  assignmentId: number
+  phaseId: number | null
+  graded: boolean
+  status: string
+  finalScore: number | null
+  needsReview: boolean
+  perSentence: { order: number; accuracy: number; completeness: number }[]
+}
+
+export function latestPhaseSubmissions(rows: RawPhaseRow[]): PhaseSubmission[] {
+  const seen = new Set<string>()
+  const out: PhaseSubmission[] = []
+  for (const s of rows) {
+    const key = `${s.studentId}:${s.assignmentId}:${s.phaseId ?? 0}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      studentId: s.studentId,
+      assignmentId: s.assignmentId,
+      phaseId: s.phaseId ?? null,
+      graded: s.phase?.graded ?? true,
+      status: s.status,
+      finalScore: s.finalScore,
+      needsReview: s.needsReview,
+      perSentence: parsePerSentence(s.aiResult),
+    })
+  }
+  return out
+}
+
+// Collapse the per-phase submissions of an assignment into ONE analytics row per
+// (student, assignment): score = mean of the GRADED phases' final scores; submitted if
+// any phase is in; needsReview if any phase needs review. This is the single place that
+// defines "a multi-phase assignment's one score" — the mean of its graded phases.
+export function collapsePhases(rows: PhaseSubmission[]): AnalyticsSubmission[] {
+  const byPair = new Map<string, PhaseSubmission[]>()
+  for (const r of rows) {
+    const k = `${r.studentId}:${r.assignmentId}`
+    const arr = byPair.get(k)
+    if (arr) arr.push(r)
+    else byPair.set(k, [r])
+  }
+  const out: AnalyticsSubmission[] = []
+  for (const group of byPair.values()) {
+    const submitted = group.filter((g) => g.status !== 'DRAFT')
+    const gradedScores = submitted.filter((g) => g.graded && g.finalScore != null).map((g) => g.finalScore as number)
+    const finalScore = gradedScores.length ? gradedScores.reduce((a, b) => a + b, 0) / gradedScores.length : null
+    out.push({
+      studentId: group[0].studentId,
+      assignmentId: group[0].assignmentId,
+      // A non-DRAFT marker so isSubmitted() counts it; analytics never reads the value.
+      status: submitted.length > 0 ? 'UPLOADED' : 'DRAFT',
+      finalScore,
+      needsReview: submitted.some((g) => g.needsReview),
+      perSentence: [],
+    })
+  }
+  return out
+}
+
 // One practice round (训练). Feeds the 平时成绩, separate from the graded submission.
 export interface AnalyticsPractice {
   studentId: number
@@ -144,26 +221,29 @@ export function studentProfiles(
 
 export interface WeakSentence {
   assignmentId: number
+  phaseId: number | null
   order: number
   avgAccuracy: number
   samples: number
 }
 
 // Aggregates per-sentence accuracy across students to surface the hardest lines.
-// Only meaningful once AI perception data exists; empty otherwise.
-export function weakSentences(submissions: AnalyticsSubmission[], limit = 5): WeakSentence[] {
-  const agg = new Map<string, { sum: number; n: number; assignmentId: number; order: number }>()
+// Keyed by (assignment, PHASE, order): two phases of one assignment can both have a
+// sentence #1 with different text, so they must not be merged. Empty until AI
+// perception data exists.
+export function weakSentences(submissions: PhaseSubmission[], limit = 5): WeakSentence[] {
+  const agg = new Map<string, { sum: number; n: number; assignmentId: number; phaseId: number | null; order: number }>()
   for (const s of submissions) {
     for (const p of s.perSentence) {
-      const key = `${s.assignmentId}:${p.order}`
-      const cur = agg.get(key) ?? { sum: 0, n: 0, assignmentId: s.assignmentId, order: p.order }
+      const key = `${s.assignmentId}:${s.phaseId ?? 0}:${p.order}`
+      const cur = agg.get(key) ?? { sum: 0, n: 0, assignmentId: s.assignmentId, phaseId: s.phaseId ?? null, order: p.order }
       cur.sum += p.accuracy
       cur.n += 1
       agg.set(key, cur)
     }
   }
   return [...agg.values()]
-    .map((v) => ({ assignmentId: v.assignmentId, order: v.order, avgAccuracy: round2(v.sum / v.n), samples: v.n }))
+    .map((v) => ({ assignmentId: v.assignmentId, phaseId: v.phaseId, order: v.order, avgAccuracy: round2(v.sum / v.n), samples: v.n }))
     .sort((a, b) => a.avgAccuracy - b.avgAccuracy)
     .slice(0, limit)
 }

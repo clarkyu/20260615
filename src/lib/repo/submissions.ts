@@ -59,22 +59,25 @@ export function acceptAiForAssignment(prisma: PrismaClient, assignmentId: number
 // Submissions for an assignment by a set of students, newest attempt first — the
 // caller keeps the latest per student (score export). Excludes DRAFT so an
 // in-progress retry can't hide the student's already-submitted/graded attempt.
+// Per-PHASE: one row per submitted phase attempt, latest-first within each phase, with
+// the phase's order/title/graded so the caller can aggregate per (student, assignment).
 export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: number, studentIds: number[]) {
   return prisma.submission.findMany({
     where: { assignmentId, studentId: { in: studentIds }, status: { not: 'DRAFT' } },
-    orderBy: { attempt: 'desc' },
+    include: { phase: { select: { order: true, title: true, graded: true } } },
+    orderBy: [{ studentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }
 
 // Every submitted attempt in an offering, ordered so the latest per
-// (student, assignment) comes first — the caller keeps the first of each pair.
-// Excludes DRAFT so a started-but-unfinished retry doesn't shadow a graded attempt
-// in the gradebook / insights / weak-sentence review.
+// (student, assignment, PHASE) comes first — the caller keeps the first of each group.
+// Carries phaseId + phase.graded so analytics aggregates per phase. Excludes DRAFT so a
+// started-but-unfinished retry doesn't shadow a graded attempt.
 export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number) {
   return prisma.submission.findMany({
     where: { assignment: { offeringId }, status: { not: 'DRAFT' } },
-    select: { studentId: true, assignmentId: true, status: true, finalScore: true, needsReview: true, aiResult: true },
-    orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { attempt: 'desc' }],
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } } },
+    orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }
 

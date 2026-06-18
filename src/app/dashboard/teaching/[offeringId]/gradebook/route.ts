@@ -7,7 +7,7 @@ import * as assignmentRepo from '@/lib/repo/assignments'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as practiceRepo from '@/lib/repo/practice'
 import { buildGradebookWorkbook, type GradebookRow } from '@/lib/roster'
-import { studentProfiles, parsePerSentence, type AnalyticsSubmission } from '@/lib/domain/analytics'
+import { studentProfiles, latestPhaseSubmissions, collapsePhases } from '@/lib/domain/analytics'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ offeringId: string }> }) {
   const { offeringId: oid } = await params
@@ -27,14 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ off
     practiceRepo.listScoredForOffering(prisma, offeringId),
   ])
 
-  const seen = new Set<string>()
-  const submissions: AnalyticsSubmission[] = []
-  for (const s of rawSubs) {
-    const k = `${s.studentId}:${s.assignmentId}`
-    if (seen.has(k)) continue
-    seen.add(k)
-    submissions.push({ studentId: s.studentId, assignmentId: s.assignmentId, status: s.status, finalScore: s.finalScore, needsReview: s.needsReview, perSentence: parsePerSentence(s.aiResult) })
-  }
+  const submissions = collapsePhases(latestPhaseSubmissions(rawSubs))
   const roster = students.map((s) => ({ id: s.id, name: s.name ?? '', studentNo: s.studentNo ?? '' }))
   const practice = rawPractice.map((p) => ({ studentId: p.studentId, assignmentId: p.assignmentId, aiScore: p.aiScore }))
   const profiles = studentProfiles(roster, assignments, submissions, practice)

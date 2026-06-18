@@ -18,8 +18,8 @@ import {
   studentProfiles,
   weakSentences,
   offeringSummary,
-  parsePerSentence,
-  type AnalyticsSubmission,
+  latestPhaseSubmissions,
+  collapsePhases,
 } from '@/lib/domain/analytics'
 
 export default async function OfferingInsightsPage({ params }: { params: Promise<{ offeringId: string }> }) {
@@ -42,32 +42,20 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
     practiceRepo.listScoredForOffering(prisma, offeringId),
   ])
 
-  // Keep only the latest attempt per (student, assignment).
-  const seen = new Set<string>()
-  const submissions: AnalyticsSubmission[] = []
-  for (const s of rawSubs) {
-    const key = `${s.studentId}:${s.assignmentId}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    submissions.push({
-      studentId: s.studentId,
-      assignmentId: s.assignmentId,
-      status: s.status,
-      finalScore: s.finalScore,
-      needsReview: s.needsReview,
-      perSentence: parsePerSentence(s.aiResult),
-    })
-  }
+  // Per-phase latest submissions → collapsed to one score per (student, assignment) =
+  // mean of graded phases; weak lines stay per-phase (orders repeat across phases).
+  const phaseRows = latestPhaseSubmissions(rawSubs)
+  const submissions = collapsePhases(phaseRows)
 
   const practice = rawPractice.map((p) => ({ studentId: p.studentId, assignmentId: p.assignmentId, aiScore: p.aiScore }))
   const roster = students.map((s) => ({ id: s.id, name: s.name ?? '', studentNo: s.studentNo ?? '' }))
   const stats = assignmentStats(assignments, submissions, students.length)
   const profiles = studentProfiles(roster, assignments, submissions, practice)
   const summary = offeringSummary(stats, profiles, students.length)
-  const weak = weakSentences(submissions)
+  const weak = weakSentences(phaseRows)
   const titleById = new Map(assignments.map((a) => [a.id, a.title]))
   const sentenceText = new Map<string, string>()
-  for (const a of assignments) for (const s of a.sentences) sentenceText.set(`${a.id}:${s.order}`, s.text)
+  for (const a of assignments) for (const s of a.sentences) sentenceText.set(`${a.id}:${s.phaseId ?? 0}:${s.order}`, s.text)
   const sem = offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 
   const tiles = [
@@ -145,9 +133,9 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
               <Card>
                 <CardContent className="space-y-2.5 p-4">
                   {weak.map((w) => {
-                    const text = sentenceText.get(`${w.assignmentId}:${w.order}`)
+                    const text = sentenceText.get(`${w.assignmentId}:${w.phaseId ?? 0}:${w.order}`)
                     return (
-                      <div key={`${w.assignmentId}:${w.order}`} className="text-sm">
+                      <div key={`${w.assignmentId}:${w.phaseId ?? 0}:${w.order}`} className="text-sm">
                         <div className="flex items-center gap-3">
                           <span className="w-10 shrink-0 text-xs font-medium text-[hsl(var(--warning))] tabular-nums">{Math.round(w.avgAccuracy * 100)}%</span>
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">

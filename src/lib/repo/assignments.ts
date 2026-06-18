@@ -284,20 +284,22 @@ export async function pendingReviewByAssignment(prisma: PrismaClient, schoolId: 
   return new Map(groups.map((g) => [g.assignmentId, g._count._all]))
 }
 
-// Same with each assignment's sentences {order, text} — the insights weak-line map.
+// Each assignment's sentences {phaseId, order, text} — the insights weak-line map
+// (keyed per phase, since orders repeat across phases).
 export function listForOfferingTitled(prisma: PrismaClient, offeringId: number) {
   return prisma.assignment.findMany({
     where: { offeringId },
-    select: { id: true, title: true, sentences: { select: { order: true, text: true } } },
+    select: { id: true, title: true, sentences: { select: { phaseId: true, order: true, text: true } } },
     orderBy: { createdAt: 'asc' },
   })
 }
 
-// Sentences of every assignment in an offering (for the "weakest sentence" review).
+// Sentences of every assignment in an offering (for the "weakest sentence" review),
+// carrying phaseId so the review picks the right phase's text.
 export function listWithSentencesForOffering(prisma: PrismaClient, offeringId: number) {
   return prisma.assignment.findMany({
     where: { offeringId },
-    select: { id: true, sentences: { select: { order: true, text: true, translation: true } } },
+    select: { id: true, sentences: { select: { phaseId: true, order: true, text: true, translation: true } } },
   })
 }
 
