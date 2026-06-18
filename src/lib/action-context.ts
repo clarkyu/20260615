@@ -63,3 +63,13 @@ export async function staffSchoolContext(): Promise<StaffSchoolResult> {
   if (!user.schoolId) return { ok: false, error: t('err.createSchoolFirst') }
   return { ok: true, user, prisma, t, schoolId: user.schoolId }
 }
+
+// Same as staffSchoolContext, but additionally requires the SCHOOL_ADMIN role (the
+// school's administrator). Use for structural / credential operations — managing
+// classes, the roster, staff, school settings — that a plain teacher must not do.
+export async function schoolAdminContext(): Promise<StaffSchoolResult> {
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return cx
+  if (cx.user.role !== 'SCHOOL_ADMIN' && cx.user.role !== 'SUPER_ADMIN') return { ok: false, error: cx.t('err.adminOnly') }
+  return cx
+}

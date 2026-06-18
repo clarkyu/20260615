@@ -23,9 +23,11 @@ export async function createSchool(prevState: unknown, formData: FormData): Prom
   const res = await createSchoolService(prisma, user.userId, name, code)
   if (!res.ok) return { error: t(res.error) }
 
-  // Reflect the new school in the session so subsequent requests are scoped to it.
+  // Reflect the new school + admin role in the session so subsequent requests are
+  // scoped to it and the UI immediately shows the school-admin surfaces.
   const session = await getSession()
   session.schoolId = res.schoolId
+  session.role = 'SCHOOL_ADMIN'
   await session.save()
 
   revalidatePath('/dashboard')
