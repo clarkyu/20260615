@@ -91,7 +91,10 @@ export interface BankFilters {
   strand?: string
   domain?: string
   series?: string
+  hasVideo?: boolean
 }
+
+const SET_LIST_SELECT = { id: true, schoolId: true, name: true, shadowVideoKey: true, cefr: true, strand: true, series: true, _count: { select: { chunks: true } } } as const
 
 // Set list for the bank index — own + global, name, video presence, chunk count,
 // level/skill/series for grouping + badges, ownership (schoolId) to badge official
@@ -106,11 +109,35 @@ export function listVisible(prisma: PrismaClient, schoolId: number | null | unde
         ...(filters?.strand ? [{ strand: filters.strand }] : []),
         ...(filters?.domain ? [{ domain: filters.domain }] : []),
         ...(filters?.series ? [{ series: filters.series }] : []),
+        ...(filters?.hasVideo ? [{ shadowVideoKey: { not: null } }] : []),
       ],
     },
-    select: { id: true, schoolId: true, name: true, shadowVideoKey: true, cefr: true, strand: true, series: true, _count: { select: { chunks: true } } },
+    select: SET_LIST_SELECT,
     orderBy: [{ series: 'asc' }, { name: 'asc' }],
   })
+}
+
+// Sets this teacher most-recently drew from (a phase pulled from a bank set), newest
+// first, deduped. D1/Prisma can't order a relation by max(updatedAt), so we read the
+// recent phases then resolve their distinct sets, preserving recency order.
+export async function listRecentlyUsedByTeacher(prisma: PrismaClient, schoolId: number | null | undefined, teacherId: number, limit = 6) {
+  const phases = await prisma.phase.findMany({
+    where: { chunkSetId: { not: null }, assignment: { offering: { teacherId } } },
+    select: { chunkSetId: true },
+    orderBy: { updatedAt: 'desc' },
+    take: 60,
+  })
+  const ids: number[] = []
+  for (const p of phases) {
+    if (p.chunkSetId != null && !ids.includes(p.chunkSetId)) {
+      ids.push(p.chunkSetId)
+      if (ids.length >= limit) break
+    }
+  }
+  if (ids.length === 0) return []
+  const sets = await prisma.chunkSet.findMany({ where: { id: { in: ids }, ...visibleWhere(schoolId) }, select: SET_LIST_SELECT })
+  const byId = new Map(sets.map((s) => [s.id, s]))
+  return ids.map((id) => byId.get(id)).filter((s): s is NonNullable<typeof s> => Boolean(s))
 }
 
 // Distinct series visible to a school (own + global), for the series filter.
