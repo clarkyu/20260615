@@ -140,6 +140,32 @@ export async function listRecentlyUsedByTeacher(prisma: PrismaClient, schoolId: 
   return ids.map((id) => byId.get(id)).filter((s): s is NonNullable<typeof s> => Boolean(s))
 }
 
+// ── per-teacher favorites ───────────────────────────────────────────────────────
+
+export async function favoriteSetIds(prisma: PrismaClient, userId: number): Promise<number[]> {
+  const rows = await prisma.bankFavorite.findMany({ where: { userId }, select: { chunkSetId: true } })
+  return rows.map((r) => r.chunkSetId)
+}
+
+// Star/unstar a set for a user; returns the new favorited state.
+export async function toggleFavorite(prisma: PrismaClient, userId: number, chunkSetId: number): Promise<boolean> {
+  const existing = await prisma.bankFavorite.findUnique({ where: { userId_chunkSetId: { userId, chunkSetId } } })
+  if (existing) {
+    await prisma.bankFavorite.delete({ where: { id: existing.id } })
+    return false
+  }
+  await prisma.bankFavorite.create({ data: { userId, chunkSetId } })
+  return true
+}
+
+// A user's starred sets that are still visible to their school, name-ordered.
+export async function listFavorites(prisma: PrismaClient, schoolId: number | null | undefined, userId: number) {
+  const ids = await favoriteSetIds(prisma, userId)
+  if (ids.length === 0) return []
+  const sets = await prisma.chunkSet.findMany({ where: { id: { in: ids }, ...visibleWhere(schoolId) }, select: SET_LIST_SELECT })
+  return sets.sort((a, b) => a.name.localeCompare(b.name))
+}
+
 // Distinct series visible to a school (own + global), for the series filter.
 export async function seriesList(prisma: PrismaClient, schoolId: number | null | undefined): Promise<string[]> {
   const rows = await prisma.chunkSet.findMany({
