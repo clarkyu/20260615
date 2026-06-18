@@ -59,6 +59,8 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   if (!storageConfigured()) return
   const submission = await submissionRepo.findGradableShadow(prisma, submissionId)
   if (!submission || submission.shadowTakes.length === 0) return
+  // Already finalized (teacher graded it first, or a prior run finished) — skip.
+  if (submission.status === 'GRADED') return
   // Owner = assignment teacher: their default model + BYOK key.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   // Reference sentences come from the phase (its own content); assignment is the

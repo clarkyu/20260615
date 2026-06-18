@@ -187,6 +187,9 @@ export async function autoGradeSubmission(
 export async function autoGradeById(prisma: PrismaClient, submissionId: number): Promise<AutoGradeResult | null> {
   const submission = await submissionRepo.findGradable(prisma, submissionId)
   if (!submission) return null
+  // Already finalized (a teacher graded it before this background run got here, or a
+  // prior run finished) — don't re-grade and clobber it; let the job settle.
+  if (submission.status === 'GRADED') return null
   if (!submission.videoKey && !submission.audioKey) return null
   if ((submission.phase ?? submission.assignment).sentences.length === 0) return null
   // Model resolution: assignment-pinned → the teacher's own default → platform default.

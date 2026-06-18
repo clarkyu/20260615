@@ -36,7 +36,17 @@ function fakePrisma(jobs: Job[]) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async updateMany({ where, data }: any) {
         let count = 0
-        for (const j of jobs) if (matches(j as never, where)) { Object.assign(j, data); touch(j); count++ }
+        for (const j of jobs) if (matches(j as never, where)) {
+          for (const [k, v] of Object.entries(data)) {
+            // Model Prisma's atomic increment: { attempts: { increment: 1 } }
+            if (v && typeof v === 'object' && !(v instanceof Date) && 'increment' in (v as object)) {
+              ;(j as never as Record<string, number>)[k] += (v as { increment: number }).increment
+            } else {
+              ;(j as never as Record<string, unknown>)[k] = v
+            }
+          }
+          touch(j); count++
+        }
         return { count }
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,6 +137,24 @@ describe('claimAndRunDue', () => {
     expect(ran).toBe(0)
     expect(runner).not.toHaveBeenCalled()
     expect(jobs[0].status).toBe('PROCESSING')
+  })
+
+  it('counts a stale-reclaim as an attempt (so a crash-loop is bounded)', async () => {
+    const jobs = [job({ status: 'PROCESSING', attempts: 1, updatedAt: new Date(Date.now() - 20 * 60_000) })]
+    const db = fakePrisma(jobs)
+    await claimAndRunDue(db, 5, ok)
+    expect(jobs[0].attempts).toBe(2) // reclaim incremented before the run
+    expect(jobs[0].status).toBe('DONE')
+  })
+
+  it('dead-letters a stale job that has exhausted attempts via reclaim, without re-running', async () => {
+    const jobs = [job({ status: 'PROCESSING', attempts: MAX_ATTEMPTS - 1, updatedAt: new Date(Date.now() - 20 * 60_000) })]
+    const db = fakePrisma(jobs)
+    const runner = vi.fn(ok)
+    const { ran } = await claimAndRunDue(db, 5, runner)
+    expect(jobs[0].status).toBe('FAILED') // reclaim → attempts hit MAX → dead-lettered
+    expect(runner).not.toHaveBeenCalled()
+    expect(ran).toBe(0)
   })
 })
 
