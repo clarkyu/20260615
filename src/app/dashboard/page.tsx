@@ -44,7 +44,9 @@ export default async function DashboardPage() {
   const schoolId = me.school.id
   // Self-heal: drain due/stuck grading jobs in the background so transient AI
   // failures recover even without new submissions. Cheap when the queue is empty.
-  await runAfterResponse(() => drainGradingJobs(prisma))
+  // Drain on a FRESH client inside the deferred callback — the request-scoped one may
+  // not outlive the response (mirrors scheduleGrading's getDb()).
+  await runAfterResponse(async () => drainGradingJobs(await getDb()))
 
   const { students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups, needRows } =
     await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.role)

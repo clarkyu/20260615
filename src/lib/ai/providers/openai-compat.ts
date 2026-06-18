@@ -89,6 +89,8 @@ async function chat(cfg: CompatConfig, model: string, messages: { role: string; 
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey(cfg)}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, messages, temperature: 0.2 }),
+    // Don't let a stalled upstream pin the isolate to the platform wall-clock limit.
+    signal: AbortSignal.timeout(180_000),
   })
   if (!res.ok) throw new Error(`${cfg.provider} ${res.status}: ${(await res.text()).slice(0, 300)}`)
   return parseChatJson(await res.json())
