@@ -10,6 +10,8 @@ import * as practiceRepo from '@/lib/repo/practice'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge, statusTone } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { ScoreTrend } from './score-trend'
 
 export default async function StudentHome() {
   const user = await requireRole('STUDENT')
@@ -70,6 +72,7 @@ export default async function StudentHome() {
   const dailyAvg = mean(assignments.map((a) => bestPractice.get(a.id)).filter((v): v is number => v != null))
   const gradedScores = summaries.map((s) => s.examScore).filter((v): v is number => v != null) // createdAt desc
   const improved = gradedScores.length >= 2 && gradedScores[0] > gradedScores[1]
+  const trendScores = gradedScores.slice(0, 10).reverse() // last ~10 tests, oldest → newest
   const tiles = [
     { label: t('shome.daily'), value: dailyAvg == null ? '—' : String(dailyAvg) },
     { label: t('shome.exam'), value: examAvg == null ? '—' : String(examAvg) },
@@ -98,6 +101,22 @@ export default async function StudentHome() {
               ))}
             </div>
             <p className="text-center text-[11px] text-muted-foreground">{t('shome.tilesHint')}</p>
+            {trendScores.length >= 2 ? (() => {
+              const delta = round1(trendScores[trendScores.length - 1] - trendScores[trendScores.length - 2])
+              const deltaLabel = delta > 0 ? t('shome.trendUp', { n: delta }) : delta < 0 ? t('shome.trendDown', { n: delta }) : t('shome.trendFlat')
+              return (
+                <div className="space-y-1.5 rounded-xl bg-card/60 p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold">
+                      {t('shome.trend')}
+                      <span className={cn('ml-1.5 font-semibold', delta > 0 ? 'text-success' : 'text-muted-foreground')}>{deltaLabel}</span>
+                    </span>
+                    <span className="text-muted-foreground">{t('shome.trendHint', { n: trendScores.length })}</span>
+                  </div>
+                  <ScoreTrend scores={trendScores} />
+                </div>
+              )
+            })() : null}
             <p className={improved ? 'animate-pop text-sm font-semibold text-success' : 'text-xs text-muted-foreground'}>{improved ? `🎉 ${t('shome.improved')}` : t('shome.cheerUp')}</p>
           </CardContent>
         </Card>
