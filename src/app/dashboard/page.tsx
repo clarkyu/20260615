@@ -54,9 +54,9 @@ export default async function DashboardPage() {
     .sort((a, b) => b.pending - a.pending)
 
   const stats = [
-    { label: t('dash.statStudents'), value: students },
-    { label: t('dash.statClasses'), value: classes },
-    { label: t('dash.statAssignments'), value: assignments },
+    { label: t('dash.statStudents'), value: students, href: '/dashboard/students' },
+    { label: t('dash.statClasses'), value: classes, href: '/dashboard/students' },
+    { label: t('dash.statAssignments'), value: assignments, href: '/dashboard/assignments' },
   ]
 
   return (
@@ -194,12 +194,14 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-3 gap-3">
         {stats.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-extrabold tracking-tight">{s.value}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{s.label}</div>
-            </CardContent>
-          </Card>
+          <Link key={s.label} href={s.href}>
+            <Card className="tap h-full hover:shadow-card">
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-extrabold tracking-tight">{s.value}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{s.label}</div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>
