@@ -17,6 +17,15 @@ export function findForStaff(prisma: PrismaClient, id: number, schoolId: number 
   })
 }
 
+// One student's own submissions, trimmed to what the points tally needs
+// (status / score / dates). Own-data read — no school scope required.
+export function listForStudentPoints(prisma: PrismaClient, studentId: number) {
+  return prisma.submission.findMany({
+    where: { studentId },
+    select: { status: true, finalScore: true, gradedAt: true, createdAt: true },
+  })
+}
+
 export function listShadowTakes(prisma: PrismaClient, submissionId: number) {
   return prisma.shadowTake.findMany({
     where: { submissionId },

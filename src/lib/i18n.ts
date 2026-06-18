@@ -674,6 +674,19 @@ const zh: Dict = {
   'fb.decline': '不采纳',
   'fb.reset': '重置',
   'fb.replyPh': '给提交者的回复（可选）',
+  // points (display + motivation only)
+  'pts.title': '我的积分',
+  'pts.unit': '分',
+  'pts.streak': '🔥 连续打卡 {n} 天',
+  'pts.hint': '多提建议、多完成作业、考出高分、天天打卡，都能攒积分。',
+  'pts.empty': '还没有积分。去提个建议或完成一次作业，开始攒分吧！',
+  'pts.feedbackSubmit': '提交建议',
+  'pts.feedbackAdopted': '建议被采纳',
+  'pts.complete': '完成作业',
+  'pts.highScore': '考出高分',
+  'pts.improve': '成绩进步',
+  'pts.practice': '坚持练习',
+  'pts.activeDay': '每日打卡',
   'err.unauthenticated': '请先登录',
 }
 
@@ -1328,6 +1341,19 @@ const en: Dict = {
   'fb.decline': 'Decline',
   'fb.reset': 'Reset',
   'fb.replyPh': 'Reply to the author (optional)',
+  // points (display + motivation only)
+  'pts.title': 'My points',
+  'pts.unit': 'pts',
+  'pts.streak': '🔥 {n}-day streak',
+  'pts.hint': 'Earn points by sharing ideas, finishing assignments, scoring high, and checking in daily.',
+  'pts.empty': 'No points yet. Share a suggestion or finish an assignment to start earning!',
+  'pts.feedbackSubmit': 'Suggestion submitted',
+  'pts.feedbackAdopted': 'Suggestion adopted',
+  'pts.complete': 'Assignment done',
+  'pts.highScore': 'High score',
+  'pts.improve': 'Score improved',
+  'pts.practice': 'Kept practising',
+  'pts.activeDay': 'Daily check-in',
   'err.unauthenticated': 'Please sign in first',
 }
 
@@ -1980,6 +2006,19 @@ const es: Dict = {
   'fb.decline': 'Rechazar',
   'fb.reset': 'Restablecer',
   'fb.replyPh': 'Respuesta al autor (opcional)',
+  // points (display + motivation only)
+  'pts.title': 'Mis puntos',
+  'pts.unit': 'pts',
+  'pts.streak': '🔥 racha de {n} días',
+  'pts.hint': 'Gana puntos compartiendo ideas, completando tareas, sacando buenas notas y entrando cada día.',
+  'pts.empty': 'Aún no tienes puntos. ¡Comparte una sugerencia o completa una tarea para empezar!',
+  'pts.feedbackSubmit': 'Sugerencia enviada',
+  'pts.feedbackAdopted': 'Sugerencia adoptada',
+  'pts.complete': 'Tarea completada',
+  'pts.highScore': 'Nota alta',
+  'pts.improve': 'Mejora de nota',
+  'pts.practice': 'Práctica constante',
+  'pts.activeDay': 'Entrada diaria',
   'err.unauthenticated': 'Inicia sesión primero',
 }
 

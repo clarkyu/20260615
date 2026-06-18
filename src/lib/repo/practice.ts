@@ -35,3 +35,12 @@ export function listScoredForStudent(prisma: PrismaClient, studentId: number) {
     select: { assignmentId: true, aiScore: true },
   })
 }
+
+// One student's practice rounds (score + date) for the points tally: scored
+// rounds earn points, and every round's day counts toward 打卡.
+export function listForStudentPoints(prisma: PrismaClient, studentId: number) {
+  return prisma.practiceAttempt.findMany({
+    where: { studentId },
+    select: { aiScore: true, createdAt: true },
+  })
+}
