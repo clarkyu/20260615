@@ -3,7 +3,7 @@
 import { uploadErrorText } from '@/lib/upload-error'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Video, Mic, Square, Check, CheckCircle2 } from 'lucide-react'
+import { Video, Mic, Square, Check, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { getShadowVideoUrl, getShadowTakeUploadUrl, finishShadowing } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { useChunkLang, ChunkLangToggle, BilingualChunk } from '@/components/bilingual'
@@ -111,6 +111,7 @@ export function ShadowSubmit(props: {
   completed: boolean
   latestScore: number | null
   latestFeedback: string | null
+  latestTakes: { order: number; aiScore: number | null; spokenText: string | null }[]
   initialRecorded: number[]
 }) {
   const t = useT()
@@ -187,6 +188,31 @@ export function ShadowSubmit(props: {
               {props.latestFeedback ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{props.latestFeedback}</p> : null}
             </div>
           ) : null}
+          {props.latestTakes.length > 0 ? (() => {
+            const byOrder = new Map(props.latestTakes.map((tk) => [tk.order, tk]))
+            return (
+              <div className="space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground">{t('sub.perSentence')}</div>
+                <ul className="space-y-1.5">
+                  {props.chunks.map((c, i) => {
+                    const tk = byOrder.get(i + 1)
+                    const weak = tk?.aiScore != null && tk.aiScore < 60
+                    return (
+                      <li key={i} className="space-y-0.5">
+                        <div className="flex items-start gap-2">
+                          {weak ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
+                          <span className={weak ? 'flex-1 text-foreground' : 'flex-1 text-muted-foreground'}>{c.exampleEn || c.english}</span>
+                          {tk?.aiScore != null ? <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{tk.aiScore}</span> : null}
+                        </div>
+                        {weak && tk?.spokenText ? <div className="pl-6 text-xs text-muted-foreground">{t('sub.youSaid')}{tk.spokenText}</div> : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+                <p className="text-xs text-muted-foreground">{t('sub.perSentenceHint')}</p>
+              </div>
+            )
+          })() : null}
           {props.attemptsLeft > 0 ? (
             <Button variant="outline" className="w-full" onClick={() => { setRedo(true); setRecorded(new Set()); setPhase('doing') }}>
               {t('sub.redo')}（{t('sub.redoLeft', { n: props.attemptsLeft })}）

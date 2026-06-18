@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Recorder } from './recorder'
 import { PhotoStep } from './photo-step'
+import { PracticePanel } from './practice-panel'
 
 interface Sentence {
   order: number
@@ -124,6 +125,7 @@ export function SubmissionFlow(props: {
   const [phase, setPhase] = useState<'doing' | 'finishing' | 'done' | 'error'>('doing')
   const [error, setError] = useState<string | null>(null)
   const [redo, setRedo] = useState(false)
+  const [weakPractice, setWeakPractice] = useState(false)
   const [, startFinish] = useTransition()
 
   function finish() {
@@ -168,6 +170,11 @@ export function SubmissionFlow(props: {
   if (completed && !redo) {
     const byOrder = new Map(props.latestPerSentence.map((p) => [p.order, p]))
     const hasPerSentence = props.latestPerSentence.length > 0 && props.sentences.length > 0
+    // The lines the AI marked weak — so the student can drill just those (零压力练习).
+    const weakSentences = props.sentences.filter((s) => {
+      const p = byOrder.get(s.order)
+      return p ? p.accuracy < 0.6 || p.completeness < 0.6 : false
+    })
     return (
       <Card>
         <CardHeader><CardTitle>{props.title}</CardTitle></CardHeader>
@@ -201,6 +208,15 @@ export function SubmissionFlow(props: {
                 })}
               </ul>
               <p className="text-xs text-muted-foreground">{t('sub.perSentenceHint')}</p>
+              {weakSentences.length > 0 ? (
+                weakPractice ? (
+                  <PracticePanel phaseId={props.phaseId} sentences={weakSentences} />
+                ) : (
+                  <Button variant="outline" className="w-full" onClick={() => setWeakPractice(true)}>
+                    <Mic className="h-4 w-4" />{t('sub.practiceWeak', { n: weakSentences.length })}
+                  </Button>
+                )
+              ) : null}
               {props.latestTranscript ? (
                 <details className="text-xs">
                   <summary className="cursor-pointer text-muted-foreground">{t('sub.transcript')}</summary>

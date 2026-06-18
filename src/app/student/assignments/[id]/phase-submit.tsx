@@ -10,7 +10,7 @@ type PhaseDetail = Prisma.PhaseGetPayload<{
     sentences: { orderBy: { order: 'asc' } }
     chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } }
     assignment: { select: { id: true; title: true; category: true } }
-    submissions: { include: { shadowTakes: { select: { order: true } } } }
+    submissions: { include: { shadowTakes: { select: { order: true; aiScore: true; spokenText: true } } } }
   }
 }>
 
@@ -83,6 +83,7 @@ export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: s
         completed={done}
         latestScore={latest?.finalScore ?? null}
         latestFeedback={latest?.feedback ?? null}
+        latestTakes={done ? (latest?.shadowTakes ?? []).map((tk) => ({ order: tk.order, aiScore: tk.aiScore, spokenText: tk.spokenText })) : []}
         initialRecorded={initialRecorded}
       />
     )

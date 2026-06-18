@@ -394,7 +394,7 @@ export function findPhaseDetailForStudent(prisma: PrismaClient, phaseId: number,
       sentences: { orderBy: { order: 'asc' } },
       chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
       assignment: { select: { id: true, title: true, category: true } },
-      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, include: { shadowTakes: { select: { order: true } } } },
+      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, include: { shadowTakes: { select: { order: true, aiScore: true, spokenText: true } } } },
     },
   })
 }
