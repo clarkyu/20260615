@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { UploadCloud } from 'lucide-react'
+import { UploadCloud, Download } from 'lucide-react'
 import { previewRoster, commitRoster } from '@/actions/students'
 import type { RosterRow } from '@/lib/roster'
 import { useT } from '@/components/i18n-provider'
@@ -75,6 +75,11 @@ export function ImportClient() {
         <CardDescription>{t('stu.importDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* A file-download route handler (not a page) — a plain <a download> is correct here. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href="/dashboard/students/template" download className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+          <Download className="h-3.5 w-3.5" />{t('stu.template')}
+        </a>
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-secondary/40 px-4 py-3 text-sm">
           <UploadCloud className="h-5 w-5 text-muted-foreground" />
           <span className="flex-1 truncate text-muted-foreground">{file ? file.name : 'Excel (.xls / .xlsx)'}</span>
