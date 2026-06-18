@@ -43,6 +43,7 @@ const draft = (over: Partial<PhaseDraft> = {}): PhaseDraft => ({
   graded: true,
   maxAttempts: 1,
   isFormalTest: false,
+  freePractice: false,
   ...over,
 })
 

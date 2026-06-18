@@ -106,7 +106,9 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
 
     const summary = summarizeShadow(scoreByOrder)
     if (!summary) { await revert(); return }
-    const { overall, minScore, weakestOrder, weakestScore, needsReview } = summary
+    const { overall, minScore, weakestOrder, weakestScore } = summary
+    // 自由练习环节：即使分数不够也不进待批队列。
+    const needsReview = submission.phase?.freePractice ? false : summary.needsReview
     const feedback = minScore < AUTO_PASS_MIN
       ? `逐句平均 ${overall} 分；最弱第 ${weakestOrder} 句仅 ${weakestScore} 分，注意发音与完整度。`
       : `逐句平均 ${overall} 分，整体不错，继续保持。`

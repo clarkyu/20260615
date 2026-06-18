@@ -32,6 +32,7 @@ export interface PhaseDraft {
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
+  freePractice: boolean
 }
 
 function hasSubmitKind(p: PhaseDraft): boolean {
@@ -86,6 +87,8 @@ async function resolvePhases(
       graded: d.graded,
       maxAttempts: d.maxAttempts,
       isFormalTest: d.isFormalTest,
+      // 自由练习只在「仅练习不计分」时成立——计分环节不能放任不限次数/不批阅。
+      freePractice: d.freePractice && !d.graded,
       sentences,
     })
   }

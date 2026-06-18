@@ -79,6 +79,7 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
           graded: p.graded,
           maxAttempts: p.maxAttempts,
           isFormalTest: p.isFormalTest,
+          freePractice: p.freePractice,
         })),
       }
     }
