@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus } from 'lucide-react'
+import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Check } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
 import { useT } from '@/components/i18n-provider'
@@ -212,6 +212,12 @@ export function AssignmentForm({
       return next
     })
 
+  // Publishing is a 3-step wizard (basic → phases → review) to cut the single-screen
+  // cognitive load; editing keeps the single scroll.
+  const wizard = !editing
+  const [step, setStep] = useState(0)
+  const STEP_KEYS = ['asg.stepBasic', 'asg.stepPhases', 'asg.stepReview']
+
   // The month list + default — computed in an effect (not during render) so a UTC
   // server and the teacher's local-TZ browser can't disagree at hydration.
   const [monthOptions, setMonthOptions] = useState<string[]>([])
@@ -232,7 +238,7 @@ export function AssignmentForm({
 
   return (
     <div className="space-y-4">
-      {!editing && !hasBank ? <AiDraftPanel onApply={applyDraft} /> : null}
+      {!editing && !hasBank && step === 0 ? <AiDraftPanel onApply={applyDraft} /> : null}
       <Card>
         <CardHeader>
           <CardTitle>{editing ? t('asg.editTitle') : t('asg.newTitle')}</CardTitle>
@@ -243,7 +249,25 @@ export function AssignmentForm({
             {!editing && !multi ? <input type="hidden" name="offeringId" value={singleOfferingId ?? ''} /> : null}
             {bankInfo ? <input type="hidden" name="chunkSetId" value={bankInfo.id} /> : null}
             <input type="hidden" name="phasesJson" value={phasesJson} />
+            <datalist id="category-presets">
+              {CATEGORY_PRESETS.map((c) => <option key={c} value={c} />)}
+            </datalist>
 
+            {wizard ? (
+              <div className="flex items-center gap-1.5">
+                {STEP_KEYS.map((key, i) => (
+                  <div key={key} className="flex flex-1 items-center gap-1.5">
+                    <div className={'grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ' + (i < step ? 'bg-success text-white' : i === step ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground')}>
+                      {i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                    </div>
+                    <span className={'truncate text-xs font-medium ' + (i === step ? 'text-foreground' : 'text-muted-foreground')}>{t(key)}</span>
+                    {i < STEP_KEYS.length - 1 ? <div className={'h-0.5 flex-1 rounded ' + (i < step ? 'bg-success' : 'bg-border')} /> : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className={wizard && step !== 0 ? 'hidden' : 'space-y-4'}>
             {multi ? (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -279,9 +303,6 @@ export function AssignmentForm({
             ) : null}
 
             {/* 作业类型（category）现按环节设置，见下方各环节卡片。 */}
-            <datalist id="category-presets">
-              {CATEGORY_PRESETS.map((c) => <option key={c} value={c} />)}
-            </datalist>
             <div className="space-y-1.5">
               <Label htmlFor="title">{t('asg.fTitle')}</Label>
               <Input id="title" name="title" required value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -295,8 +316,9 @@ export function AssignmentForm({
                 ))}
               </select>
             </div>
+            </div>
 
-            <div className="space-y-3">
+            <div className={wizard && step !== 1 ? 'hidden' : 'space-y-3'}>
               <div className="flex items-center justify-between">
                 <Label>{t('asg.phases')}</Label>
                 <span className="text-xs text-muted-foreground">{phases.length} {t('asg.phaseUnit')}</span>
@@ -321,23 +343,35 @@ export function AssignmentForm({
               </Button>
             </div>
 
-            {!editing ? (
-              <div className="space-y-2 rounded-xl border border-input p-3">
-                <label className="flex items-center gap-2.5 text-sm">
-                  <input type="checkbox" name="saveTemplate" checked={saveTemplate} onChange={(e) => setSaveTemplate(e.target.checked)} className="h-4 w-4 accent-primary" />
-                  {t('tmpl.saveAs')}
-                </label>
-                {saveTemplate ? (
-                  <Input name="templateName" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder={t('tmpl.namePh')} maxLength={100} />
-                ) : null}
-                <p className="text-xs text-muted-foreground">{t('tmpl.saveHint')}</p>
-              </div>
-            ) : null}
+            <div className={wizard && step !== 2 ? 'hidden' : 'space-y-4'}>
+              {!editing ? (
+                <div className="space-y-2 rounded-xl border border-input p-3">
+                  <label className="flex items-center gap-2.5 text-sm">
+                    <input type="checkbox" name="saveTemplate" checked={saveTemplate} onChange={(e) => setSaveTemplate(e.target.checked)} className="h-4 w-4 accent-primary" />
+                    {t('tmpl.saveAs')}
+                  </label>
+                  {saveTemplate ? (
+                    <Input name="templateName" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder={t('tmpl.namePh')} maxLength={100} />
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">{t('tmpl.saveHint')}</p>
+                </div>
+              ) : null}
+              {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
+            </div>
 
-            {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-            <Button type="submit" disabled={isPending} size="lg" className="w-full">
-              {isPending ? (editing ? t('asg.saving') : t('asg.publishing')) : editing ? t('asg.save') : t('asg.publish')}
-            </Button>
+            {/* Wizard nav (publish flow): Back / Next; the publish button only on the last step */}
+            <div className="flex gap-3">
+              {wizard && step > 0 ? (
+                <Button type="button" variant="outline" size="lg" className="flex-1" onClick={() => setStep((s) => Math.max(0, s - 1))}>{t('asg.back')}</Button>
+              ) : null}
+              {wizard && step < 2 ? (
+                <Button type="button" size="lg" className="flex-1" onClick={() => setStep((s) => Math.min(2, s + 1))}>{t('asg.next')}</Button>
+              ) : (
+                <Button type="submit" disabled={isPending} size="lg" className="flex-1">
+                  {isPending ? (editing ? t('asg.saving') : t('asg.publishing')) : editing ? t('asg.save') : t('asg.publish')}
+                </Button>
+              )}
+            </div>
           </form>
         </CardContent>
       </Card>
