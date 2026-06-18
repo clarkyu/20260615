@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { staffContext, staffSchoolContext } from '@/lib/action-context'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as offeringRepo from '@/lib/repo/offerings'
+import * as templateRepo from '@/lib/repo/templates'
 import {
   createAssignments,
   updateAssignment as updateAssignmentService,
@@ -96,8 +97,42 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
 
   const res = await createAssignments(cx.prisma, cx.schoolId, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId)
   if (!res.ok) return { error: cx.t(res.error) }
+
+  // Optionally save this publish config as a reusable template (school-shared).
+  const templateName = String(formData.get('templateName') ?? '').trim()
+  if (formData.get('saveTemplate') && templateName) {
+    const payload = {
+      title: fr.data.meta.title,
+      monthLabel: fr.data.meta.monthLabel ?? '',
+      chunkSetId,
+      phases: fr.data.phases.map((p) => ({
+        title: p.title ?? '',
+        category: p.category ?? '',
+        instructions: p.instructions ?? '',
+        useBankSet: p.useBankSet,
+        sentences: p.typedSentences.join('\n'),
+        requireEyesClosed: p.requireEyesClosed,
+        requireText: p.requireText,
+        requireAudio: p.requireAudio,
+        requireVideo: p.requireVideo,
+        requireHandwriting: p.requireHandwriting,
+        graded: p.graded,
+        maxAttempts: p.maxAttempts,
+      })),
+    }
+    await templateRepo.create(cx.prisma, { schoolId: cx.schoolId, name: templateName.slice(0, 100), createdById: cx.user.userId, payload: JSON.stringify(payload) })
+  }
+
   revalidatePath('/dashboard/teaching')
   redirect(res.redirectTo)
+}
+
+// Delete a saved template (own school). Used from the new-assignment template picker.
+export async function deleteAssignmentTemplate(formData: FormData): Promise<void> {
+  const { user, prisma } = await staffContext()
+  const id = Number(formData.get('templateId'))
+  if (Number.isInteger(id)) await templateRepo.deleteForSchool(prisma, id, user.schoolId)
+  revalidatePath('/dashboard/teaching/new-assignment')
 }
 
 export async function updateAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
