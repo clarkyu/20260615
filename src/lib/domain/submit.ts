@@ -6,35 +6,51 @@ import type { PrismaClient } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
 
-export type AttemptResult = { ok: false; error: string } | { ok: true; attempt: number }
-
-// Confirms the student may submit (class targeted & window open & attempts left);
-// returns the active attempt number, or an i18n error key.
-export async function resolveAttempt(
-  prisma: PrismaClient,
-  studentId: number,
-  classIds: number[],
-  assignmentId: number,
-): Promise<AttemptResult> {
-  if (classIds.length === 0) return { ok: false, error: 'err.noClassAssigned' }
-  const assignment = await assignments.findForClasses(prisma, assignmentId, classIds)
-  if (!assignment) return { ok: false, error: 'err.assignNotFound' }
-
-  const now = new Date()
-  if (assignment.openAt && now < assignment.openAt) return { ok: false, error: 'err.notOpen' }
-  if (assignment.dueAt && now > assignment.dueAt) return { ok: false, error: 'err.closed' }
-
-  const used = await submissions.countActiveAttempts(prisma, assignmentId, studentId)
-  if (used >= assignment.maxAttempts) return { ok: false, error: 'err.attemptsUsed' }
-  return { ok: true, attempt: used + 1 }
-}
-
-interface Requirements {
+export interface Requirements {
   requireText: boolean
   requireVideo: boolean
   requireAudio: boolean
   requireHandwriting: boolean
 }
+
+export type AttemptResult =
+  | { ok: false; error: string }
+  | { ok: true; attempt: number; assignmentId: number; phaseId: number; requirements: Requirements }
+
+// Confirms the student may submit a PHASE (class targeted & its window open & its
+// attempts left); returns the active attempt number, the owning assignment id, and
+// the phase's submit requirements, or an i18n error key. A submission is per-phase,
+// so the window and attempt cap come from the phase, not the assignment.
+export async function resolveAttempt(
+  prisma: PrismaClient,
+  studentId: number,
+  classIds: number[],
+  phaseId: number,
+): Promise<AttemptResult> {
+  if (classIds.length === 0) return { ok: false, error: 'err.noClassAssigned' }
+  const phase = await assignments.findPhaseForClasses(prisma, phaseId, classIds)
+  if (!phase) return { ok: false, error: 'err.assignNotFound' }
+
+  const now = new Date()
+  if (phase.openAt && now < phase.openAt) return { ok: false, error: 'err.notOpen' }
+  if (phase.dueAt && now > phase.dueAt) return { ok: false, error: 'err.closed' }
+
+  const used = await submissions.countActiveAttempts(prisma, phaseId, studentId)
+  if (used >= phase.maxAttempts) return { ok: false, error: 'err.attemptsUsed' }
+  return {
+    ok: true,
+    attempt: used + 1,
+    assignmentId: phase.assignmentId,
+    phaseId,
+    requirements: {
+      requireText: phase.requireText,
+      requireVideo: phase.requireVideo,
+      requireAudio: phase.requireAudio,
+      requireHandwriting: phase.requireHandwriting,
+    },
+  }
+}
+
 interface Parts {
   recitedText: string | null
   videoKey: string | null

@@ -12,14 +12,15 @@ import * as userRepo from '@/lib/repo/users'
 import * as practiceRepo from '@/lib/repo/practice'
 
 // Presigned URL for a practice audio recording (separate prefix; never counts as a submission).
-export async function getPracticeUploadUrl(assignmentId: number, contentType: string, ext: string) {
+export async function getPracticeUploadUrl(phaseId: number, contentType: string, ext: string) {
   const { user, prisma, t } = await studentContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
   if (classIds.length === 0) return { error: t('err.noClassAssigned') }
-  if (!(await assignmentRepo.findForClasses(prisma, assignmentId, classIds))) return { error: t('err.assignNotFound') }
+  const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
+  if (!phase) return { error: t('err.assignNotFound') }
 
-  const key = practiceMediaKey(assignmentId, user.userId, 'audio', ext || 'webm')
+  const key = practiceMediaKey(phase.assignmentId, phaseId, user.userId, 'audio', ext || 'webm')
   try {
     const url = await presignUpload(key, contentType)
     return { url, key }
@@ -51,18 +52,19 @@ export type PracticeFeedback =
 
 // Grades one practice round and records it. Returns structured feedback for the UI.
 export async function gradePracticeAttempt(
-  assignmentId: number,
+  phaseId: number,
   payload: { kind: 'audio' | 'text'; mediaKey?: string; recitedText?: string },
 ): Promise<PracticeFeedback> {
   const { user, prisma, t } = await studentContext()
   const classIds = await userRepo.studentClassIds(prisma, user.userId)
   if (classIds.length === 0) return { status: 'error', message: t('err.noClassAssigned') }
-  const assignment = await assignmentRepo.findForClassesWithSentences(prisma, assignmentId, classIds)
-  if (!assignment) return { status: 'error', message: t('err.assignNotFound') }
+  const phase = await assignmentRepo.findPhaseWithSentencesForClasses(prisma, phaseId, classIds)
+  if (!phase) return { status: 'error', message: t('err.assignNotFound') }
+  const assignmentId = phase.assignment.id
 
   // Security: only presign a key that demonstrably belongs to THIS student under
-  // THIS assignment's practice prefix — never trust an arbitrary client-supplied key.
-  const ownPrefix = `practice/${assignmentId}/${user.userId}/`
+  // THIS phase's practice prefix — never trust an arbitrary client-supplied key.
+  const ownPrefix = `practice/${assignmentId}/${phaseId}/${user.userId}/`
   if (payload.mediaKey && !payload.mediaKey.startsWith(ownPrefix)) {
     return { status: 'error', message: t('err.subNotFound') }
   }
@@ -81,10 +83,10 @@ export async function gradePracticeAttempt(
   const owner = await assignmentRepo.offeringTeacher(prisma, assignmentId)
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
   const outcome = await withAiKeys(keys, () => gradePractice({
-    perceptionModel: assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
-    judgeModel: assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
-    rubric: assignment.rubric || DEFAULT_RUBRIC,
-    referenceSentences: assignment.sentences.map((s) => ({ order: s.order, text: s.text })),
+    perceptionModel: phase.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
+    judgeModel: phase.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
+    rubric: phase.assignment.rubric || DEFAULT_RUBRIC,
+    referenceSentences: phase.sentences.map((s) => ({ order: s.order, text: s.text })),
     audioUrl,
     recitedText: payload.recitedText?.trim() || undefined,
   }))
@@ -92,6 +94,7 @@ export async function gradePracticeAttempt(
   // Persist every practice round (even unavailable/error) for later analytics.
   await practiceRepo.createAttempt(prisma, {
     assignmentId,
+    phaseId,
     studentId: user.userId,
     kind: payload.kind,
     mediaKey: payload.mediaKey ?? null,

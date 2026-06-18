@@ -41,7 +41,7 @@ function pickMimeType(mode: Mode): { mime: string; ext: string } {
 }
 
 export function Recorder(props: {
-  assignmentId: number
+  phaseId: number
   sentences: Sentence[]
   requireEyesClosed: boolean
   attemptsLeft: number
@@ -184,7 +184,7 @@ export function Recorder(props: {
     const { ext } = pickMimeType(props.mode)
     const fileExt = blob.type.includes('mp4') ? (isAudio ? 'm4a' : 'mp4') : ext
     try {
-      const res = await getUploadUrl(props.assignmentId, props.mode, blob.type || (isAudio ? 'audio/webm' : 'video/webm'), fileExt)
+      const res = await getUploadUrl(props.phaseId, props.mode, blob.type || (isAudio ? 'audio/webm' : 'video/webm'), fileExt)
       if ('error' in res || !res.url) {
         setError(res.error ?? 'upload failed'); setPhase('recorded'); return
       }

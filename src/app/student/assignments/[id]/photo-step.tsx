@@ -16,7 +16,7 @@ function extFor(type: string): string {
   return 'jpg'
 }
 
-export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDone: () => void }) {
+export function PhotoStep({ phaseId, onDone }: { phaseId: number; onDone: () => void }) {
   const t = useT()
   const inputRef = useRef<HTMLInputElement>(null)
   const previewUrlRef = useRef<string | null>(null)
@@ -44,7 +44,7 @@ export function PhotoStep({ assignmentId, onDone }: { assignmentId: number; onDo
     setBusy(true); setError(null)
     try {
       const type = file.type || 'image/jpeg'
-      const res = await getUploadUrl(assignmentId, 'image', type, extFor(type))
+      const res = await getUploadUrl(phaseId, 'image', type, extFor(type))
       if ('error' in res || !res.url) { setError(res.error ?? 'upload failed'); setBusy(false); return }
       const put = await fetch(res.url, { method: 'PUT', body: file, headers: { 'Content-Type': type } })
       if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setBusy(false); return }

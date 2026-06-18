@@ -34,7 +34,7 @@ function pickAudioMime(): { mime: string; ext: string } {
 }
 
 // One sentence's recorder: record → upload that take → report done.
-function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assignmentId: number; order: number; recorded: boolean; onRecorded: () => void }) {
+function SentenceRecorder({ phaseId, order, recorded, onRecorded }: { phaseId: number; order: number; recorded: boolean; onRecorded: () => void }) {
   const t = useT()
   const [phase, setPhase] = useState<'idle' | 'recording' | 'uploading'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +53,7 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
     setPhase('uploading')
     try {
       const type = blob.type || 'audio/webm'
-      const res = await getShadowTakeUploadUrl(assignmentId, order, type, blob.type.includes('mp4') ? 'm4a' : ext)
+      const res = await getShadowTakeUploadUrl(phaseId, order, type, blob.type.includes('mp4') ? 'm4a' : ext)
       if ('error' in res || !res.url) { setError(res.error ?? t('rec.uploadFail')); setPhase('idle'); return }
       const put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': type } })
       if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setPhase('idle'); return }
@@ -62,7 +62,7 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
     } catch (e) {
       setError(uploadErrorText(e, t)); setPhase('idle')
     }
-  }, [assignmentId, order, onRecorded, t])
+  }, [phaseId, order, onRecorded, t])
 
   const start = useCallback(async () => {
     setError(null)
@@ -101,7 +101,7 @@ function SentenceRecorder({ assignmentId, order, recorded, onRecorded }: { assig
 }
 
 export function ShadowSubmit(props: {
-  assignmentId: number
+  phaseId: number
   title: string
   category: string | null
   instructions: string | null
@@ -124,9 +124,9 @@ export function ShadowSubmit(props: {
 
   useEffect(() => {
     let active = true
-    getShadowVideoUrl(props.assignmentId).then((r) => { if (active && r.url) setUrl(r.url) })
+    getShadowVideoUrl(props.phaseId).then((r) => { if (active && r.url) setUrl(r.url) })
     return () => { active = false }
-  }, [props.assignmentId])
+  }, [props.phaseId])
 
   const total = props.chunks.length
   const doneCount = recorded.size
@@ -143,7 +143,7 @@ export function ShadowSubmit(props: {
   function submit() {
     setPhase('finishing'); setError(null)
     startFinish(async () => {
-      const res = await finishShadowing(props.assignmentId)
+      const res = await finishShadowing(props.phaseId)
       if (res.error) { setError(res.error); setPhase('doing') }
       else setPhase('done')
     })
@@ -240,7 +240,7 @@ export function ShadowSubmit(props: {
                 <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{order}.</span>
                 <BilingualChunk chunk={c} lang={lang} />
               </div>
-              <SentenceRecorder assignmentId={props.assignmentId} order={order} recorded={recorded.has(order)} onRecorded={() => markRecorded(order)} />
+              <SentenceRecorder phaseId={props.phaseId} order={order} recorded={recorded.has(order)} onRecorded={() => markRecorded(order)} />
             </li>
           )
         })}
