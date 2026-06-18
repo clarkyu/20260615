@@ -92,14 +92,19 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
   })
 }
 
-// Teacher "preview as student": assignment + sentences + optional shadow chunk set
-// (with chunks), scoped to the teacher's school. No submissions — it's a preview.
-export function findForStaffPreview(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+// Teacher "preview as student", phase-aware: assignment + ordered phases, each with
+// its sentences and (for shadow phases) chunk-set chunks. School-scoped, no submissions.
+export function findForStaffPreviewPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
   return prisma.assignment.findFirst({
     where: { id, ...inSchool(schoolId) },
     include: {
-      sentences: { orderBy: { order: 'asc' } },
-      chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
+      phases: {
+        orderBy: { order: 'asc' },
+        include: {
+          sentences: { orderBy: { order: 'asc' } },
+          chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
+        },
+      },
     },
   })
 }
