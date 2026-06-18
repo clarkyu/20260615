@@ -108,6 +108,16 @@ export function listForStudentLatestFirst(prisma: PrismaClient, studentId: numbe
   })
 }
 
+// One student's non-DRAFT submissions within ONE offering (RawPhaseRow shape) — for
+// the teacher's per-student drill-down. Scoped by assignment.offeringId.
+export function listForStudentInOfferingLatestFirst(prisma: PrismaClient, offeringId: number, studentId: number) {
+  return prisma.submission.findMany({
+    where: { studentId, status: { not: 'DRAFT' }, assignment: { offeringId } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } }, assignment: { select: { title: true } } },
+    orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
+  })
+}
+
 // ── grading pipeline (the AI grading state machine; called by the job queue /
 //    grading services, keyed by submission id — system-wide, not tenant-scoped) ──
 

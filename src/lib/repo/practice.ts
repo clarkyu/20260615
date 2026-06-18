@@ -36,6 +36,15 @@ export function listScoredForStudent(prisma: PrismaClient, studentId: number) {
   })
 }
 
+// One student's scored practice within ONE offering — the per-student drill-down's
+// 平时成绩. Scoped by assignment.offeringId.
+export function listScoredForStudentInOffering(prisma: PrismaClient, offeringId: number, studentId: number) {
+  return prisma.practiceAttempt.findMany({
+    where: { studentId, aiScore: { not: null }, assignment: { offeringId } },
+    select: { assignmentId: true, aiScore: true },
+  })
+}
+
 // One student's practice rounds (score + date) for the points tally: scored
 // rounds earn points, and every round's day counts toward 打卡.
 export function listForStudentPoints(prisma: PrismaClient, studentId: number) {

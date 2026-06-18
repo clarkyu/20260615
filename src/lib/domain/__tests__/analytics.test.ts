@@ -4,6 +4,7 @@ import {
   studentProfiles,
   weakSentences,
   studentWeakPoints,
+  studentAssignmentScores,
   offeringSummary,
   parsePerSentence,
   latestPhaseSubmissions,
@@ -120,6 +121,30 @@ describe('weakSentences', () => {
 
   it('is empty without perception data', () => {
     expect(weakSentences([phaseSub({ studentId: 1, assignmentId: 10 })])).toEqual([])
+  })
+})
+
+describe('studentAssignmentScores', () => {
+  const assignments = [
+    { id: 10, title: 'A1' },
+    { id: 11, title: 'A2' },
+    { id: 12, title: 'A3' },
+  ]
+  it('joins per-assignment score + best practice and marks never-started as not submitted', () => {
+    const submissions: AnalyticsSubmission[] = [
+      sub({ studentId: 1, assignmentId: 10, status: 'GRADED', finalScore: 88 }),
+      sub({ studentId: 1, assignmentId: 11, status: 'UPLOADED', finalScore: null, needsReview: true }),
+    ]
+    const practice = [{ studentId: 1, assignmentId: 10, aiScore: 70 }, { studentId: 1, assignmentId: 10, aiScore: 82 }]
+    const rows = studentAssignmentScores(submissions, assignments, practice)
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatchObject({ assignmentId: 10, title: 'A1', finalScore: 88, submitted: true, bestPractice: 82 })
+    expect(rows[1]).toMatchObject({ assignmentId: 11, finalScore: null, submitted: true, needsReview: true, bestPractice: null })
+    expect(rows[2]).toMatchObject({ assignmentId: 12, finalScore: null, submitted: false, bestPractice: null }) // never started
+  })
+  it('still resolves best practice when the student has no submissions', () => {
+    const rows = studentAssignmentScores([], assignments, [{ studentId: 5, assignmentId: 12, aiScore: 60 }])
+    expect(rows[2]).toMatchObject({ assignmentId: 12, submitted: false, bestPractice: 60 })
   })
 })
 

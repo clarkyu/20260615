@@ -283,6 +283,39 @@ export function studentWeakPoints(
     .slice(0, limit)
 }
 
+// One student's result on one assignment — the per-student drill-down's main table.
+export interface StudentAssignmentScore {
+  assignmentId: number
+  title: string
+  finalScore: number | null // collapsed mean of graded phases; null if not graded yet
+  submitted: boolean
+  needsReview: boolean
+  bestPractice: number | null // 平时成绩 (best practice score) for this assignment
+}
+
+// Join one student's collapsed submissions + best practice to the offering's full
+// assignment list, so even never-started assignments show as「未提交」.
+export function studentAssignmentScores(
+  submissions: AnalyticsSubmission[],
+  assignments: { id: number; title: string }[],
+  practice: AnalyticsPractice[] = [],
+): StudentAssignmentScore[] {
+  const best = bestPracticeByPair(practice)
+  const byAssignment = new Map(submissions.map((s) => [s.assignmentId, s]))
+  const studentId = submissions[0]?.studentId ?? practice[0]?.studentId
+  return assignments.map((a) => {
+    const sub = byAssignment.get(a.id)
+    return {
+      assignmentId: a.id,
+      title: a.title,
+      finalScore: sub?.finalScore ?? null,
+      submitted: sub ? isSubmitted(sub.status) : false,
+      needsReview: sub?.needsReview ?? false,
+      bestPractice: studentId != null ? best.get(`${studentId}:${a.id}`) ?? null : null,
+    }
+  })
+}
+
 export interface OfferingSummary {
   students: number
   assignments: number
