@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { schoolAdminContext, staffSchoolContext } from '@/lib/action-context'
+import { schoolAdminContext } from '@/lib/action-context'
 import { addTeacher as addTeacherService } from '@/lib/domain/staff'
 import * as userRepo from '@/lib/repo/users'
 import { parseForm, reqText, optText, z } from '@/lib/validate'
@@ -12,7 +12,7 @@ type ActionState = { error?: string; success?: boolean }
 // the work number and must be changed on first login. This is the only in-app path
 // to provision a teacher account.
 export async function addTeacher(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const cx = await staffSchoolContext()
+  const cx = await schoolAdminContext()
   if (!cx.ok) return { error: cx.error }
   const parsed = parseForm(
     z.object({

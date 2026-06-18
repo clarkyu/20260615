@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { staffContext, staffSchoolContext } from '@/lib/action-context'
+import { staffContext, schoolAdminContext } from '@/lib/action-context'
 import { getSession } from '@/lib/session'
 import { createSchool as createSchoolService, createSchoolForPlatform as createPlatformSchoolService, renameSchool as renameSchoolService } from '@/lib/domain/schools'
 import { parseForm, reqText, optText, z } from '@/lib/validate'
@@ -52,9 +52,9 @@ export async function createPlatformSchool(prevState: unknown, formData: FormDat
   return { success: true }
 }
 
-// Rename the staff member's school (the code is kept).
+// Rename the school (the code is kept). School-admin only.
 export async function renameSchool(prevState: unknown, formData: FormData): Promise<ActionState> {
-  const cx = await staffSchoolContext()
+  const cx = await schoolAdminContext()
   if (!cx.ok) return { error: cx.error }
   const parsed = parseForm(z.object({ name: reqText('err.needSchoolName', 100) }), formData)
   if (!parsed.ok) return { error: cx.t(parsed.error) }

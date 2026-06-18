@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { staffContext, staffSchoolContext } from '@/lib/action-context'
+import { staffContext, schoolAdminContext } from '@/lib/action-context'
 import { hashPassword, BULK_HASH_ITERATIONS } from '@/lib/password'
 import { parseRoster, type RosterRow } from '@/lib/roster'
 import { importRoster } from '@/lib/domain/roster'
@@ -43,7 +43,7 @@ export async function previewRoster(prevState: unknown, formData: FormData): Pro
 
 // Import: upsert classes + students scoped to the staff member's school.
 export async function commitRoster(prevState: unknown, formData: FormData): Promise<CommitState> {
-  const cx = await staffSchoolContext()
+  const cx = await schoolAdminContext()
   if (!cx.ok) return { error: cx.error }
   const buf = await readFile(formData)
   if (!buf) return { error: cx.t('err.pickExcel') }
@@ -62,7 +62,7 @@ type MutState = { error?: string; success?: boolean }
 
 // Create an empty class by 班号 (and optional grade) without importing a roster.
 export async function addClassGroup(prevState: unknown, formData: FormData): Promise<MutState> {
-  const cx = await staffSchoolContext()
+  const cx = await schoolAdminContext()
   if (!cx.ok) return { error: cx.error }
   const parsed = parseForm(z.object({ name: reqText('err.needClassName', 50), grade: optText(20) }), formData)
   if (!parsed.ok) return { error: cx.t(parsed.error) }
@@ -77,7 +77,9 @@ export async function addClassGroup(prevState: unknown, formData: FormData): Pro
 const optMajorId = z.preprocess((v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null }, z.number().int().positive().nullable())
 
 export async function updateClass(prevState: unknown, formData: FormData): Promise<MutState> {
-  const { user, prisma, t } = await staffContext()
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return { error: cx.error }
+  const { prisma, t, schoolId } = cx
   const parsed = parseForm(
     z.object({ classId: reqId, name: reqText('err.needClassName', 50), grade: optText(20), majorId: optMajorId }),
     formData,
@@ -85,7 +87,7 @@ export async function updateClass(prevState: unknown, formData: FormData): Promi
   if (!parsed.ok) return { error: t(parsed.error) }
   const { classId, name, grade, majorId } = parsed.data
 
-  const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
+  const cls = await classRepo.findClassForSchool(prisma, classId, schoolId)
   if (!cls) return { error: t('err.classNotFound') }
   if (await classRepo.findDupName(prisma, cls.schoolId, name, classId)) return { error: t('err.classNameExists') }
   if (majorId && !(await majorRepo.findForSchool(prisma, majorId, cls.schoolId))) return { error: t('err.classNotFound') }
@@ -97,15 +99,18 @@ export async function updateClass(prevState: unknown, formData: FormData): Promi
 }
 
 export async function deleteClass(formData: FormData): Promise<void> {
-  const { user, prisma } = await staffContext()
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return
   const classId = Number(formData.get('classId'))
-  await classRepo.deleteWithStudents(prisma, classId, user.schoolId)
+  await classRepo.deleteWithStudents(cx.prisma, classId, cx.schoolId)
   revalidatePath('/dashboard/students')
   redirect('/dashboard/students')
 }
 
 export async function addStudent(prevState: unknown, formData: FormData): Promise<MutState> {
-  const { user, prisma, t } = await staffContext()
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return { error: cx.error }
+  const { prisma, t, schoolId } = cx
   const parsed = parseForm(
     z.object({
       classId: reqId,
@@ -120,7 +125,7 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
   const { classId, studentNo, name, phone } = parsed.data
   const email = parsed.data.email?.toLowerCase() ?? null
 
-  const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
+  const cls = await classRepo.findClassForSchool(prisma, classId, schoolId)
   if (!cls) return { error: t('err.classNotFound') }
 
   // A student can be in several classes: if this studentNo already exists in the
@@ -147,7 +152,9 @@ export async function addStudent(prevState: unknown, formData: FormData): Promis
 }
 
 export async function updateStudent(formData: FormData): Promise<MutState> {
-  const { user, prisma, t } = await staffContext()
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return { error: cx.error }
+  const { prisma, t, schoolId } = cx
   const parsed = parseForm(
     z.object({
       studentId: reqId,
@@ -165,7 +172,7 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
   const { studentId, name, studentNo, classId, phone } = parsed.data
   const email = parsed.data.email?.toLowerCase() ?? null
 
-  const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
+  const stu = await userRepo.findStudentForSchool(prisma, studentId, schoolId)
   if (!stu || stu.schoolId == null) return { error: t('err.studentNotFound') }
   if (await userRepo.findStudentNoDup(prisma, stu.schoolId, studentNo, studentId)) return { error: t('err.studentNoExists') }
   if (email && (await userRepo.findEmailOwner(prisma, email, studentId))) return { error: t('err.emailTaken') }
@@ -178,12 +185,14 @@ export async function updateStudent(formData: FormData): Promise<MutState> {
 // Remove a student from ONE class (not the whole account). If that leaves them in no
 // class at all, the student row is deleted (a classless student can't see anything).
 export async function removeStudentFromClass(formData: FormData): Promise<MutState> {
-  const { user, prisma, t } = await staffContext()
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return { error: cx.error }
+  const { prisma, t, schoolId } = cx
   const studentId = Number(formData.get('studentId'))
   const classId = Number(formData.get('classId'))
-  const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
+  const cls = await classRepo.findClassForSchool(prisma, classId, schoolId)
   if (!cls) return { error: t('err.classNotFound') }
-  const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
+  const stu = await userRepo.findStudentForSchool(prisma, studentId, schoolId)
   if (stu) {
     await userRepo.removeClassMembership(prisma, studentId, classId)
     revalidatePath(`/dashboard/students/${classId}`)
@@ -192,9 +201,11 @@ export async function removeStudentFromClass(formData: FormData): Promise<MutSta
 }
 
 export async function resetStudentPassword(formData: FormData): Promise<MutState> {
-  const { user, prisma, t } = await staffContext()
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return { error: cx.error }
+  const { prisma, t, schoolId } = cx
   const studentId = Number(formData.get('studentId'))
-  const stu = await userRepo.findStudentForSchool(prisma, studentId, user.schoolId)
+  const stu = await userRepo.findStudentForSchool(prisma, studentId, schoolId)
   if (!stu?.studentNo) return { error: t('err.studentNotFound') }
   await userRepo.setStudentPassword(prisma, studentId, await hashPassword(stu.studentNo, BULK_HASH_ITERATIONS))
   return { success: true }
