@@ -1,11 +1,13 @@
 import Link from 'next/link'
-import { Bot, ChevronRight, MessageSquarePlus } from 'lucide-react'
+import { Bot, ChevronRight, MessageSquarePlus, Trophy } from 'lucide-react'
 import { requireAuth } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as departmentRepo from '@/lib/repo/departments'
+import { computePoints } from '@/lib/domain/points'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { ProfileClient } from './profile-client'
 import { StaffSettings } from './staff-settings'
 import { ContactSettings } from './contact-settings'
@@ -26,7 +28,10 @@ export default async function ProfilePage() {
   // from the first class that has a major.
   const stuClasses = user.classMemberships.map((m) => m.class)
   const stuMajor = stuClasses.find((c) => c.major)?.major
-  const departments = isStaff && user.schoolId ? await departmentRepo.listForSchool(prisma, user.schoolId) : []
+  const [departments, points] = await Promise.all([
+    isStaff && user.schoolId ? departmentRepo.listForSchool(prisma, user.schoolId) : Promise.resolve([]),
+    computePoints(prisma, session.userId),
+  ])
 
   const rows = [
     user.email ? { k: t('email'), v: user.email } : null,
@@ -44,6 +49,37 @@ export default async function ProfilePage() {
   return (
     <div className="space-y-4 py-2">
       <h1 className="text-2xl font-bold tracking-tight">{t('prof.account')}</h1>
+
+      {/* 我的积分：派生展示（提建议 / 完成作业 / 高分 / 进步 / 打卡） */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="space-y-3 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-sm font-semibold">
+              <Trophy className="h-4 w-4 text-primary" />{t('pts.title')}
+            </span>
+            <span className="text-2xl font-extrabold tabular-nums text-primary">
+              {points.total}
+              <span className="ml-1 text-xs font-medium text-muted-foreground">{t('pts.unit')}</span>
+            </span>
+          </div>
+          {points.streak > 0 ? (
+            <p className="text-xs font-semibold text-[hsl(var(--warning))]">{t('pts.streak', { n: points.streak })}</p>
+          ) : null}
+          {points.rows.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {points.rows.map((r) => (
+                <Badge key={r.source} tone="muted">
+                  {t('pts.' + r.source)} ×{r.count} · +{r.points}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">{t('pts.empty')}</p>
+          )}
+          <p className="text-[11px] text-muted-foreground">{t('pts.hint')}</p>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="divide-y divide-border/60 p-0">
           {rows.map((r) => (
