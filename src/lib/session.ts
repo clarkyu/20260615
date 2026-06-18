@@ -12,6 +12,9 @@ export interface SessionData {
   // Student
   studentNo?: string | null
   schoolId?: number | null
+  // Which role-panel the staff member is currently viewing (a focus preference, never
+  // an escalation — always ≤ their actual role). Falls back to `role` when unset.
+  activeRole?: Role
 }
 
 export async function getSession(): Promise<IronSession<SessionData>> {

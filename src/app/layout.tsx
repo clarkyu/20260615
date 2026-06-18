@@ -57,7 +57,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main className="mx-auto w-full max-w-xl px-4 pt-5" style={{ paddingBottom: user ? '6.5rem' : '2rem' }}>
             <div key={locale} className="animate-in-up">{children}</div>
           </main>
-          {user ? <BottomNav role={user.role} newScores={newScores} /> : null}
+          {user ? <BottomNav role={user.panelRole} newScores={newScores} /> : null}
         </I18nProvider>
       </body>
     </html>
