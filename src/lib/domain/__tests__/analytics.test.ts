@@ -3,6 +3,7 @@ import {
   assignmentStats,
   studentProfiles,
   weakSentences,
+  studentWeakPoints,
   offeringSummary,
   parsePerSentence,
   latestPhaseSubmissions,
@@ -119,6 +120,31 @@ describe('weakSentences', () => {
 
   it('is empty without perception data', () => {
     expect(weakSentences([phaseSub({ studentId: 1, assignmentId: 10 })])).toEqual([])
+  })
+})
+
+describe('studentWeakPoints', () => {
+  const sentences = [
+    { assignmentId: 10, phaseId: 1, order: 1, text: 'Good morning.' },
+    { assignmentId: 10, phaseId: 1, order: 2, text: 'How are you today?' },
+  ]
+  it('keeps only sub-threshold lines and joins their text, weakest first', () => {
+    const rows = [
+      phaseSub({ studentId: 1, assignmentId: 10, perSentence: [{ order: 1, accuracy: 0.95, completeness: 1 }, { order: 2, accuracy: 0.3, completeness: 1 }] }),
+    ]
+    const weak = studentWeakPoints(rows, sentences)
+    expect(weak).toHaveLength(1) // order 1 (0.95) is above threshold, dropped
+    expect(weak[0]).toMatchObject({ order: 2, text: 'How are you today?', samples: 1 })
+    expect(weak[0].avgAccuracy).toBeCloseTo(0.3)
+  })
+  it('drops weak lines whose text cannot be resolved', () => {
+    const rows = [phaseSub({ studentId: 1, assignmentId: 10, perSentence: [{ order: 9, accuracy: 0.1, completeness: 1 }] })]
+    expect(studentWeakPoints(rows, sentences)).toEqual([])
+  })
+  it('respects the limit', () => {
+    const many = Array.from({ length: 5 }, (_, i) => ({ assignmentId: 10, phaseId: 1, order: i + 1, text: `s${i + 1}` }))
+    const rows = [phaseSub({ studentId: 1, assignmentId: 10, perSentence: many.map((s) => ({ order: s.order, accuracy: 0.2, completeness: 1 })) })]
+    expect(studentWeakPoints(rows, many, { limit: 2 })).toHaveLength(2)
   })
 })
 

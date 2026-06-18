@@ -365,6 +365,16 @@ export function countPhaseSentences(prisma: PrismaClient, phaseId: number) {
   return prisma.sentence.count({ where: { phaseId } })
 }
 
+// Sentence text for a set of assignments, keyed later by (assignmentId, phaseId, order)
+// — used to join the student's weak-sentence aggregate back to readable text.
+export function listSentencesForAssignments(prisma: PrismaClient, assignmentIds: number[]) {
+  if (assignmentIds.length === 0) return Promise.resolve([])
+  return prisma.sentence.findMany({
+    where: { assignmentId: { in: assignmentIds } },
+    select: { assignmentId: true, phaseId: true, order: true, text: true },
+  })
+}
+
 // The assignment's phases as an overview list for the student: each phase's label,
 // schedule, whether it counts, sentence count, and the student's latest submission
 // status/score. Drives the multi-phase landing screen.

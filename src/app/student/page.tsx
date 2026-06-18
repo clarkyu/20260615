@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Inbox, Sparkles } from 'lucide-react'
+import { Inbox, Sparkles, Target, ChevronRight } from 'lucide-react'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -120,6 +120,23 @@ export default async function StudentHome() {
             <p className={improved ? 'animate-pop text-sm font-semibold text-success' : 'text-xs text-muted-foreground'}>{improved ? `🎉 ${t('shome.improved')}` : t('shome.cheerUp')}</p>
           </CardContent>
         </Card>
+      ) : null}
+
+      {gradedScores.length > 0 ? (
+        <Link href="/student/weak-points">
+          <Card className="tap hover:shadow-card">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+                <Target className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold leading-snug">{t('weak.card')}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{t('weak.cardDesc')}</p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
       ) : null}
 
       {assignments.length === 0 ? (
