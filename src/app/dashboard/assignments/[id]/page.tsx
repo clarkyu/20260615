@@ -7,6 +7,7 @@ import { getT } from '@/lib/i18n-server'
 import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as userRepo from '@/lib/repo/users'
 import { GradingClient } from './grading-client'
 
 export default async function AssignmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +53,15 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
     }))
     .sort((a, b) => a.studentNo.localeCompare(b.studentNo) || a.phaseOrder - b.phaseOrder)
 
+  // Who hasn't handed anything in yet: the class roster minus everyone with a
+  // non-DRAFT submission (any phase). Lets the teacher chase up missing students —
+  // they never appear in the submissions list because they have no row.
+  const roster = await userRepo.listClassRoster(prisma, user.schoolId, assignment.offering.class.id)
+  const submittedIds = new Set(assignment.submissions.filter((s) => s.status !== 'DRAFT').map((s) => s.studentId))
+  const notSubmitted = roster
+    .filter((r) => !submittedIds.has(r.id))
+    .map((r) => ({ name: r.name ?? '', studentNo: r.studentNo ?? '' }))
+
   const sem = assignment.offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 
   return (
@@ -73,6 +83,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
         studentCount={new Set([...latestByStudentPhase.values()].map((s) => s.studentId)).size}
         classes={[{ id: assignment.offering.class.id, name: assignment.offering.class.name }]}
         rows={rows}
+        notSubmitted={notSubmitted}
         presets={PRESETS}
         perceptionModels={modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))}
         judgeModels={modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))}
