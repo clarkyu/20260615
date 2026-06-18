@@ -8,7 +8,7 @@ import * as bankRepo from '@/lib/repo/bank'
 import { BankActions } from './bank-actions'
 import { BankList } from './bank-list'
 
-export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string; series?: string }> }) {
+export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string; series?: string; video?: string }> }) {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
@@ -16,11 +16,13 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   // A super-admin curates the global pool and may have no school of their own.
   if (!user.schoolId && !isSuperAdmin) redirect('/dashboard')
 
-  const { cefr, strand, domain, series } = await searchParams
-  const filtered = Boolean(cefr || strand || domain || series)
-  const [sets, allSeries] = await Promise.all([
-    bankRepo.listVisible(prisma, user.schoolId, { cefr, strand, domain, series }),
+  const { cefr, strand, domain, series, video } = await searchParams
+  const hasVideo = video === '1'
+  const filtered = Boolean(cefr || strand || domain || series || hasVideo)
+  const [sets, allSeries, recent] = await Promise.all([
+    bankRepo.listVisible(prisma, user.schoolId, { cefr, strand, domain, series, hasVideo }),
     bankRepo.seriesList(prisma, user.schoolId),
+    bankRepo.listRecentlyUsedByTeacher(prisma, user.schoolId, user.userId),
   ])
 
   return (
@@ -40,11 +42,13 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
 
       <BankList
         sets={sets}
+        recent={recent}
         filtered={filtered}
         cefr={cefr}
         strand={strand}
         domain={domain}
         series={series}
+        video={video}
         seriesOptions={allSeries}
       />
     </div>

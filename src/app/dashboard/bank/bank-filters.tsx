@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { X } from 'lucide-react'
+import { X, Video } from 'lucide-react'
 import { CEFR_LEVELS, STRANDS, DOMAINS } from '@/lib/curriculum/taxonomy'
 import { useT } from '@/components/i18n-provider'
 
@@ -11,7 +11,7 @@ const speakingStrands = STRANDS.filter((s) => s.parent === 'english.speaking')
 // URL-driven filters for the bank index. Each select writes its value into the
 // query string (empty → removed), and the server component re-queries. Kept
 // stateless so the URL is the single source of truth (shareable / back-button).
-export function BankFilters({ cefr, strand, domain, series, seriesOptions = [] }: { cefr?: string; strand?: string; domain?: string; series?: string; seriesOptions?: string[] }) {
+export function BankFilters({ cefr, strand, domain, series, video, seriesOptions = [] }: { cefr?: string; strand?: string; domain?: string; series?: string; video?: string; seriesOptions?: string[] }) {
   const t = useT()
   const router = useRouter()
   const pathname = usePathname()
@@ -25,7 +25,8 @@ export function BankFilters({ cefr, strand, domain, series, seriesOptions = [] }
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
-  const active = Boolean(cefr || strand || domain || series)
+  const videoOn = video === '1'
+  const active = Boolean(cefr || strand || domain || series || videoOn)
 
   return (
     <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -48,6 +49,14 @@ export function BankFilters({ cefr, strand, domain, series, seriesOptions = [] }
         <option value="">{t('bank.domain')}</option>
         {DOMAINS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
       </select>
+      <button
+        type="button"
+        onClick={() => set('video', videoOn ? '' : '1')}
+        aria-pressed={videoOn}
+        className={'inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-sm ' + (videoOn ? 'border-primary bg-accent text-accent-foreground' : 'border-input bg-background text-muted-foreground')}
+      >
+        <Video className="h-3.5 w-3.5" />{t('bank.videoOnly')}
+      </button>
       {active ? (
         <button
           type="button"
