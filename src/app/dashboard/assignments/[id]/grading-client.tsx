@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck } from 'lucide-react'
+import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX } from 'lucide-react'
 import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -46,6 +46,7 @@ export function GradingClient(props: {
   studentCount: number
   classes: { id: number; name: string }[]
   rows: Row[]
+  notSubmitted: { name: string; studentNo: string }[]
   presets: Preset[]
   perceptionModels: ModelOpt[]
   judgeModels: ModelOpt[]
@@ -184,6 +185,28 @@ export function GradingClient(props: {
             ) : (
               <p className="flex items-center gap-1.5 text-xs text-success"><CheckCheck className="h-4 w-4" />{t('grade.allReviewed')}</p>
             )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {props.notSubmitted.length > 0 ? (
+        <Card className="border-[hsl(var(--warning))]/30 bg-warning/5">
+          <CardContent className="p-4">
+            <details>
+              <summary className="flex cursor-pointer items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-[hsl(var(--warning))]">
+                  <UserX className="h-4 w-4" />{t('grade.notSubmitted')}
+                </span>
+                <span className="text-2xl font-extrabold tabular-nums text-[hsl(var(--warning))]">{props.notSubmitted.length}</span>
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {props.notSubmitted.map((s) => (
+                  <span key={s.studentNo} className="rounded-lg bg-secondary px-2 py-1 text-xs">
+                    {s.name}<span className="ml-1 text-muted-foreground">{s.studentNo}</span>
+                  </span>
+                ))}
+              </div>
+            </details>
           </CardContent>
         </Card>
       ) : null}
