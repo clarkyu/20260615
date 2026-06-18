@@ -16,6 +16,7 @@ import { getT } from '@/lib/i18n-server'
 import { config } from '@/lib/config'
 import * as userRepo from '@/lib/repo/users'
 import * as departmentRepo from '@/lib/repo/departments'
+import * as inviteRepo from '@/lib/repo/invites'
 import { parseForm, optText, optId, z } from '@/lib/validate'
 import {
   rateLimitLogin,
@@ -92,6 +93,39 @@ export async function register(prevState: unknown, formData: FormData): Promise<
     await prisma.user.create({ data: { email, passwordHash, name, role, emailVerified: now } })
   }
   return { success: true }
+}
+
+// Accept a school invite link: a NEW teacher sets name + email + password and is bound
+// to the inviting school as TEACHER. The invite is single-use and time-limited.
+export async function acceptInvite(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const { t } = await getT()
+  if (!(await rateLimitRegister())) return { error: t('err.tooMany') }
+  const prisma = await getDb()
+
+  const token = String(formData.get('token') ?? '')
+  if (!token) return { error: t('err.inviteInvalid') }
+  const invite = await inviteRepo.findValidByHash(prisma, await hashToken(token), new Date())
+  if (!invite) return { error: t('err.inviteInvalid') }
+
+  const email = normalizeEmail((formData.get('email') as string) ?? '')
+  if (!email) return { error: t('err.invalidEmail') }
+  const passwordError = validatePassword((formData.get('password') as string) ?? '')
+  if (passwordError) return { error: t(passwordError) }
+  const { value: name, error: nameError } = validateName(formData.get('name') as string | null)
+  if (nameError) return { error: t(nameError) }
+
+  if (await prisma.user.findUnique({ where: { email } })) return { error: t('err.emailTaken') }
+
+  // Consume the invite first (fenced on usedAt:null) so a replay can't create two teachers.
+  const consumed = await inviteRepo.markUsed(prisma, invite.id, new Date())
+  if (consumed.count === 0) return { error: t('err.inviteInvalid') }
+
+  const passwordHash = await hashPassword((formData.get('password') as string) ?? '')
+  const user = await prisma.user.create({
+    data: { email, passwordHash, name, role: 'TEACHER', schoolId: invite.schoolId, emailVerified: new Date() },
+  })
+  await establishSession(user)
+  redirect('/dashboard')
 }
 
 export async function resendVerification(prevState: unknown, formData: FormData): Promise<ActionState> {
