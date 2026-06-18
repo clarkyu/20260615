@@ -19,6 +19,23 @@ export async function PlatformHome({ name, schools }: { name: string; schools: S
         <p className="mt-1 text-sm text-muted-foreground">{t('plat.desc', { name })}</p>
       </div>
 
+      {/* First-run guide — only until the first school exists. */}
+      {schools.length === 0 ? (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="space-y-2.5 p-4">
+            <p className="font-semibold">{t('plat.onbdTitle')}</p>
+            <ol className="space-y-1.5 text-sm">
+              {[t('plat.onbdStep1'), t('plat.onbdStep2'), t('plat.onbdStep3')].map((s, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-muted-foreground">{i + 1}</span>
+                  <span className="flex-1 pt-0.5 text-muted-foreground">{s}</span>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Link href="/dashboard/bank">
         <Card className="tap bg-primary text-primary-foreground hover:shadow-card">
           <CardContent className="flex items-center gap-4 p-4">
