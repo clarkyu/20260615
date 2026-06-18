@@ -154,3 +154,12 @@ export async function submitRecitedText(phaseId: number, text: string) {
   revalidatePath('/student')
   return { success: true }
 }
+
+// 学生看过成绩：把 scoresSeenAt 推进到现在，清掉站内未读提示（红点 / NEW）。
+// 由学生首页在挂载时调用一次。故意不 revalidate('/student')——当前这屏的「新成绩」
+// 高亮要留着给学生看完，下次进入页面/导航时红点与 NEW 自然消失即可。
+export async function markScoresSeen() {
+  const { user, prisma } = await studentContext()
+  await userRepo.markScoresSeen(prisma, user.userId, new Date())
+  return { success: true }
+}

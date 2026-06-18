@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Inbox, Sparkles, Target, ChevronRight } from 'lucide-react'
+import { Inbox, Sparkles, Target, ChevronRight, PartyPopper } from 'lucide-react'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge, statusTone } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { ScoreTrend } from './score-trend'
+import { MarkScoresSeen } from './mark-scores-seen'
 
 export default async function StudentHome() {
   const user = await requireRole('STUDENT')
@@ -48,12 +49,15 @@ export default async function StudentHome() {
   // An assignment is one or more phases; aggregate over the GRADED phases (or all,
   // when every phase is practice-only). Completed = every counted phase submitted;
   // the exam score is the mean of the GRADED phases' final scores.
+  // 站内未读：任何 gradedAt 晚于「上次看过成绩」的已批阅环节即为「新成绩」。
+  const seenMs = me.scoresSeenAt ? me.scoresSeenAt.getTime() : 0
   type Asg = (typeof assignments)[number]
   function summarize(a: Asg) {
     const graded = a.phases.filter((p) => p.graded)
     const counted = graded.length > 0 ? graded : a.phases
     const done = counted.filter((p) => { const s = p.submissions[0]; return s && DONE_STATUSES.includes(s.status) }).length
     const scores = counted.map((p) => (p.submissions[0]?.status === 'GRADED' ? p.submissions[0]?.finalScore : null)).filter((v): v is number => v != null)
+    const newGraded = a.phases.some((p) => { const s = p.submissions[0]; return s?.status === 'GRADED' && s.gradedAt != null && s.gradedAt.getTime() > seenMs })
     return {
       single: a.phases.length === 1,
       p0: a.phases[0],
@@ -62,11 +66,13 @@ export default async function StudentHome() {
       allDone: counted.length > 0 && done === counted.length,
       sentenceCount: a.phases.reduce((n, p) => n + p._count.sentences, 0),
       examScore: scores.length ? mean(scores) : null,
+      newGraded,
     }
   }
   const summaries = assignments.map((a) => ({ a, ...summarize(a) }))
 
   const total = assignments.length
+  const newCount = summaries.filter((s) => s.newGraded).length
   const submittedCount = summaries.filter((s) => s.allDone).length
   const examAvg = mean(summaries.map((s) => s.examScore).filter((v): v is number => v != null))
   const dailyAvg = mean(assignments.map((a) => bestPractice.get(a.id)).filter((v): v is number => v != null))
@@ -85,6 +91,21 @@ export default async function StudentHome() {
         <h1 className="text-2xl font-bold tracking-tight">{t('shome.title')}</h1>
         <p className="text-sm text-muted-foreground">{me.name}（{me.studentNo}）</p>
       </div>
+
+      {newCount > 0 ? (
+        <>
+          <Card className="border-success/30 bg-success/10">
+            <CardContent className="flex items-center gap-3 p-4">
+              <PartyPopper className="h-6 w-6 shrink-0 text-success" />
+              <div className="min-w-0">
+                <p className="font-semibold leading-snug text-success">{t('shome.newScores', { n: newCount })}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{t('shome.newScoresHint')}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <MarkScoresSeen />
+        </>
+      ) : null}
 
       {total > 0 ? (
         <Card className="border-primary/30 bg-primary/5">
@@ -147,7 +168,7 @@ export default async function StudentHome() {
           </CardContent>
         </Card>
       ) : (
-        summaries.map(({ a, single, p0, doneCount, totalPhases, allDone, sentenceCount, examScore }) => {
+        summaries.map(({ a, single, p0, doneCount, totalPhases, allDone, sentenceCount, examScore, newGraded }) => {
           // Single-phase keeps the original per-submission card; multi-phase shows a
           // 「done/total 环节」progress badge that links into the phase checklist.
           const sub = single ? p0.submissions[0] : null
@@ -175,7 +196,10 @@ export default async function StudentHome() {
                       {a.dueAt ? ` · ${t('asg.due')} ${a.dueAt.toISOString().slice(0, 10)}` : ''}
                     </p>
                   </div>
-                  <Badge tone={tone}>{statusLabel}</Badge>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {newGraded ? <Badge tone="success">{t('shome.newBadge')}</Badge> : null}
+                    <Badge tone={tone}>{statusLabel}</Badge>
+                  </div>
                 </div>
                 {scoreShown != null ? (
                   <div className="rounded-xl bg-secondary p-3 text-sm">

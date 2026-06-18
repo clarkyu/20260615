@@ -162,6 +162,9 @@ model User {
   // auto-grading + practice unless the assignment pins its own.
   defaultPerceptionModel String?
   defaultJudgeModel      String?
+  // 学生最近一次「看过成绩」的时间。任何 gradedAt 晚于它的已批阅提交即为「新成绩」，
+  // 用于站内未读提示（红点 / NEW 徽章）。null = 还没看过任何成绩。
+  scoresSeenAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

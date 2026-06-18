@@ -2,8 +2,11 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
+import { getDb } from '@/lib/db'
 import { config, validateConfigOnce } from '@/lib/config'
 import { getLocale } from '@/lib/i18n-server'
+import * as userRepo from '@/lib/repo/users'
+import * as submissionRepo from '@/lib/repo/submissions'
 import { I18nProvider } from '@/components/i18n-provider'
 import { AppHeader } from '@/components/app-header'
 import { BottomNav } from '@/components/bottom-nav'
@@ -37,6 +40,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   validateConfigOnce()
   const [locale, user] = await Promise.all([getLocale(), getCurrentUser()])
 
+  // 站内未读提示：学生有「比上次看过更晚批阅」的成绩时，底部导航「作业」上点红点。
+  let newScores = false
+  if (user && user.role === 'STUDENT') {
+    const prisma = await getDb()
+    const seen = await userRepo.scoresSeenAt(prisma, user.userId)
+    newScores = (await submissionRepo.countNewlyGraded(prisma, user.userId, seen?.scoresSeenAt ?? null)) > 0
+  }
+
   return (
     <html lang={locale === 'zh' ? 'zh-CN' : locale} className={inter.variable} suppressHydrationWarning>
       <body>
@@ -46,7 +57,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main className="mx-auto w-full max-w-xl px-4 pt-5" style={{ paddingBottom: user ? '6.5rem' : '2rem' }}>
             <div key={locale} className="animate-in-up">{children}</div>
           </main>
-          {user ? <BottomNav role={user.role} /> : null}
+          {user ? <BottomNav role={user.role} newScores={newScores} /> : null}
         </I18nProvider>
       </body>
     </html>
