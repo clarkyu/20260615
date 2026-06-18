@@ -95,13 +95,23 @@ export async function claimAndRunDue(
 ): Promise<{ ran: number }> {
   const now = new Date()
 
-  // 1) Reclaim orphans: a worker that died mid-job left a stale PROCESSING row.
+  // 1) Reclaim orphans AS A FAILED ATTEMPT: a worker that died mid-job (or a job that
+  //    outran STALE_MS) left a stale PROCESSING row. Counting the reclaim as an attempt
+  //    means a submission that repeatedly crashes the isolate eventually dead-letters
+  //    instead of looping forever and re-spending AI on every reclaim.
   await prisma.gradingJob.updateMany({
     where: { status: 'PROCESSING', updatedAt: { lt: new Date(now.getTime() - STALE_MS) } },
-    data: { status: 'PENDING' },
+    data: { status: 'PENDING', attempts: { increment: 1 } },
   })
 
-  // 2) Due PENDING jobs, oldest first.
+  // 2) Dead-letter anything that has now exhausted its attempts (via failures or
+  //    reclaims) so it never re-runs.
+  await prisma.gradingJob.updateMany({
+    where: { status: 'PENDING', attempts: { gte: MAX_ATTEMPTS } },
+    data: { status: 'FAILED', lastError: 'grading did not complete after retries' },
+  })
+
+  // 3) Due PENDING jobs, oldest first.
   const due = await prisma.gradingJob.findMany({
     where: { status: 'PENDING', nextAttemptAt: { lte: now } },
     orderBy: { nextAttemptAt: 'asc' },
@@ -119,8 +129,12 @@ export async function claimAndRunDue(
     ran++
 
     const res = await runner(prisma, { id: job.id, submissionId: job.submissionId, kind: job.kind, attempts: job.attempts })
+
+    // Every terminal write is FENCED to `status: 'PROCESSING'` — a stale run that was
+    // already reclaimed (and maybe re-run by another isolate) can't reopen or clobber a
+    // job another isolate has since settled.
     if (res.done) {
-      await prisma.gradingJob.update({ where: { id: job.id }, data: { status: 'DONE', lastError: null } })
+      await prisma.gradingJob.updateMany({ where: { id: job.id, status: 'PROCESSING' }, data: { status: 'DONE', lastError: null } })
       continue
     }
 
@@ -129,13 +143,13 @@ export async function claimAndRunDue(
     if (attempts >= MAX_ATTEMPTS) {
       // Dead-letter: stop retrying. The submission stays in the teacher queue
       // (needsReview), so the work is surfaced, just no longer auto-graded.
-      await prisma.gradingJob.update({
-        where: { id: job.id },
+      await prisma.gradingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING' },
         data: { status: 'FAILED', attempts, lastError: lastError ?? 'grading did not complete' },
       })
     } else {
-      await prisma.gradingJob.update({
-        where: { id: job.id },
+      await prisma.gradingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING' },
         data: { status: 'PENDING', attempts, nextAttemptAt: new Date(now.getTime() + backoffMs(attempts)), lastError },
       })
     }
