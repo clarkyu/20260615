@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as offeringRepo from '@/lib/repo/offerings'
+import { LocalDate } from '@/components/local-date'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -78,7 +79,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
                   <p className="font-semibold leading-snug">{a.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {a._count.sentences} {t('asg.sentences')} · {a._count.submissions} {t('asg.submissions')}
-                    {a.dueAt ? ` · ${t('asg.due')} ${a.dueAt.toISOString().slice(0, 10)}` : ''}
+                    {a.dueAt ? <> · {t('asg.due')} <LocalDate iso={a.dueAt.toISOString()} /></> : null}
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />

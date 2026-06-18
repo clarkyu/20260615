@@ -6,6 +6,7 @@ import { getT } from '@/lib/i18n-server'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { LocalDate } from '@/components/local-date'
 
 // The staff "作业" menu: every assignment in the teacher's scope, newest first,
 // each linking to its grading screen.
@@ -60,7 +61,7 @@ export default async function StaffAssignmentsPage() {
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {a.offering.course.name} · {a.offering.class.name}
                       {a._count.phases > 1 ? ` · ${a._count.phases} ${t('phase.unit')}` : ''}
-                      {a.dueAt ? ` · ${t('asg.due')} ${a.dueAt.toISOString().slice(0, 10)}` : ''}
+                      {a.dueAt ? <> · {t('asg.due')} <LocalDate iso={a.dueAt.toISOString()} /></> : null}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{t('asgList.submittedN', { n: submitted.get(a.id) ?? 0 })}</p>
                   </div>

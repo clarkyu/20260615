@@ -1,4 +1,5 @@
 import type { PrismaClient, Role, SubmissionStatus } from '@prisma/client'
+import { localDayWindowUtc } from '@/lib/time'
 
 // Read-model for the teacher dashboard: the headline counts + the "needs grading"
 // board, in one place. Spans several aggregates (users/classes/assignments/
@@ -8,11 +9,11 @@ import type { PrismaClient, Role, SubmissionStatus } from '@prisma/client'
 // or wasn't confident enough to auto-approve (needsReview).
 const NEEDS_TEACHER_STATUS: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
-export async function loadStaffDashboard(prisma: PrismaClient, schoolId: number, userId: number, role: Role) {
+export async function loadStaffDashboard(prisma: PrismaClient, schoolId: number, userId: number, role: Role, tzo = 0) {
   // A teacher only sees their own offerings; admins see the whole school.
   const offeringWhere = { schoolId, ...(role === 'TEACHER' ? { teacherId: userId } : {}) }
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1)
+  // "Due today" is the user's LOCAL calendar day (tzo from their browser).
+  const { start: todayStart, end: todayEnd } = localDayWindowUtc(new Date(), tzo)
 
   const [students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups] = await Promise.all([
     prisma.user.count({ where: { schoolId, role: 'STUDENT' } }),

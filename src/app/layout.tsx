@@ -33,7 +33,7 @@ export const viewport: Viewport = {
 }
 
 // Set the theme class before paint so there's no flash of the wrong theme.
-const themeInit = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]+)/);var t=m?m[1]:'system';if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}})()`
+const themeInit = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([^;]+)/);var t=m?m[1]:'system';if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}try{document.cookie='tzo='+new Date().getTimezoneOffset()+';path=/;max-age=31536000;samesite=lax'}catch(e){}})()`
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // One-time redacted config check so a misconfigured deploy is visible in logs.
