@@ -2,7 +2,7 @@
 
 import { uploadErrorText } from '@/lib/upload-error'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eye, ListChecks, Video, Mic } from 'lucide-react'
+import { Eye, ListChecks, Video, Mic, Wifi } from 'lucide-react'
 import { getUploadUrl, recordMedia } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -219,6 +219,11 @@ export function Recorder(props: {
                   {props.sentences.map((s) => <li key={s.order}>{s.text}</li>)}
                 </ol>
               </details>
+            ) : null}
+            {!isAudio ? (
+              <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                <Wifi className="mt-0.5 h-3.5 w-3.5 shrink-0" />{t('rec.dataTip')}
+              </p>
             ) : null}
           </CardContent>
         </Card>
