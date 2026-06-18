@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bot, ChevronRight } from 'lucide-react'
+import { Bot, ChevronRight, MessageSquarePlus } from 'lucide-react'
 import { requireAuth } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -82,6 +82,20 @@ export default async function ProfilePage() {
           </Card>
         </Link>
       ) : null}
+      <Link href="/feedback">
+        <Card className="tap hover:shadow-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+              <MessageSquarePlus className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold leading-snug">{t('fb.title')}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{t('fb.rule')}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </Link>
       <ProfileClient />
     </div>
   )

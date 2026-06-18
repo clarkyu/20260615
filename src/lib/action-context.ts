@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
-import { requireStaff, requireRole, type CurrentUser } from '@/lib/auth'
+import { requireAuth, requireStaff, requireRole, type CurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 
@@ -17,6 +17,15 @@ export interface ActionCtx {
 }
 
 export type StaffCtx = ActionCtx
+
+// Any authenticated user (staff OR student) + a db client + a translator. Use for
+// actions that aren't role-specific — e.g. submitting feedback.
+export async function authedContext(): Promise<ActionCtx> {
+  const user = await requireAuth()
+  const { t } = await getT()
+  const prisma = await getDb()
+  return { user, prisma, t }
+}
 
 // Authenticated staff + a db client + a translator. Use for actions that don't
 // need a school scope (or that handle the missing-school case themselves).
