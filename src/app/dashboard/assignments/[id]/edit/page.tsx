@@ -45,6 +45,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       graded: p.graded,
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,
+      freePractice: p.freePractice,
     })),
   }
 

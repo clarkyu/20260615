@@ -35,8 +35,9 @@ export async function resolveAttempt(
   if (phase.openAt && now < phase.openAt) return { ok: false, error: 'err.notOpen' }
   if (phase.dueAt && now > phase.dueAt) return { ok: false, error: 'err.closed' }
 
+  // 自由练习环节不限提交次数；其余按 maxAttempts 限制。
   const used = await submissions.countActiveAttempts(prisma, phaseId, studentId)
-  if (used >= phase.maxAttempts) return { ok: false, error: 'err.attemptsUsed' }
+  if (!phase.freePractice && used >= phase.maxAttempts) return { ok: false, error: 'err.attemptsUsed' }
   return {
     ok: true,
     attempt: used + 1,

@@ -30,6 +30,7 @@ export interface PhaseInitial {
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
+  freePractice: boolean
 }
 
 export interface AssignmentInitial {
@@ -79,6 +80,7 @@ interface PhaseState {
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
+  freePractice: boolean
 }
 
 // A fresh phase. `bank` = there's a published set this phase can draw from. `recite`
@@ -100,6 +102,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     graded: true,
     maxAttempts: 3,
     isFormalTest: false,
+    freePractice: false,
   }
 }
 
@@ -197,6 +200,7 @@ export function AssignmentForm({
       graded: p.graded,
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,
+      freePractice: p.freePractice,
     })),
   )
 
@@ -527,6 +531,14 @@ function PhaseCard({
           <span>{t('asg.graded')}<span className="block text-xs text-muted-foreground">{t('asg.gradedHint')}</span></span>
         </label>
       </div>
+
+      {/* 自由练习（仅「不计分」时可选）：不限次数、不进待批 */}
+      {!phase.graded ? (
+        <label className="flex items-start gap-2.5 rounded-xl border border-input p-3 text-sm">
+          <input type="checkbox" checked={phase.freePractice} onChange={(e) => onPatch({ freePractice: e.target.checked })} className="mt-0.5 h-4 w-4 accent-primary" />
+          <span>{t('asg.freePractice')}<span className="block text-xs text-muted-foreground">{t('asg.freePracticeHint')}</span></span>
+        </label>
+      ) : null}
 
       {/* 正式测试·强防作弊分层 */}
       <label className="flex items-start gap-2.5 rounded-xl border border-input p-3 text-sm">

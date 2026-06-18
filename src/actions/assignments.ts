@@ -52,6 +52,7 @@ const phaseJsonSchema = z.object({
   graded: z.boolean().optional().default(true),
   maxAttempts: z.coerce.number().int().min(1).max(99).optional().default(1),
   isFormalTest: z.boolean().optional().default(false),
+  freePractice: z.boolean().optional().default(false),
 })
 const phasesJsonSchema = z.array(phaseJsonSchema).min(1).max(20)
 
@@ -82,6 +83,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
     graded: p.graded,
     maxAttempts: p.maxAttempts,
     isFormalTest: p.isFormalTest,
+    freePractice: p.freePractice,
   }))
   return { ok: true, data: { meta: { title: parsed.data.title, monthLabel: parsed.data.monthLabel }, phases } }
 }
@@ -121,6 +123,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
         graded: p.graded,
         maxAttempts: p.maxAttempts,
         isFormalTest: p.isFormalTest,
+        freePractice: p.freePractice,
       })),
     }
     await templateRepo.create(cx.prisma, { schoolId: cx.schoolId, name: templateName.slice(0, 100), createdById: cx.user.userId, payload: JSON.stringify(payload) })

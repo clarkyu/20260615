@@ -39,6 +39,7 @@ export interface PhaseInput {
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
+  freePractice: boolean
   sentences: SentenceRow[]
 }
 
@@ -130,6 +131,7 @@ function phaseData(p: PhaseInput) {
     graded: p.graded,
     maxAttempts: p.maxAttempts,
     isFormalTest: p.isFormalTest,
+    freePractice: p.freePractice,
   }
 }
 
@@ -227,6 +229,7 @@ export function createReview(prisma: PrismaClient, offeringId: number, title: st
       graded: true,
       maxAttempts: 3,
       isFormalTest: false,
+      freePractice: false,
       sentences,
     },
   ])
@@ -340,7 +343,7 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
   return prisma.phase.findFirst({
     where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },
     select: {
-      id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true,
+      id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true, freePractice: true,
       requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
     },
   })

@@ -17,6 +17,7 @@ export const templatePhaseSchema = z.object({
   graded: z.boolean().default(true),
   maxAttempts: z.coerce.number().int().min(1).max(99).default(1),
   isFormalTest: z.boolean().default(false),
+  freePractice: z.boolean().default(false),
 })
 
 export const templatePayloadSchema = z.object({

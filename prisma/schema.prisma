@@ -281,6 +281,9 @@ model Phase {
   requireHandwriting Boolean @default(false)
   graded       Boolean @default(true)  // false → 仅练习、不计分
   maxAttempts  Int      @default(1)
+  // 自由练习（仅当 graded=false 时有意义）：true → 不限提交次数、AI 评完即定稿不进
+  // 老师待批队列。让发作业的老师自己决定练习环节是否打扰到批阅与次数限制。
+  freePractice Boolean @default(false)
   // 正式测试（强防作弊分层）：true → 强制真实录像、记录切屏/暂停等违规并提示老师复核，
   // 学生端展示「正式测试」横幅。仅环节级，不回填到 Assignment。
   isFormalTest Boolean @default(false)

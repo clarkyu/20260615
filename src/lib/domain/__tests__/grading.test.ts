@@ -31,6 +31,11 @@ describe('decideReview', () => {
     expect(decideReview({ confidence: null, hasViolation: false }).needsReview).toBe(true)
     expect(decideReview({ confidence: undefined, hasViolation: false }).needsReview).toBe(true)
   })
+
+  it('a free-practice phase never needs review — even on low confidence or a violation', () => {
+    expect(decideReview({ confidence: 0.1, hasViolation: true, freePractice: true })).toEqual({ needsReview: false, status: 'GRADED' })
+    expect(decideReview({ confidence: null, hasViolation: false, freePractice: true }).needsReview).toBe(false)
+  })
 })
 
 describe('hasAntiCheatViolation', () => {

@@ -40,7 +40,10 @@ export interface ReviewDecision {
 export function decideReview(input: {
   confidence: number | null | undefined
   hasViolation: boolean
+  freePractice?: boolean
 }): ReviewDecision {
+  // 自由练习环节：AI 评完即定稿，永不进老师待批队列。
+  if (input.freePractice) return { needsReview: false, status: 'GRADED' }
   if (input.hasViolation) return { needsReview: true, status: 'FLAGGED' }
   const confident =
     typeof input.confidence === 'number' && input.confidence >= REVIEW_CONFIDENCE_THRESHOLD
@@ -69,6 +72,7 @@ export function hasAntiCheatViolation(violations: string | null | undefined): bo
 interface GradingContent {
   requireEyesClosed: boolean
   sentences: { order: number; text: string }[]
+  freePractice?: boolean // only meaningful on the phase; absent on the assignment fallback
 }
 export interface GradableSubmission {
   id: number
@@ -149,6 +153,7 @@ export async function autoGradeSubmission(
     const decision = decideReview({
       confidence: result.judge.confidence,
       hasViolation: hasAntiCheatViolation(submission.violations),
+      freePractice: submission.phase?.freePractice ?? false,
     })
 
     await submissionRepo.applyGradeResult(prisma, submission.id, {
