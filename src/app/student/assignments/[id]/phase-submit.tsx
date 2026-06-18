@@ -40,7 +40,7 @@ const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
 // phase with a video) or the eyes-closed/recitation flow. The single-phase landing
 // page and the multi-phase per-phase route both render this; `heading` is the
 // assignment title (single phase) or the phase's own label (multi-phase).
-export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: string }) {
+export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null }: { phase: PhaseDetail; heading: string; nextHref?: string | null; nextLabel?: string | null }) {
   const latest = phase.submissions[0]
   // Anything past DRAFT consumed an attempt (matches repo ACTIVE_STATUSES).
   const usedAttempts = phase.submissions.filter((s) => s.status !== 'DRAFT').length
@@ -85,6 +85,8 @@ export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: s
         latestFeedback={latest?.feedback ?? null}
         latestTakes={done ? (latest?.shadowTakes ?? []).map((tk) => ({ order: tk.order, aiScore: tk.aiScore, spokenText: tk.spokenText })) : []}
         initialRecorded={initialRecorded}
+        nextHref={nextHref}
+        nextLabel={nextLabel}
       />
     )
   }
@@ -113,6 +115,8 @@ export function PhaseSubmit({ phase, heading }: { phase: PhaseDetail; heading: s
       latestFeedback={latest?.feedback ?? null}
       latestPerSentence={graded.perSentence}
       latestTranscript={graded.transcript}
+      nextHref={nextHref}
+      nextLabel={nextLabel}
     />
   )
 }

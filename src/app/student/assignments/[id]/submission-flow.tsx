@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react'
 import { submitRecitedText, finishSubmission } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -106,8 +107,11 @@ export function SubmissionFlow(props: {
   latestFeedback: string | null
   latestPerSentence: { order: number; accuracy: number; completeness: number; spokenText?: string }[]
   latestTranscript?: string
+  nextHref?: string | null
+  nextLabel?: string | null
 }) {
   const t = useT()
+  const router = useRouter()
   const completed = props.latestStatus !== null && DONE_STATUSES.includes(props.latestStatus)
   const steps = useMemo(() => {
     const s: Kind[] = []
@@ -127,6 +131,13 @@ export function SubmissionFlow(props: {
   const [redo, setRedo] = useState(false)
   const [weakPractice, setWeakPractice] = useState(false)
   const [, startFinish] = useTransition()
+
+  // 多环节自动衔接：刚交完（done）且还有下一环节时，短暂展示「已提交」后自动前往。
+  useEffect(() => {
+    if (phase !== 'done' || !props.nextHref) return
+    const id = setTimeout(() => router.push(props.nextHref as string), 1800)
+    return () => clearTimeout(id)
+  }, [phase, props.nextHref, router])
 
   function finish() {
     setPhase('finishing'); setError(null)
@@ -161,7 +172,17 @@ export function SubmissionFlow(props: {
           <div className="animate-pop grid h-16 w-16 place-items-center rounded-full bg-success/15 text-success"><CheckCircle2 className="h-9 w-9" /></div>
           <p className="text-xl font-bold">{t('rec.success')}</p>
           <p className="text-sm text-muted-foreground">{t('rec.successDesc')}</p>
-          <Link href="/student" className="mt-1 w-full"><Button className="w-full" size="lg">{t('sub.backToList')}</Button></Link>
+          {props.nextHref ? (
+            <>
+              <p className="text-xs text-muted-foreground">{t('sub.nextAuto')}</p>
+              <Link href={props.nextHref} className="mt-1 w-full">
+                <Button className="w-full" size="lg">{t('sub.nextPhase')}{props.nextLabel ? `：${props.nextLabel}` : ''}<ArrowRight className="h-4 w-4" /></Button>
+              </Link>
+              <Link href="/student" className="w-full"><Button variant="ghost" className="w-full">{t('sub.backToList')}</Button></Link>
+            </>
+          ) : (
+            <Link href="/student" className="mt-1 w-full"><Button className="w-full" size="lg">{t('sub.backToList')}</Button></Link>
+          )}
         </CardContent>
       </Card>
     )
@@ -229,6 +250,9 @@ export function SubmissionFlow(props: {
             <Button variant="outline" className="w-full" onClick={() => { setRedo(true); setIdx(0); setPhase('doing') }}>
               {t('sub.redo')}（{t('sub.redoLeft', { n: props.attemptsLeft })}）
             </Button>
+          ) : null}
+          {props.nextHref ? (
+            <Link href={props.nextHref}><Button className="w-full" size="lg">{t('sub.nextPhase')}{props.nextLabel ? `：${props.nextLabel}` : ''}<ArrowRight className="h-4 w-4" /></Button></Link>
           ) : null}
           <Link href="/student"><Button variant="ghost" className="w-full">{t('sub.backToList')}</Button></Link>
         </CardContent>
