@@ -56,6 +56,7 @@ export function LoginForm({ next, schools }: { next: string; schools: { id: numb
         <div className="space-y-1.5">
           <Label htmlFor="password">{t('password')}</Label>
           <PasswordInput id="password" name="password" autoComplete="current-password" required />
+          {mode === 'id' ? <p className="text-xs text-muted-foreground">{t('login.pwHint')}</p> : null}
         </div>
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
         <Button type="submit" disabled={isPending} size="lg" className="w-full">
