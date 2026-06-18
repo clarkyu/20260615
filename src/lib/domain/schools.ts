@@ -7,13 +7,14 @@ import * as users from '@/lib/repo/users'
 
 export type CreateResult = { ok: true; schoolId: number } | { ok: false; error: string }
 
-// Create a school (unique name + code), then bind it to the creating staff member.
+// Create a school (unique name + code), then bind it to the creating staff member —
+// who becomes the school's administrator (SCHOOL_ADMIN).
 export async function createSchool(prisma: PrismaClient, userId: number, name: string, code: string): Promise<CreateResult> {
   if (await schools.findByName(prisma, name)) return { ok: false, error: 'err.schoolNameExists' }
   if (await schools.findByCode(prisma, code)) return { ok: false, error: 'err.codeTaken' }
 
   const school = await schools.create(prisma, name, code)
-  await users.setSchool(prisma, userId, school.id)
+  await users.setSchoolAsAdmin(prisma, userId, school.id)
   return { ok: true, schoolId: school.id }
 }
 

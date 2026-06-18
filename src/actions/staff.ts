@@ -1,8 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { staffSchoolContext } from '@/lib/action-context'
+import { schoolAdminContext, staffSchoolContext } from '@/lib/action-context'
 import { addTeacher as addTeacherService } from '@/lib/domain/staff'
+import * as userRepo from '@/lib/repo/users'
 import { parseForm, reqText, optText, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
@@ -33,4 +34,17 @@ export async function addTeacher(prevState: unknown, formData: FormData): Promis
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath('/dashboard/teachers')
   return { success: true }
+}
+
+// Promote / demote a colleague between TEACHER and SCHOOL_ADMIN (school-admin only).
+// Scoped to the caller's school; never affects a super-admin or the caller themselves.
+export async function setStaffRole(formData: FormData): Promise<void> {
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return
+  const staffId = Number(formData.get('staffId'))
+  const role = String(formData.get('role'))
+  if (!Number.isInteger(staffId) || staffId === cx.user.userId) return
+  if (role !== 'TEACHER' && role !== 'SCHOOL_ADMIN') return
+  await userRepo.setStaffRoleInSchool(cx.prisma, staffId, cx.schoolId, role)
+  revalidatePath('/dashboard/teachers')
 }

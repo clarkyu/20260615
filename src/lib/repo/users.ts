@@ -29,6 +29,20 @@ export function setSchool(prisma: PrismaClient, userId: number, schoolId: number
   return prisma.user.update({ where: { id: userId }, data: { schoolId } })
 }
 
+// Founder of a school becomes its admin — bind the school AND promote to SCHOOL_ADMIN.
+export function setSchoolAsAdmin(prisma: PrismaClient, userId: number, schoolId: number) {
+  return prisma.user.update({ where: { id: userId }, data: { schoolId, role: 'SCHOOL_ADMIN' } })
+}
+
+// Promote/demote a colleague between TEACHER and SCHOOL_ADMIN. Scoped to the caller's
+// school and to those two roles only — never touches a SUPER_ADMIN or a student.
+export function setStaffRoleInSchool(prisma: PrismaClient, staffId: number, schoolId: number, role: 'TEACHER' | 'SCHOOL_ADMIN') {
+  return prisma.user.updateMany({
+    where: { id: staffId, schoolId, role: { in: ['TEACHER', 'SCHOOL_ADMIN'] } },
+    data: { role },
+  })
+}
+
 // ── student roster management ────────────────────────────────────────────────
 
 export function findStudentForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
@@ -126,7 +140,7 @@ export function findProfile(prisma: PrismaClient, id: number) {
 export function listStaffForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
   return prisma.user.findMany({
     where: { schoolId: schoolId ?? -1, role: { in: ['TEACHER', 'SCHOOL_ADMIN'] } },
-    select: { id: true, name: true, staffNo: true, email: true, _count: { select: { taughtOfferings: true } } },
+    select: { id: true, name: true, staffNo: true, email: true, role: true, _count: { select: { taughtOfferings: true } } },
     orderBy: { createdAt: 'asc' },
   })
 }
