@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
 export interface PhaseInitial {
+  id: number
   title: string
   instructions: string
   useBankSet: boolean
@@ -61,6 +62,7 @@ function localToIso(local: string): string {
 
 // A phase as the form edits it (openAt/dueAt are local-wall-clock strings).
 interface PhaseState {
+  id?: number // existing phase id (edit) so the server reconciles in place, not delete+recreate
   title: string
   instructions: string
   useBankSet: boolean
@@ -159,6 +161,7 @@ export function AssignmentForm({
   // Serialize phases for the server (local times → UTC ISO).
   const phasesJson = JSON.stringify(
     phases.map((p) => ({
+      ...(p.id ? { id: p.id } : {}),
       title: p.title,
       instructions: p.instructions,
       useBankSet: hasBank && p.useBankSet,

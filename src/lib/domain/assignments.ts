@@ -16,6 +16,7 @@ export type { AssignmentMeta }
 // means "this phase's sentences (and shadow video) come from the published bank set";
 // otherwise the typed sentence list is used.
 export interface PhaseDraft {
+  id: number | null // existing phase id (edit) — null for a newly added phase
   title: string | null
   instructions: string | null
   useBankSet: boolean
@@ -65,6 +66,7 @@ async function resolvePhases(
       ? bankSentences!.map((s) => ({ ...s }))
       : d.typedSentences.map((text, j) => ({ order: j + 1, text, translation: null }))
     phases.push({
+      id: d.id,
       order: i + 1,
       title: d.title,
       instructions: d.instructions,

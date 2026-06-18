@@ -29,6 +29,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
     chunkSetCount: bank?._count.chunks ?? 0,
     chunkSetHasVideo: Boolean(bank?.shadowVideoKey),
     phases: a.phases.map((p) => ({
+      id: p.id,
       title: p.title ?? '',
       instructions: p.instructions ?? '',
       useBankSet: p.chunkSetId != null,
