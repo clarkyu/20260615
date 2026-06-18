@@ -78,6 +78,7 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
           requireHandwriting: p.requireHandwriting,
           graded: p.graded,
           maxAttempts: p.maxAttempts,
+          isFormalTest: p.isFormalTest,
         })),
       }
     }

@@ -44,6 +44,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       requireHandwriting: p.requireHandwriting,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
+      isFormalTest: p.isFormalTest,
     })),
   }
 

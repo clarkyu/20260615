@@ -8,7 +8,7 @@ import { updateWithPhases, type PhaseInput } from '@/lib/repo/assignments'
 const phase = (over: Partial<PhaseInput> = {}): PhaseInput => ({
   id: null, order: 1, title: null, category: null, instructions: null, chunkSetId: null, shadowVideoKey: null,
   openAt: null, dueAt: null, requireEyesClosed: false, requireText: false, requireAudio: true,
-  requireVideo: false, requireHandwriting: false, graded: true, maxAttempts: 1, sentences: [], ...over,
+  requireVideo: false, requireHandwriting: false, graded: true, maxAttempts: 1, isFormalTest: false, sentences: [], ...over,
 })
 const meta = { title: 'T', monthLabel: null }
 

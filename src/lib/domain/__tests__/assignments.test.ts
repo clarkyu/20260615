@@ -42,6 +42,7 @@ const draft = (over: Partial<PhaseDraft> = {}): PhaseDraft => ({
   requireHandwriting: false,
   graded: true,
   maxAttempts: 1,
+  isFormalTest: false,
   ...over,
 })
 
@@ -62,6 +63,12 @@ describe('createAssignments — phase resolution', () => {
       { order: 1, text: 'a', translation: null },
       { order: 2, text: 'b', translation: null },
     ])
+  })
+
+  it('forces real video on a formal-test phase even if the teacher left video off', async () => {
+    await createAssignments(prisma, 1, meta, [draft({ typedSentences: ['a'], requireText: true, requireVideo: false, isFormalTest: true })], [10], null, null)
+    const phases = lastPhases()
+    expect(phases[0]).toMatchObject({ isFormalTest: true, requireVideo: true })
   })
 
   it('pulls sentences + shadow video from the bank set, for every useBankSet phase', async () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react'
+import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert } from 'lucide-react'
 import { submitRecitedText, finishSubmission } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -27,6 +27,20 @@ const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
   video: { key: 'sub.step2', icon: Video },
   audio: { key: 'sub.stepAudio', icon: Mic },
   handwriting: { key: 'sub.stepImage', icon: Camera },
+}
+
+// 正式测试横幅：告诉学生这是受监督的正式测试，行为更端正 = 成绩更真实。
+export function FormalTestBanner() {
+  const t = useT()
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-[hsl(var(--warning))]/30 bg-warning/10 p-3 text-sm">
+      <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[hsl(var(--warning))]" />
+      <div>
+        <p className="font-semibold text-[hsl(var(--warning))]">{t('sub.formalTest')}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t('sub.formalTestDesc')}</p>
+      </div>
+    </div>
+  )
 }
 
 function Steps({ steps, idx }: { steps: Kind[]; idx: number }) {
@@ -109,6 +123,7 @@ export function SubmissionFlow(props: {
   latestTranscript?: string
   nextHref?: string | null
   nextLabel?: string | null
+  isFormalTest?: boolean
 }) {
   const t = useT()
   const router = useRouter()
@@ -269,6 +284,7 @@ export function SubmissionFlow(props: {
         <h1 className="text-xl font-bold tracking-tight">{props.title}</h1>
         {props.instructions ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{props.instructions}</p> : null}
       </div>
+      {props.isFormalTest ? <FormalTestBanner /> : null}
       {props.shadowing}
       {props.practice}
       <Steps steps={steps} idx={idx} />

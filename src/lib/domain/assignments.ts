@@ -31,6 +31,7 @@ export interface PhaseDraft {
   requireHandwriting: boolean
   graded: boolean
   maxAttempts: number
+  isFormalTest: boolean
 }
 
 function hasSubmitKind(p: PhaseDraft): boolean {
@@ -79,10 +80,12 @@ async function resolvePhases(
       requireEyesClosed: d.requireEyesClosed,
       requireText: d.requireText,
       requireAudio: d.requireAudio,
-      requireVideo: d.requireVideo,
+      // 正式测试必须真实录像——即使老师没勾视频，也强制要求，杜绝只交文字蒙混。
+      requireVideo: d.requireVideo || d.isFormalTest,
       requireHandwriting: d.requireHandwriting,
       graded: d.graded,
       maxAttempts: d.maxAttempts,
+      isFormalTest: d.isFormalTest,
       sentences,
     })
   }
