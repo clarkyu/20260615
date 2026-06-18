@@ -7,7 +7,7 @@ import * as assignments from '@/lib/repo/assignments'
 import * as offerings from '@/lib/repo/offerings'
 import * as bank from '@/lib/repo/bank'
 import * as submissions from '@/lib/repo/submissions'
-import { weakSentences, parsePerSentence, type AnalyticsSubmission } from '@/lib/domain/analytics'
+import { weakSentences, latestPhaseSubmissions } from '@/lib/domain/analytics'
 import type { AssignmentMeta, PhaseInput, SentenceRow } from '@/lib/repo/assignments'
 
 export type { AssignmentMeta }
@@ -142,23 +142,16 @@ export async function updateAssignment(
 // (the new assignment's edit page, or insights when there's nothing weak yet).
 export async function buildReviewAssignment(prisma: PrismaClient, offeringId: number): Promise<{ redirectTo: string }> {
   const list = await assignments.listWithSentencesForOffering(prisma, offeringId)
+  // Keyed per (assignment, phase, order): sentence orders repeat across phases.
   const textByKey = new Map<string, { text: string; translation: string | null }>()
-  for (const a of list) for (const s of a.sentences) textByKey.set(`${a.id}:${s.order}`, { text: s.text, translation: s.translation })
+  for (const a of list) for (const s of a.sentences) textByKey.set(`${a.id}:${s.phaseId ?? 0}:${s.order}`, { text: s.text, translation: s.translation })
 
-  const rawSubs = await submissions.listForOfferingLatestFirst(prisma, offeringId)
-  const seen = new Set<string>()
-  const subs: AnalyticsSubmission[] = []
-  for (const s of rawSubs) {
-    const k = `${s.studentId}:${s.assignmentId}`
-    if (seen.has(k)) continue
-    seen.add(k)
-    subs.push({ studentId: s.studentId, assignmentId: s.assignmentId, status: s.status, finalScore: s.finalScore, needsReview: s.needsReview, perSentence: parsePerSentence(s.aiResult) })
-  }
+  const phaseRows = latestPhaseSubmissions(await submissions.listForOfferingLatestFirst(prisma, offeringId))
 
   const picked: SentenceRow[] = []
   const used = new Set<string>()
-  for (const w of weakSentences(subs, 12)) {
-    const e = textByKey.get(`${w.assignmentId}:${w.order}`)
+  for (const w of weakSentences(phaseRows, 12)) {
+    const e = textByKey.get(`${w.assignmentId}:${w.phaseId ?? 0}:${w.order}`)
     if (e && !used.has(e.text)) {
       used.add(e.text)
       picked.push({ order: picked.length + 1, text: e.text, translation: e.translation })

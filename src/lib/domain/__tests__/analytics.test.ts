@@ -5,8 +5,22 @@ import {
   weakSentences,
   offeringSummary,
   parsePerSentence,
+  latestPhaseSubmissions,
+  collapsePhases,
   type AnalyticsSubmission,
+  type PhaseSubmission,
+  type RawPhaseRow,
 } from '@/lib/domain/analytics'
+
+const phaseSub = (o: Partial<PhaseSubmission> & Pick<PhaseSubmission, 'studentId' | 'assignmentId'>): PhaseSubmission => ({
+  phaseId: 1,
+  graded: true,
+  status: 'GRADED',
+  finalScore: null,
+  needsReview: false,
+  perSentence: [],
+  ...o,
+})
 
 const students = [
   { id: 1, name: '甲', studentNo: '001' },
@@ -85,16 +99,65 @@ describe('平时成绩 from practice', () => {
 describe('weakSentences', () => {
   it('ranks the hardest lines by average accuracy', () => {
     const subs = [
-      sub({ studentId: 1, assignmentId: 10, perSentence: [{ order: 1, accuracy: 0.9, completeness: 1 }, { order: 2, accuracy: 0.3, completeness: 1 }] }),
-      sub({ studentId: 2, assignmentId: 10, perSentence: [{ order: 1, accuracy: 0.8, completeness: 1 }, { order: 2, accuracy: 0.5, completeness: 1 }] }),
+      phaseSub({ studentId: 1, assignmentId: 10, perSentence: [{ order: 1, accuracy: 0.9, completeness: 1 }, { order: 2, accuracy: 0.3, completeness: 1 }] }),
+      phaseSub({ studentId: 2, assignmentId: 10, perSentence: [{ order: 1, accuracy: 0.8, completeness: 1 }, { order: 2, accuracy: 0.5, completeness: 1 }] }),
     ]
     const weak = weakSentences(subs)
-    expect(weak[0]).toMatchObject({ assignmentId: 10, order: 2, samples: 2 })
+    expect(weak[0]).toMatchObject({ assignmentId: 10, phaseId: 1, order: 2, samples: 2 })
     expect(weak[0].avgAccuracy).toBeCloseTo(0.4)
   })
 
+  it('does NOT merge the same order across different phases', () => {
+    const subs = [
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 1, perSentence: [{ order: 1, accuracy: 0.2, completeness: 1 }] }),
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 2, perSentence: [{ order: 1, accuracy: 0.9, completeness: 1 }] }),
+    ]
+    const weak = weakSentences(subs)
+    expect(weak).toHaveLength(2) // two distinct (phase, order=1) lines, not merged
+    expect(weak.map((w) => w.phaseId).sort()).toEqual([1, 2])
+  })
+
   it('is empty without perception data', () => {
-    expect(weakSentences([sub({ studentId: 1, assignmentId: 10 })])).toEqual([])
+    expect(weakSentences([phaseSub({ studentId: 1, assignmentId: 10 })])).toEqual([])
+  })
+})
+
+describe('latestPhaseSubmissions + collapsePhases', () => {
+  const raw = (o: Partial<RawPhaseRow> & Pick<RawPhaseRow, 'studentId' | 'assignmentId' | 'phaseId'>): RawPhaseRow => ({
+    status: 'GRADED', finalScore: null, needsReview: false, aiResult: null, phase: { graded: true }, ...o,
+  })
+
+  it('keeps the latest attempt per (student, assignment, phase)', () => {
+    // rows arrive latest-first within each phase group
+    const rows = [
+      raw({ studentId: 1, assignmentId: 10, phaseId: 1, finalScore: 90 }),
+      raw({ studentId: 1, assignmentId: 10, phaseId: 1, finalScore: 50 }), // older attempt, dropped
+      raw({ studentId: 1, assignmentId: 10, phaseId: 2, finalScore: 70 }),
+    ]
+    const phases = latestPhaseSubmissions(rows)
+    expect(phases).toHaveLength(2)
+    expect(phases.find((p) => p.phaseId === 1)!.finalScore).toBe(90)
+  })
+
+  it('collapses an assignment to the mean of its GRADED phases', () => {
+    const phases: PhaseSubmission[] = [
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 1, graded: true, finalScore: 80 }),
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 2, graded: true, finalScore: 60 }),
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 3, graded: false, finalScore: 10 }), // practice-only, excluded
+    ]
+    const [row] = collapsePhases(phases)
+    expect(row.finalScore).toBe(70) // mean(80, 60); the practice-only 10 is excluded
+    expect(row.status).not.toBe('DRAFT') // submitted
+  })
+
+  it('feeds the existing analytics: a 2-phase assignment scores its mean', () => {
+    const phases: PhaseSubmission[] = [
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 1, finalScore: 100 }),
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 2, finalScore: 0 }),
+    ]
+    const stats = assignmentStats([{ id: 10, title: 'A1' }], collapsePhases(phases), 1)
+    expect(stats[0].avgScore).toBe(50)
+    expect(stats[0].submitted).toBe(1) // one student, not two phase-rows
   })
 })
 

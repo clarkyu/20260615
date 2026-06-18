@@ -36,21 +36,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const students = await userRepo.listClassRoster(prisma, user.schoolId, classId)
   const submissions = await submissionRepo.listForAssignmentStudents(prisma, assignmentId, students.map((s) => s.id))
-  const latest = new Map<number, (typeof submissions)[number]>()
-  for (const s of submissions) if (!latest.has(s.studentId)) latest.set(s.studentId, s)
+
+  // Per-phase latest-first → keep the latest per (student, phase), grouped by student.
+  const seenPhase = new Set<string>()
+  const byStudent = new Map<number, (typeof submissions)[number][]>()
+  for (const s of submissions) {
+    const pk = `${s.studentId}:${s.phaseId ?? 0}`
+    if (seenPhase.has(pk)) continue
+    seenPhase.add(pk)
+    const arr = byStudent.get(s.studentId)
+    if (arr) arr.push(s)
+    else byStudent.set(s.studentId, [s])
+  }
+  const meanOf = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null)
+  const fmt = (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ')
 
   const rows: ScoreExportRow[] = students.map((st) => {
-    const sub = latest.get(st.id)
-    return {
-      studentNo: st.studentNo ?? '',
-      name: st.name ?? '',
-      className: cls.name,
-      status: sub ? STATUS[sub.status] ?? sub.status : '未提交',
-      aiScore: sub?.aiScore ?? null,
-      finalScore: sub?.finalScore ?? null,
-      feedback: sub?.feedback ?? '',
-      gradedAt: sub?.gradedAt ? sub.gradedAt.toISOString().slice(0, 16).replace('T', ' ') : '',
+    const phases = (byStudent.get(st.id) ?? []).sort((a, b) => (a.phase?.order ?? 0) - (b.phase?.order ?? 0))
+    if (phases.length === 0) {
+      return { studentNo: st.studentNo ?? '', name: st.name ?? '', className: cls.name, status: STATUS.DRAFT, aiScore: null, finalScore: null, feedback: '', gradedAt: '' }
     }
+    // Score = mean over the GRADED phases — a multi-phase assignment's single score.
+    const graded = phases.filter((p) => p.phase?.graded ?? true)
+    const finalScore = meanOf(graded.map((p) => p.finalScore).filter((v): v is number => v != null))
+    const aiScore = meanOf(graded.map((p) => p.aiScore).filter((v): v is number => v != null))
+    const status = graded.length > 0 && graded.every((p) => p.status === 'GRADED') ? STATUS.GRADED : phases.some((p) => p.status === 'FLAGGED') ? STATUS.FLAGGED : STATUS.UPLOADED
+    const multi = phases.length > 1
+    const feedback = phases
+      .filter((p) => p.feedback)
+      .map((p) => (multi ? `【${p.phase?.title?.trim() || `环节${p.phase?.order ?? ''}`}】${p.feedback}` : p.feedback))
+      .join('\n')
+    const lastGraded = phases.map((p) => p.gradedAt).filter((v): v is Date => v != null).sort((a, b) => b.getTime() - a.getTime())[0]
+    return { studentNo: st.studentNo ?? '', name: st.name ?? '', className: cls.name, status, aiScore, finalScore, feedback, gradedAt: lastGraded ? fmt(lastGraded) : '' }
   })
 
   const buf = await buildScoreWorkbook(cls.name, rows)
