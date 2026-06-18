@@ -20,6 +20,8 @@ import {
   offeringSummary,
   latestPhaseSubmissions,
   collapsePhases,
+  RISK_SCORE,
+  RISK_SUBMIT_RATE,
 } from '@/lib/domain/analytics'
 
 export default async function OfferingInsightsPage({ params }: { params: Promise<{ offeringId: string }> }) {
@@ -98,6 +100,7 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
               <AlertTriangle className="h-4 w-4 text-[hsl(var(--warning))]" />{t('insights.riskTitle')}
             </h2>
+            <p className="text-xs text-muted-foreground">{t('insights.riskHint', { score: RISK_SCORE, rate: Math.round(RISK_SUBMIT_RATE * 100) })}</p>
             {profiles.filter((p) => p.atRisk).length === 0 ? (
               <Card><CardContent className="py-6 text-center text-sm text-success">{t('insights.noRisk')}</CardContent></Card>
             ) : (
@@ -143,7 +146,8 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
                           </div>
                         </div>
                         <div className="mt-0.5 pl-[3.25rem] text-xs text-muted-foreground">
-                          {text ? <span className="text-foreground">{text}</span> : `${titleById.get(w.assignmentId)} · ${t('insights.lineN', { n: w.order })}`}
+                          {text ? <span className="text-foreground">{text}</span> : t('insights.lineN', { n: w.order })}
+                          <span className="text-muted-foreground"> · {titleById.get(w.assignmentId)}</span>
                         </div>
                       </div>
                     )
