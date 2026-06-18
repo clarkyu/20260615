@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library } from 'lucide-react'
-import { requireStaff } from '@/lib/auth'
+import { requireStaff, availablePanels } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { runAfterResponse } from '@/lib/cf'
 import { drainGradingJobs } from '@/lib/domain/jobs'
@@ -12,17 +12,26 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
 import { PlatformHome } from './platform-home'
+import { PanelSwitcher } from './panel-switcher'
 
 export default async function DashboardPage() {
   const user = await requireStaff()
   const prisma = await getDb()
   const { t } = await getT()
 
-  // A super-admin is platform-level (no school of their own) — show the platform
-  // console, never the "create your school" funnel.
-  if (user.role === 'SUPER_ADMIN') {
+  // The user may focus their view down to a lower-role panel; render by panelRole.
+  const panels = availablePanels(user.role, user.schoolId)
+  const switcher = panels.length > 1 ? <PanelSwitcher panels={panels} active={user.panelRole} /> : null
+
+  // The platform console (super-admin panel) — no school of its own.
+  if (user.panelRole === 'SUPER_ADMIN') {
     const schools = await schoolRepo.listAllWithCounts(prisma)
-    return <PlatformHome name={user.name || user.email || ''} schools={schools} />
+    return (
+      <div className="space-y-4 py-2">
+        {switcher}
+        <PlatformHome name={user.name || user.email || ''} schools={schools} />
+      </div>
+    )
   }
 
   const me = await userRepo.findWithSchool(prisma, user.userId)
@@ -49,8 +58,8 @@ export default async function DashboardPage() {
   await runAfterResponse(async () => drainGradingJobs(await getDb()))
 
   const { students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups, needRows } =
-    await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.role)
-  const isAdmin = user.role === 'SCHOOL_ADMIN'
+    await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.panelRole)
+  const isAdmin = user.panelRole === 'SCHOOL_ADMIN'
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows
     .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, teacher: a.offering.teacher?.name ?? null, pending: countById.get(a.id) ?? 0 }))
@@ -64,6 +73,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-5 py-2">
+      {switcher}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{me.school.name}</h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

@@ -9,6 +9,30 @@ export interface CurrentUser {
   email?: string
   studentNo?: string | null
   schoolId?: number | null
+  // The role-panel the user is currently viewing (≤ role). UI surfaces (nav/dashboard
+  // scope) follow this; permission checks always use `role`.
+  panelRole: Role
+}
+
+const ROLE_RANK: Record<Role, number> = { STUDENT: 0, TEACHER: 1, SCHOOL_ADMIN: 2, SUPER_ADMIN: 3 }
+
+// A super-admin/school-admin can focus their view down to a lower-role panel ("act as
+// teacher", etc.). The school-scoped panels (school-admin / teacher) require a school,
+// so a school-less super-admin only ever sees the platform panel.
+export function availablePanels(role: Role, schoolId: number | null | undefined): Role[] {
+  if (role === 'STUDENT') return ['STUDENT']
+  const out: Role[] = []
+  if (role === 'SUPER_ADMIN') out.push('SUPER_ADMIN')
+  if (schoolId) {
+    if (ROLE_RANK['SCHOOL_ADMIN'] <= ROLE_RANK[role]) out.push('SCHOOL_ADMIN')
+    if (ROLE_RANK['TEACHER'] <= ROLE_RANK[role]) out.push('TEACHER')
+  }
+  return out.length ? out : [role]
+}
+
+function resolvePanel(role: Role, schoolId: number | null | undefined, activeRole: Role | undefined): Role {
+  if (!activeRole || activeRole === role) return role
+  return availablePanels(role, schoolId).includes(activeRole) ? activeRole : role
 }
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -21,6 +45,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     email: session.email,
     studentNo: session.studentNo,
     schoolId: session.schoolId,
+    panelRole: resolvePanel(session.role, session.schoolId, session.activeRole),
   }
 }
 
