@@ -87,6 +87,7 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
         initialRecorded={initialRecorded}
         nextHref={nextHref}
         nextLabel={nextLabel}
+        isFormalTest={phase.isFormalTest}
       />
     )
   }
@@ -117,6 +118,7 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       latestTranscript={graded.transcript}
       nextHref={nextHref}
       nextLabel={nextLabel}
+      isFormalTest={phase.isFormalTest}
     />
   )
 }

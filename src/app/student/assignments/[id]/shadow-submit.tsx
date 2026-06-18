@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { FormalTestBanner } from './submission-flow'
 
 export interface ShadowChunk {
   english: string
@@ -116,6 +117,7 @@ export function ShadowSubmit(props: {
   initialRecorded: number[]
   nextHref?: string | null
   nextLabel?: string | null
+  isFormalTest?: boolean
 }) {
   const t = useT()
   const router = useRouter()
@@ -255,6 +257,8 @@ export function ShadowSubmit(props: {
         <h1 className="text-xl font-bold tracking-tight">{props.title}</h1>
         {props.instructions ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{props.instructions}</p> : null}
       </div>
+
+      {props.isFormalTest ? <FormalTestBanner /> : null}
 
       <Card>
         <CardContent className="space-y-3 p-3">

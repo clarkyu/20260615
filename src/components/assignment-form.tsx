@@ -29,6 +29,7 @@ export interface PhaseInitial {
   requireHandwriting: boolean
   graded: boolean
   maxAttempts: number
+  isFormalTest: boolean
 }
 
 export interface AssignmentInitial {
@@ -77,6 +78,7 @@ interface PhaseState {
   requireHandwriting: boolean
   graded: boolean
   maxAttempts: number
+  isFormalTest: boolean
 }
 
 // A fresh phase. `bank` = there's a published set this phase can draw from. `recite`
@@ -97,6 +99,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     requireHandwriting: false,
     graded: true,
     maxAttempts: 3,
+    isFormalTest: false,
   }
 }
 
@@ -188,6 +191,7 @@ export function AssignmentForm({
       requireHandwriting: p.requireHandwriting,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
+      isFormalTest: p.isFormalTest,
     })),
   )
 
@@ -465,6 +469,12 @@ function PhaseCard({
           <span>{t('asg.graded')}<span className="block text-xs text-muted-foreground">{t('asg.gradedHint')}</span></span>
         </label>
       </div>
+
+      {/* 正式测试·强防作弊分层 */}
+      <label className="flex items-start gap-2.5 rounded-xl border border-input p-3 text-sm">
+        <input type="checkbox" checked={phase.isFormalTest} onChange={(e) => onPatch({ isFormalTest: e.target.checked })} className="mt-0.5 h-4 w-4 accent-primary" />
+        <span>{t('asg.formalTest')}<span className="block text-xs text-muted-foreground">{t('asg.formalTestHint')}</span></span>
+      </label>
     </div>
   )
 }

@@ -38,6 +38,7 @@ export interface PhaseInput {
   requireHandwriting: boolean
   graded: boolean
   maxAttempts: number
+  isFormalTest: boolean
   sentences: SentenceRow[]
 }
 
@@ -128,6 +129,7 @@ function phaseData(p: PhaseInput) {
     requireHandwriting: p.requireHandwriting,
     graded: p.graded,
     maxAttempts: p.maxAttempts,
+    isFormalTest: p.isFormalTest,
   }
 }
 
@@ -224,6 +226,7 @@ export function createReview(prisma: PrismaClient, offeringId: number, title: st
       requireHandwriting: false,
       graded: true,
       maxAttempts: 3,
+      isFormalTest: false,
       sentences,
     },
   ])
