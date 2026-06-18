@@ -221,10 +221,12 @@ export function GradingClient(props: {
             <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} className="h-4 w-4 accent-[hsl(var(--primary))]" />
             {t('grade.advanced')}
           </label>
-          <div className="space-y-1.5">
-            <Label htmlFor="rubric">{t('grade.rubric')}</Label>
-            <Textarea id="rubric" value={rubric} onChange={(e) => setRubric(e.target.value)} rows={3} placeholder={t('grade.rubricPh')} />
-          </div>
+          {advanced ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="rubric">{t('grade.rubric')}</Label>
+              <Textarea id="rubric" value={rubric} onChange={(e) => setRubric(e.target.value)} rows={3} placeholder={t('grade.rubricPh')} />
+            </div>
+          ) : null}
           {pendingCount > 0 ? (
             <Button variant="secondary" disabled={pending}
               onClick={() => props.rows.filter((r) => r.status === 'UPLOADED' || r.status === 'FLAGGED').forEach((r) => grade(r.id))}>
