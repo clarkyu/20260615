@@ -255,15 +255,18 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
   })
 }
 
-// Submitted (non-DRAFT) submission count per assignment — a plain groupBy (the D1
-// adapter doesn't do filtered relation `_count`s).
+// How many DISTINCT students have submitted (any phase) per assignment — counts
+// students, not per-phase submission rows, so a multi-phase assignment isn't inflated
+// (20 students × 3 phases must read 20, not 60).
 export async function submittedCountByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<Map<number, number>> {
-  const groups = await prisma.submission.groupBy({
-    by: ['assignmentId'],
+  const rows = await prisma.submission.findMany({
     where: { status: { not: 'DRAFT' }, assignment: { offering: staffScope(schoolId, userId, role) } },
-    _count: { _all: true },
+    select: { assignmentId: true, studentId: true },
+    distinct: ['assignmentId', 'studentId'],
   })
-  return new Map(groups.map((g) => [g.assignmentId, g._count._all]))
+  const m = new Map<number, number>()
+  for (const r of rows) m.set(r.assignmentId, (m.get(r.assignmentId) ?? 0) + 1)
+  return m
 }
 
 // Pending-review count per assignment (the actionable chip on the 作业 menu).
