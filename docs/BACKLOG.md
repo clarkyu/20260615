@@ -10,6 +10,35 @@
 > 76→#181 · 77→#182 · 78→#183 · 79→#184 · 80→#185 · 81→#186 · 82→#187。
 > 限流 DO 与原生 Queues 经评估**有意不做**（边际收益 vs. 不可验证的部署风险，见 P4）。
 
+## 第二波 · 全应用复审后的打磨（增量83–102）· ✅ 已完成
+
+> 来源：P1–P4 收尾后又做了一轮全应用复审（留存覆盖、导入 bug、安全复审、a11y、
+> 运维、性能、体验）。增量↔PR 对照：PR# = 增量# + 106（如 83→#189 … 102→#208）。
+
+| 增量 | 标题 | 范围 |
+|---|---|---|
+| 83 | 留存清理覆盖补全 | 留存清理同时扫 Submission＋ShadowTake＋PracticeAttempt（媒体一并清 R2） |
+| 84 | README 刷新＋定时/存储测试＋config getters | cron 鉴权门 + `storage.deleteObject` + 留存天数测试；config 加 openai/anthropic getters |
+| 85 | 专业可无院系导入 | `Major.departmentId` 改可空（onDelete SetNull）；导入「专业无院系」不再丢专业（双轨迁移 0037） |
+| 86 | 修复校内按 id 越权（IDOR） | 列表已按角色 scope 但「按 id」明细/编辑/删除/评分/取媒体只按校 scope；统一到 repo 层 staffScope（TEACHER 限本人 offering） |
+| 87 | 评分编排/逐句/批量改分回归测试 | `autoGradeSubmission` 状态机 + `gradeShadowTake` 加权/NaN + `applyBatchOverride` 写入越权边界 |
+| 88 | a11y·表单可访问名称 | 26 个 placeholder-only 控件补 `aria-label`（复用既有 key） |
+| 89 | a11y·动态状态 aria-live | 提交中/评分中/上传中/逐句进度/倒计时补 live region（每秒计时器刻意不加） |
+| 90 | a11y·弹窗焦点/键盘 | 录制授权弹窗补 aria-label/Esc/焦点陷阱；题库下拉补 Esc/aria-expanded |
+| 91 | 运维/部署 runbook | 新增 `docs/OPERATIONS.md`（环境变量全表、迁移回滚、定时任务、密钥轮换、排障、灾备） |
+| 92 | 错误边界 | 新增 `not-found.tsx` + `global-error.tsx`（双语、不依赖 provider） |
+| 93 | 登录极光背景＋补全 reduced-motion | auth 页极光渐变（纯 CSS/GPU/装饰）；reduce 下停所有循环动画/过渡 |
+| 94 | 权限变更守卫＋删除越权回归测试 | `setStaffRoleInSchool` 提权守卫 + offering/assignment `deleteForSchool` 越权 |
+| 95–96 | 按页本地化标题 | 根模板 `%s · 你好！作业` + 三大着陆页与各导航页 `generateMetadata`（复用 nav.* key） |
+| 97 | 性能审计＋跟读预签名并行 | 全应用无数据库 N+1；`getShadowTakeUrls` 串行签名改 `Promise.all` |
+| 98–99 | 详情页动态标题 | 作业评阅/课头/学生作业/师生详情页标签显示具体名称（按归属 scope，防泄露） |
+| 100–101 | 主要路由加载骨架 | 底部导航 8 个目的地加 `loading.tsx`（Suspense shimmer，reduce 下静止） |
+| 102 | 班级删除孤儿清理回归测试 | `deleteWithStudents` 唯一会删学生的分支（最后一个班才删人）＋租户 scope |
+
+> 复审为「非问题/已覆盖/有意不做」者不再入队：存储预签名/SSRF/注入复审 0 critical；
+> 数据库查询无 N+1；analytics、roster（含「专业无院系」）测试已充分；`upsertCourse`
+> 等纯 upsert 包装为同义反复、不补测。Parked B4 仍待「院系/专业删除入口」触发。
+
 ## P1 · 纯应用层，小而高价值（增量69–73）· ✅ 已完成
 
 | 增量 | 标题 | 来源 | 范围 / 做法 |
