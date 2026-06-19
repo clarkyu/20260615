@@ -1,10 +1,25 @@
+import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
-import { requireRole } from '@/lib/auth'
+import { requireRole, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import * as userRepo from '@/lib/repo/users'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { PhaseSubmit } from './phase-submit'
 import { PhaseList } from './phase-list'
+
+// Tab title = the assignment's title, scoped to the student's own classes exactly
+// like the page (a guessed id outside their classes can't leak a title).
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const id = Number((await params).id)
+  if (!Number.isInteger(id)) return {}
+  const user = await getCurrentUser()
+  if (!user || user.role !== 'STUDENT') return {}
+  const prisma = await getDb()
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  if (classIds.length === 0) return {}
+  const overview = await assignmentRepo.findForStudentPhaseList(prisma, id, classIds, user.userId)
+  return overview ? { title: overview.title } : {}
+}
 
 export default async function StudentAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
