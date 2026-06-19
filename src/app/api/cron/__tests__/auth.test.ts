@@ -1,0 +1,28 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- minimal request stub */
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { POST as drainPOST } from '../drain/route'
+import { POST as retentionPOST } from '../retention/route'
+
+// Minimal request stub — both handlers only read the Authorization header before the gate.
+function req(auth?: string): any {
+  return { headers: { get: (k: string) => (k.toLowerCase() === 'authorization' ? auth ?? null : null) } }
+}
+
+beforeEach(() => { delete process.env.CRON_SECRET })
+afterEach(() => { delete process.env.CRON_SECRET })
+
+describe.each([
+  ['drain', drainPOST],
+  ['retention', retentionPOST],
+])('POST /api/cron/%s — auth gate', (_name, POST) => {
+  it('401 when CRON_SECRET is not configured (even with a bearer)', async () => {
+    expect((await POST(req('Bearer anything'))).status).toBe(401)
+  })
+
+  it('401 when the bearer is missing or wrong', async () => {
+    process.env.CRON_SECRET = 's3cret'
+    expect((await POST(req())).status).toBe(401)
+    expect((await POST(req('Bearer wrong'))).status).toBe(401)
+    expect((await POST(req('s3cret'))).status).toBe(401) // missing "Bearer " prefix
+  })
+})

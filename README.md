@@ -25,7 +25,7 @@
 ## AI 评阅层（`src/lib/ai/`）
 
 - `registry.ts`：模型注册表（Gemini/Qwen/MiniMax/GPT-4o/Whisper/DeepSeek/Claude）+ 能力/模态标签 + 预设
-- `grade.ts`：两段式编排（感知→评分）；`adapters.ts`：各家适配器（**当前占位桩**，整条流程已通，接真实 key 即替换）
+- `grade.ts`：两段式编排（感知→评分）；`adapters.ts`：各家真实适配器（Gemini/Qwen/MiniMax/DeepSeek/GPT-4o/Whisper/Claude，缺 key 优雅降级）
 - DeepSeek 仅做②评分（纯文本）；Gemini 一把梭最适合。专用发音引擎为二期
 
 ## 本地开发
@@ -71,5 +71,6 @@ npm run cf:deploy            # opennextjs-cloudflare deploy
 - ✅ Phase 0：OpenNext + Wrangler 工具链；`cf:build` 产出 Workers 包
 - ✅ Phase 1（核心）：DB→D1（Prisma adapter，请求级 `getDb()`）；交互式事务改 D1 batch
 - ✅ Phase 2：tokens/口令→WebCrypto(PBKDF2)；邮件→Resend；预签名→aws4fetch
-- ✅ Phase 3：接真实 AI（Gemini / Qwen / MiniMax / DeepSeek / GPT-4o 实接，Whisper / Claude 占位并优雅降级）；Excel 导入/导出走 SheetJS；CI（构建+测试）与「合并 main 自动迁移+部署」（见 `.github/workflows/ci.yml`、`deploy.yml`）
-- ⏭️ 待办（完整优先级队列见 `docs/BACKLOG.md`）：限流改 Durable Object（当前进程内 Map，serverless 下偏弱）；后台评阅→Queues/Workflows；wrangler dev + 本地 D1 端到端实测；真实 PWA 图标 / 隐私同意 / 视频留存
+- ✅ Phase 3：接真实 AI（Gemini / Qwen / MiniMax / DeepSeek / GPT-4o / Whisper / Claude **均已实接**，缺 key 优雅降级）；Excel 导入/导出走 SheetJS；CI（构建+测试）与「合并 main 自动迁移+部署」（见 `.github/workflows/ci.yml`、`deploy.yml`）
+- ✅ Phase 4：真实 PWA 图标、隐私同意告知、视频留存定期清理、后台评阅定时排空（安全 drain）均已落地；媒体清理覆盖提交/跟读/练一练/题库视频（详见 `docs/BACKLOG.md`）
+- ⏭️ 待办：wrangler dev + 本地 D1 端到端实测。**限流 Durable Object / 原生 Cloudflare Queues 经评估有意不做**——限流已是 D1 共享存储（跨 isolate 一致），评阅定时排空已用安全方案替代；二者均需不可本地验证的 OpenNext Worker 入口改造，性价比不足（详见 `docs/BACKLOG.md` P4）
