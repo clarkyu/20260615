@@ -48,6 +48,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (arr) arr.push(s)
     else byStudent.set(s.studentId, [s])
   }
+  // Graded phases present across the class, ordered. When there's more than one, the
+  // export adds a score column per phase so the single mean isn't the only number.
+  const phaseMeta = new Map<number, { order: number; title: string }>()
+  for (const s of submissions) {
+    if (s.phaseId != null && (s.phase?.graded ?? true) && !phaseMeta.has(s.phaseId)) {
+      phaseMeta.set(s.phaseId, { order: s.phase?.order ?? 0, title: s.phase?.title?.trim() || `环节${s.phase?.order ?? ''}` })
+    }
+  }
+  const phaseList = [...phaseMeta.entries()].map(([pid, m]) => ({ id: pid, ...m })).sort((a, b) => a.order - b.order)
+  const multiPhase = phaseList.length > 1
+
   const meanOf = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null)
   const fmt = (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ')
 
@@ -67,10 +78,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .map((p) => (multi ? `【${p.phase?.title?.trim() || `环节${p.phase?.order ?? ''}`}】${p.feedback}` : p.feedback))
       .join('\n')
     const lastGraded = phases.map((p) => p.gradedAt).filter((v): v is Date => v != null).sort((a, b) => b.getTime() - a.getTime())[0]
-    return { studentNo: st.studentNo ?? '', name: st.name ?? '', className: cls.name, status, aiScore, finalScore, feedback, gradedAt: lastGraded ? fmt(lastGraded) : '' }
+    const phaseScores = multiPhase
+      ? phaseList.map((gp) => phases.find((p) => p.phaseId === gp.id)?.finalScore ?? null)
+      : undefined
+    return { studentNo: st.studentNo ?? '', name: st.name ?? '', className: cls.name, status, aiScore, finalScore, phaseScores, feedback, gradedAt: lastGraded ? fmt(lastGraded) : '' }
   })
 
-  const buf = await buildScoreWorkbook(cls.name, rows)
+  const buf = await buildScoreWorkbook(cls.name, rows, multiPhase ? phaseList.map((p) => p.title) : [])
   const filename = `${assignment.title}-${cls.name}.xlsx`
   return new NextResponse(new Uint8Array(buf), {
     headers: {

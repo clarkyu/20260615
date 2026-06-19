@@ -167,6 +167,9 @@ export interface ScoreExportRow {
   status: string
   aiScore: number | null
   finalScore: number | null
+  // Per-graded-phase final scores, aligned to the `phaseLabels` passed to
+  // buildScoreWorkbook. Only set for multi-phase exports; empty/missing → blank cells.
+  phaseScores?: (number | null)[]
   feedback: string
   gradedAt: string
 }
@@ -192,14 +195,27 @@ export function buildGradebookWorkbook(className: string, rows: GradebookRow[]):
   return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
 }
 
-export function buildScoreWorkbook(className: string, rows: ScoreExportRow[]): Uint8Array {
-  const header = ['学号 ID', '姓名 Name', '班级 Class', '状态 Status', 'AI 评分 AI', '最终得分 Final', '评语 Feedback', '评阅时间 Graded at']
+// `phaseLabels` (when non-empty) inserts one score column per graded phase between
+// 状态 and AI, and relabels the single score column as a mean — so a multi-phase
+// assignment shows the per-phase breakdown instead of one opaque averaged number.
+export function buildScoreWorkbook(className: string, rows: ScoreExportRow[], phaseLabels: string[] = []): Uint8Array {
+  const multi = phaseLabels.length > 0
+  const finalHeader = multi ? '总分·各环节均分 Mean' : '最终得分 Final'
+  const header = [
+    '学号 ID', '姓名 Name', '班级 Class', '状态 Status',
+    ...phaseLabels.map((t, i) => t || `环节${i + 1}`),
+    'AI 评分 AI', finalHeader, '评语 Feedback', '评阅时间 Graded at',
+  ]
   const aoa: (string | number | null)[][] = [
     header,
-    ...rows.map((r) => [r.studentNo, r.name, r.className, r.status, r.aiScore, r.finalScore, r.feedback, r.gradedAt]),
+    ...rows.map((r) => [
+      r.studentNo, r.name, r.className, r.status,
+      ...phaseLabels.map((_, i) => r.phaseScores?.[i] ?? null),
+      r.aiScore, r.finalScore, r.feedback, r.gradedAt,
+    ]),
   ]
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 48 }, { wch: 18 }]
+  ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, ...phaseLabels.map(() => ({ wch: 8 })), { wch: 8 }, { wch: 10 }, { wch: 48 }, { wch: 18 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, (className || '成绩').slice(0, 31))
   return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
