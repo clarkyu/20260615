@@ -1,7 +1,8 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { Plus, Pencil, ChevronRight, ChevronLeft, ClipboardList, TrendingUp } from 'lucide-react'
-import { requireStaff } from '@/lib/auth'
+import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as offeringRepo from '@/lib/repo/offerings'
@@ -9,6 +10,20 @@ import { LocalDate } from '@/components/local-date'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+
+// Tab title = the course name for this offering. Scoped like the page (own offering
+// for a TEACHER) so a guessed id can't leak a course name; generic menu name otherwise.
+export async function generateMetadata({ params }: { params: Promise<{ offeringId: string }> }): Promise<Metadata> {
+  const { t } = await getT()
+  const fallback = { title: t('nav.teaching') }
+  const id = Number((await params).offeringId)
+  if (!Number.isInteger(id)) return fallback
+  const user = await getCurrentUser()
+  if (!user?.schoolId) return fallback
+  const prisma = await getDb()
+  const o = await offeringRepo.findForSchoolWithCourse(prisma, id, user.schoolId, user.userId, user.role)
+  return o ? { title: o.course.name } : fallback
+}
 
 export default async function OfferingPage({ params }: { params: Promise<{ offeringId: string }> }) {
   const { offeringId: oid } = await params
