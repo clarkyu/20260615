@@ -23,6 +23,7 @@ type CommitState = {
   created?: number
   updated?: number
   skipped?: number
+  failed?: number
   classesTouched?: number
 }
 

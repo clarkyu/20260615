@@ -12,7 +12,7 @@ function parsed(rows: RosterRow[]): ParsedRoster {
 
 // Stateful in-memory stand-in for the prisma calls importRoster makes. Auto-assigns
 // ids for created departments/majors/classes and counts the student writes.
-function rosterFake(opts: { existingStudents?: { id: number; studentNo: string }[]; takenEmails?: string[]; createManyThrows?: boolean; createThrowsFor?: string[] } = {}) {
+function rosterFake(opts: { existingStudents?: { id: number; studentNo: string }[]; takenEmails?: string[]; createManyThrows?: boolean; createThrowsFor?: string[]; createAlwaysThrowsFor?: string[] } = {}) {
   let id = 1000
   const calls = { createMany: 0, userCreate: 0, userUpdate: 0, deptCreate: 0, majorCreate: 0, classCreate: 0, scCreateMany: 0, scCreate: 0 }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,7 +31,12 @@ function rosterFake(opts: { existingStudents?: { id: number; studentNo: string }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       createMany: async ({ data }: any) => { calls.createMany++; if (opts.createManyThrows) throw new Error('P2002'); return { count: data.length } },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      create: async ({ data }: any) => { calls.userCreate++; if (opts.createThrowsFor?.includes(data.studentNo) && data.email != null) throw new Error('P2002'); return {} },
+      create: async ({ data }: any) => {
+        calls.userCreate++
+        if (opts.createAlwaysThrowsFor?.includes(data.studentNo)) throw new Error('P2002') // 学号 collision, even without email
+        if (opts.createThrowsFor?.includes(data.studentNo) && data.email != null) throw new Error('P2002')
+        return {}
+      },
       update: async () => { calls.userUpdate++; return {} },
     },
     studentClass: {
@@ -50,7 +55,7 @@ describe('importRoster', () => {
   it('creates departments/majors/classes and new students (happy path)', async () => {
     const db = rosterFake()
     const res = await importRoster(db, 1, parsed([row({ studentNo: '001', email: 'a@x.com' }), row({ studentNo: '002', name: 'B' })]))
-    expect(res).toEqual({ created: 2, updated: 0, skipped: 0, classesTouched: 1 })
+    expect(res).toEqual({ created: 2, updated: 0, skipped: 0, failed: 0, classesTouched: 1 })
     expect(db._calls.deptCreate).toBe(1)
     expect(db._calls.majorCreate).toBe(1)
     expect(db._calls.classCreate).toBe(1)
@@ -79,6 +84,15 @@ describe('importRoster', () => {
     expect(db._calls.createMany).toBe(1) // attempted once, threw
     expect(db._calls.userCreate).toBe(2) // then per-row
     expect(res.created).toBe(2)
+  })
+
+  it('reports rows that still collide on 学号 as failed (not silently dropped)', async () => {
+    // createMany throws; on per-row, 001 collides even without an email (a concurrent
+    // import already took that 学号) → it can't be created and is counted in `failed`.
+    const db = rosterFake({ createManyThrows: true, createAlwaysThrowsFor: ['001'] })
+    const res = await importRoster(db, 1, parsed([row({ studentNo: '001' }), row({ studentNo: '002', name: 'B' })]))
+    expect(res.created).toBe(1) // only 002 lands
+    expect(res.failed).toBe(1) // 001 surfaced, not silently missing
   })
 
   it('drops a colliding email but keeps the student on per-row retry', async () => {
