@@ -32,7 +32,11 @@ export default function ForgotPasswordPage() {
           <Input id="email" name="email" type="email" autoComplete="email" required placeholder="you@example.com" />
         </div>
         {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
-        {state?.success ? <FormMessage tone="success">{t('forgot.sent')}</FormMessage> : null}
+        {state?.emailUnavailable ? (
+          <FormMessage>{t('forgot.emailUnavailable')}</FormMessage>
+        ) : state?.success ? (
+          <FormMessage tone="success">{t('forgot.sent')}</FormMessage>
+        ) : null}
         <Button type="submit" disabled={isPending} size="lg" className="w-full">
           {isPending ? t('forgot.sending') : t('forgot.send')}
         </Button>

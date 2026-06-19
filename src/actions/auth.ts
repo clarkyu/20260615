@@ -8,6 +8,7 @@ import { requireAuth, requireStaff } from '@/lib/auth'
 import { hashPassword, verifyPassword, fakeVerifyPassword } from '@/lib/password'
 import { getSession } from '@/lib/session'
 import { sendVerificationEmail, sendPasswordResetEmail } from '@/lib/email'
+import { emailConfigured } from '@/lib/config'
 import { getAppUrl } from '@/lib/app-url'
 import { normalizeEmail } from '@/lib/utils'
 import { generateToken, hashToken } from '@/lib/tokens'
@@ -30,7 +31,7 @@ import {
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000
 const RESET_TTL_MS = 60 * 60 * 1000
 
-type ActionState = { error?: string; success?: boolean; needsVerification?: boolean }
+type ActionState = { error?: string; success?: boolean; needsVerification?: boolean; emailUnavailable?: boolean }
 
 // Resolve the school from either a dropdown pick (schoolId) or a typed code.
 async function resolveSchool(prisma: PrismaClient, formData: FormData) {
@@ -218,6 +219,13 @@ export async function requestPasswordReset(prevState: unknown, formData: FormDat
   const prisma = await getDb()
   const email = normalizeEmail((formData.get('email') as string) ?? '')
   if (!email) return { error: t('err.invalidEmail') }
+
+  // If this deployment can't send email at all, say so up front. This is gated on
+  // CONFIG (not on whether the account exists or a send succeeded), so the response is
+  // identical for every address — it never leaks account existence. Transient send
+  // failures when email IS configured stay uniformly "success" (logged server-side) to
+  // preserve that anti-enumeration property.
+  if (!emailConfigured()) return { success: true, emailUnavailable: true }
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (user && user.email) {
