@@ -1,9 +1,7 @@
 import type {
   JudgeInput,
   JudgeResult,
-  PerceptionInput,
   PerceptionProvider,
-  PerceptionResult,
   JudgeProvider,
   Provider,
 } from './types'
@@ -16,38 +14,13 @@ import {
   openaiPerception,
   openaiJudge,
 } from './providers/openai-compat'
+import { whisperPerception } from './providers/whisper'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUB adapters. These return deterministic mock results so the full grading
-// flow (queue → perceive → judge → store → review) works end to end before any
-// real API keys are wired. Each provider gets its own real implementation later;
-// the registry + orchestrator already route to the right provider/stage.
+// STUB judge adapter. Returns a deterministic mock so the full grading flow works
+// end to end before the Claude judge is wired. The registry + orchestrator already
+// route to the right provider/stage.
 // ─────────────────────────────────────────────────────────────────────────────
-
-class StubPerception implements PerceptionProvider {
-  constructor(private readonly provider: Provider) {}
-
-  async perceive(input: PerceptionInput, modelId: string): Promise<PerceptionResult> {
-    const perSentence = input.referenceSentences.map((s) => ({
-      order: s.order,
-      spokenText: s.text,
-      completeness: 1,
-      accuracy: 0.9,
-    }))
-    return {
-      transcript: input.referenceSentences.map((s) => s.text).join(' '),
-      perSentence,
-      pronunciationImpression: `[stub:${this.provider}/${modelId}] 发音清晰、流利度尚可（占位）`,
-      observations: {
-        eyesClosed: input.requireEyesClosed ? true : undefined,
-        readingSuspected: false,
-        facePresent: true,
-        continuousTake: true,
-        notes: '占位感知结果，待接入真实模型。',
-      },
-    }
-  }
-}
 
 class StubJudge implements JudgeProvider {
   constructor(private readonly provider: Provider) {}
@@ -72,8 +45,7 @@ const perceptionProviders: Partial<Record<Provider, PerceptionProvider>> = {
   gemini: geminiPerception,
   qwen: qwenPerception,
   openai: openaiPerception,
-  // Stub (to be implemented):
-  whisper: new StubPerception('whisper'),
+  whisper: whisperPerception,
 }
 
 const judgeProviders: Partial<Record<Provider, JudgeProvider>> = {

@@ -1,4 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// Whisper is now a real transcription provider (needs audio); mock its perceive so this
+// stays a pure pipeline test (perceive → judge → result) without a network call.
+vi.mock('@/lib/ai/providers/whisper', () => ({
+  whisperPerception: {
+    perceive: async (input: { referenceSentences: { order: number; text: string }[] }) => ({
+      transcript: input.referenceSentences.map((s) => s.text).join(' '),
+      perSentence: input.referenceSentences.map((s) => ({ order: s.order, spokenText: s.text, completeness: 1, accuracy: 0.9 })),
+      observations: {},
+    }),
+  },
+}))
+
 import { gradePractice } from '@/lib/domain/practice'
 import { isUnavailable } from '@/lib/domain/grading'
 
@@ -20,7 +33,7 @@ describe('isUnavailable', () => {
 describe('gradePractice', () => {
   it('returns a graded outcome from the stub pipeline', async () => {
     const out = await gradePractice({
-      perceptionModel: 'whisper-1', // StubPerception
+      perceptionModel: 'whisper-1', // mocked perception (above)
       judgeModel: 'claude-opus-4-8', // StubJudge
       rubric: '按完整度、准确度评分。',
       referenceSentences: [{ order: 1, text: '床前明月光' }],
