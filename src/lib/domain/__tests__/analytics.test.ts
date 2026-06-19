@@ -51,6 +51,11 @@ describe('assignmentStats', () => {
     expect(a1).toMatchObject({ submitted: 2, total: 2, avgScore: 70 })
     expect(a2).toMatchObject({ submitted: 0, avgScore: null })
   })
+
+  it('treats a MISSING (缺交) marker as not submitted and unscored', () => {
+    const [a1] = assignmentStats(assignments, [sub({ studentId: 1, assignmentId: 10, status: 'MISSING', finalScore: null })], 3)
+    expect(a1).toMatchObject({ submitted: 0, avgScore: null })
+  })
 })
 
 describe('studentProfiles', () => {

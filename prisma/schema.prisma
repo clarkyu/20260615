@@ -20,6 +20,7 @@ enum SubmissionStatus {
   GRADED
   FLAGGED
   FAILED
+  MISSING
 }
 
 model School {
