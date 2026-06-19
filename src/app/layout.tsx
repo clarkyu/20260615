@@ -22,6 +22,8 @@ export const metadata: Metadata = {
   title: APP_NAME,
   description: '你好！作业 — 手机端背诵作业：录制提交、AI 评阅、按班级统计导出',
   manifest: '/manifest.webmanifest',
+  // iOS ignores SVG/manifest icons for the home screen — give it a real PNG.
+  icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
   appleWebApp: { capable: true, statusBarStyle: 'default', title: APP_NAME },
 }
 
