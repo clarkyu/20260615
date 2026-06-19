@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { config, storageConfigured, emailConfigured, aiConfigured, configReport } from '../config'
 
-const KEYS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'SESSION_SECRET', 'APP_URL', 'EMAIL_FROM', 'APP_NAME']
+const KEYS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'QWEN_API_KEY', 'SESSION_SECRET', 'APP_URL', 'EMAIL_FROM', 'APP_NAME']
 const SAVED = new Map(KEYS.map((k) => [k, process.env[k]]))
 
 beforeEach(() => { for (const k of KEYS) delete process.env[k] })
@@ -27,6 +27,12 @@ describe('feature flags', () => {
     process.env.GEMINI_API_KEY = '   '
     expect(aiConfigured()).toBe(false)
     process.env.GEMINI_API_KEY = 'k'
+    expect(aiConfigured()).toBe(true)
+  })
+
+  it('aiConfigured is true for ANY provider key, not just Gemini', () => {
+    expect(aiConfigured()).toBe(false)
+    process.env.QWEN_API_KEY = 'q' // no Gemini key at all
     expect(aiConfigured()).toBe(true)
   })
 

@@ -42,8 +42,13 @@ export function emailConfigured(): boolean {
   return Boolean(config.email().apiKey)
 }
 
+// Any one configured provider key means AI features can run — not just Gemini. (These
+// are the distinct values of registry.ts PROVIDER_KEY_ENV; duplicated here so config
+// keeps no upward dependency on the AI layer.)
+const AI_PROVIDER_KEY_ENVS = ['GEMINI_API_KEY', 'QWEN_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'MINIMAX_API_KEY']
+
 export function aiConfigured(): boolean {
-  return Boolean(config.geminiKey())
+  return AI_PROVIDER_KEY_ENVS.some((k) => Boolean(env(k)))
 }
 
 // ── startup diagnostics (redacted — names + present/absent only) ──────────────
