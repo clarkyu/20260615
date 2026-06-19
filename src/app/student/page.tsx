@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Inbox, Sparkles, Target, ChevronRight, PartyPopper } from 'lucide-react'
 import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as assignmentRepo from '@/lib/repo/assignments'
@@ -14,6 +15,11 @@ import { cn } from '@/lib/utils'
 import { ScoreTrend } from './score-trend'
 import { MarkScoresSeen } from './mark-scores-seen'
 import { LocalDate } from '@/components/local-date'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.myWork') }
+}
 
 export default async function StudentHome() {
   const user = await requireRole('STUDENT')
