@@ -110,6 +110,17 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
   })
 }
 
+// Lighter variant for the gradebook export: it collapses phases and never needs the
+// per-sentence detail, so the (potentially large) aiResult JSON is omitted — keeping the
+// whole-offering scan cheap in memory even for a big class. Same ordering/dedup contract.
+export function listForOfferingGradebook(prisma: PrismaClient, offeringId: number) {
+  return prisma.submission.findMany({
+    where: { assignment: { offeringId }, status: { not: 'DRAFT' } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, phase: { select: { graded: true } } },
+    orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
+  })
+}
+
 // Mark a set of non-submitting students as 缺交 (MISSING) for an assignment — one row
 // per student on the given phase, no score. Caller passes only students who currently
 // have no submission, so the (assignment, phase, student, attempt) unique key is safe.

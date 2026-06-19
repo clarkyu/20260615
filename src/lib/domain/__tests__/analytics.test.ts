@@ -195,6 +195,14 @@ describe('latestPhaseSubmissions + collapsePhases', () => {
     expect(phases.find((p) => p.phaseId === 1)!.finalScore).toBe(90)
   })
 
+  it('treats a row with no aiResult (the gradebook’s lighter query) as empty per-sentence detail', () => {
+    const phases = latestPhaseSubmissions([
+      { studentId: 1, assignmentId: 10, phaseId: 1, status: 'GRADED', finalScore: 88, needsReview: false, phase: { graded: true } },
+    ])
+    expect(phases[0].perSentence).toEqual([])
+    expect(phases[0].finalScore).toBe(88)
+  })
+
   it('collapses an assignment to the mean of its GRADED phases', () => {
     const phases: PhaseSubmission[] = [
       phaseSub({ studentId: 1, assignmentId: 10, phaseId: 1, graded: true, finalScore: 80 }),
