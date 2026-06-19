@@ -1,13 +1,16 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import { cookies } from 'next/headers'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { config, validateConfigOnce } from '@/lib/config'
 import { getLocale } from '@/lib/i18n-server'
+import { parseTzOffset } from '@/lib/time'
 import * as userRepo from '@/lib/repo/users'
 import * as submissionRepo from '@/lib/repo/submissions'
 import { I18nProvider } from '@/components/i18n-provider'
+import { TzOffsetProvider } from '@/components/tz-provider'
 import { AppHeader } from '@/components/app-header'
 import { BottomNav } from '@/components/bottom-nav'
 
@@ -38,7 +41,8 @@ const themeInit = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // One-time redacted config check so a misconfigured deploy is visible in logs.
   validateConfigOnce()
-  const [locale, user] = await Promise.all([getLocale(), getCurrentUser()])
+  const [locale, user, cookieStore] = await Promise.all([getLocale(), getCurrentUser(), cookies()])
+  const tzo = parseTzOffset(cookieStore.get('tzo')?.value)
 
   // 站内未读提示：学生有「比上次看过更晚批阅」的成绩时，底部导航「作业」上点红点。
   let newScores = false
@@ -53,11 +57,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <I18nProvider locale={locale}>
-          <AppHeader user={user} />
-          <main className="mx-auto w-full max-w-xl px-4 pt-5" style={{ paddingBottom: user ? '6.5rem' : '2rem' }}>
-            <div key={locale} className="animate-in-up">{children}</div>
-          </main>
-          {user ? <BottomNav role={user.panelRole} newScores={newScores} /> : null}
+          <TzOffsetProvider offset={tzo}>
+            <AppHeader user={user} />
+            <main className="mx-auto w-full max-w-xl px-4 pt-5" style={{ paddingBottom: user ? '6.5rem' : '2rem' }}>
+              <div key={locale} className="animate-in-up">{children}</div>
+            </main>
+            {user ? <BottomNav role={user.panelRole} newScores={newScores} /> : null}
+          </TzOffsetProvider>
         </I18nProvider>
       </body>
     </html>
