@@ -154,6 +154,7 @@ export async function updateChunkSet(prevState: unknown, formData: FormData): Pr
 
   await bankRepo.replaceChunks(prisma, id, name, chunks, metaFrom(parsed.data))
   revalidatePath(`/dashboard/bank/${id}`)
+  revalidatePath(`/dashboard/bank/${id}/publish`) // keep the publish screen's summary in sync after an inline edit
   return { success: true }
 }
 
