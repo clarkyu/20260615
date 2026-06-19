@@ -290,7 +290,7 @@ export function SubmissionFlow(props: {
       <Steps steps={steps} idx={idx} />
 
       {phase === 'finishing' ? (
-        <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">{t('sub.submitting')}</CardContent></Card>
+        <Card><CardContent role="status" aria-live="polite" className="py-8 text-center text-sm text-muted-foreground">{t('sub.submitting')}</CardContent></Card>
       ) : phase === 'error' ? (
         <Card>
           <CardContent className="space-y-3 py-6">

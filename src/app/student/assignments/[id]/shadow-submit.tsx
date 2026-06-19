@@ -283,7 +283,7 @@ export function ShadowSubmit(props: {
       <div className="sticky top-0 z-10 -mx-1 rounded-xl bg-background/90 px-1 py-1.5 backdrop-blur">
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium">{t('shadow.progress')}</span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={total} aria-valuetext={`${doneCount}/${total}`} aria-label={t('shadow.progress')}>
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${total ? Math.round((doneCount / total) * 100) : 0}%` }} />
           </div>
           <span className="tabular-nums text-muted-foreground">{doneCount}/{total}</span>

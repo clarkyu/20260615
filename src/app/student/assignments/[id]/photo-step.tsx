@@ -81,7 +81,8 @@ export function PhotoStep({ phaseId, onDone }: { phaseId: number; onDone: () => 
         {preview ? (
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={() => inputRef.current?.click()}>{t('photo.retake')}</Button>
-            <Button className="flex-1" size="lg" disabled={busy} onClick={submit}>{busy ? t('photo.uploading') : t('submit')}</Button>
+            <Button className="flex-1" size="lg" disabled={busy} aria-busy={busy} onClick={submit}>{busy ? t('photo.uploading') : t('submit')}</Button>
+            <span role="status" aria-live="polite" className="sr-only">{busy ? t('photo.uploading') : ''}</span>
           </div>
         ) : (
           <Button className="w-full" size="lg" onClick={() => inputRef.current?.click()}><ImageUp className="h-4 w-4" />{t('photo.pick')}</Button>
