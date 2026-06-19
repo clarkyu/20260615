@@ -209,7 +209,7 @@ export function GradeFocus({
             <span className="w-14 text-sm text-muted-foreground">{t('grade.score')}</span>
             <Input value={score} onChange={(e) => setScore(e.target.value)} type="number" min={0} max={100} className="h-12 w-28 text-xl font-bold" />
           </div>
-          <Textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={3} placeholder={t('grade.rubricPh')} />
+          <Textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={3} placeholder={t('grade.rubricPh')} aria-label={t('grade.rubricPh')} />
         </div>
 
         {error ? <FormMessage>{error}</FormMessage> : null}

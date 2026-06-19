@@ -31,8 +31,8 @@ export function NewClassForm() {
 
   return (
     <form ref={formRef} action={action} className="flex flex-wrap items-center gap-2">
-      <Input name="name" required placeholder={t('stu.classNamePh')} className="h-10 w-44" />
-      <Input name="grade" placeholder={t('stu.gradePh')} className="h-10 w-28" />
+      <Input name="name" required placeholder={t('stu.classNamePh')} aria-label={t('stu.classNamePh')} className="h-10 w-44" />
+      <Input name="grade" placeholder={t('stu.gradePh')} aria-label={t('stu.gradePh')} className="h-10 w-28" />
       <Button type="submit" size="sm" disabled={pending}>{pending ? t('stu.adding') : t('stu.addClass')}</Button>
       <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>{t('stu.cancelClass')}</Button>
       {state?.error ? <FormMessage>{state.error}</FormMessage> : null}

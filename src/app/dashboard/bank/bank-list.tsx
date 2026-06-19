@@ -126,7 +126,7 @@ export function BankList({
     <div className="space-y-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('bank.search')} className="h-11 pl-9" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('bank.search')} aria-label={t('bank.search')} className="h-11 pl-9" />
       </div>
 
       <BankFilters cefr={cefr} strand={strand} domain={domain} series={series} video={video} seriesOptions={seriesOptions} />

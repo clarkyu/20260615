@@ -115,7 +115,7 @@ export default async function FeedbackPage() {
                     </p>
                     <form action={reviewFeedback} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="feedbackId" value={f.id} />
-                      <Input name="reply" defaultValue={f.reply ?? ''} placeholder={t('fb.replyPh')} className="min-w-[10rem] flex-1" />
+                      <Input name="reply" defaultValue={f.reply ?? ''} placeholder={t('fb.replyPh')} aria-label={t('fb.replyPh')} className="min-w-[10rem] flex-1" />
                       <Button type="submit" name="action" value="adopt" size="sm" variant="default">{t('fb.adopt')}</Button>
                       <Button type="submit" name="action" value="decline" size="sm" variant="outline">{t('fb.decline')}</Button>
                       {s !== 'PENDING' ? (

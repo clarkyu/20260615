@@ -89,7 +89,7 @@ function TextStep({ phaseId, initial, onDone }: { phaseId: number; initial: stri
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">{t('sub.step1Desc')}</p>
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={9} placeholder={t('sub.step1Ph')} />
+        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={9} placeholder={t('sub.step1Ph')} aria-label={t('sub.step1Ph')} />
         {error ? <FormMessage>{error}</FormMessage> : null}
         <Button onClick={submit} disabled={pending || !text.trim()} size="lg" className="w-full">
           {pending ? t('sub.submitting') : t('sub.next')}

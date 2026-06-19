@@ -13,9 +13,9 @@ export function JoinForm({ token }: { token: string }) {
   return (
     <form action={action} className="space-y-3">
       <input type="hidden" name="token" value={token} />
-      <Input name="name" required maxLength={50} placeholder={t('join.name')} />
-      <Input name="email" type="email" required maxLength={120} placeholder={t('join.email')} />
-      <Input name="password" type="password" required placeholder={t('join.password')} />
+      <Input name="name" required maxLength={50} placeholder={t('join.name')} aria-label={t('join.name')} />
+      <Input name="email" type="email" required maxLength={120} placeholder={t('join.email')} aria-label={t('join.email')} />
+      <Input name="password" type="password" required placeholder={t('join.password')} aria-label={t('join.password')} />
       {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
       <Button type="submit" disabled={pending} size="lg" className="w-full">
         {pending ? t('join.joining') : t('join.submit')}

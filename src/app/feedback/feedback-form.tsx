@@ -19,7 +19,7 @@ export function FeedbackForm() {
     <Card>
       <CardContent className="p-4">
         <form ref={ref} action={action} className="space-y-3">
-          <Textarea name="body" rows={4} required maxLength={5000} placeholder={t('fb.placeholder')} />
+          <Textarea name="body" rows={4} required maxLength={5000} placeholder={t('fb.placeholder')} aria-label={t('fb.placeholder')} />
           {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
           {state?.success ? <FormMessage tone="success">{t('fb.thanks')}</FormMessage> : null}
           <Button type="submit" disabled={pending} size="lg" className="w-full">
