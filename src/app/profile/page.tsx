@@ -43,7 +43,7 @@ export default async function ProfilePage() {
     user.department ? { k: t('prof.department'), v: user.department.name } : null,
     stuClasses.length ? { k: locale === 'zh' ? '班级' : 'Class', v: stuClasses.map((c) => c.name).join(locale === 'zh' ? '、' : ', ') } : null,
     stuMajor ? { k: locale === 'zh' ? '专业' : 'Major', v: stuMajor.name } : null,
-    stuMajor ? { k: t('prof.department'), v: stuMajor.department.name } : null,
+    stuMajor?.department ? { k: t('prof.department'), v: stuMajor.department.name } : null,
   ].filter(Boolean) as { k: string; v: string }[]
 
   return (

@@ -41,7 +41,7 @@ export default async function StudentsPage() {
               classes={classes.map((c) => ({
                 id: c.id,
                 name: c.name,
-                department: c.major?.department.name ?? null,
+                department: c.major?.department?.name ?? null,
                 major: c.major?.name ?? null,
                 grade: c.grade,
                 count: c._count.studentMemberships,
