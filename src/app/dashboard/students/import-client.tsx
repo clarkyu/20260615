@@ -59,7 +59,8 @@ export function ImportClient() {
         const res = await commitRoster(null, fd)
         if (res.error) setError(res.error)
         else {
-          setResult(`+${res.created} · ↻${res.updated} · ⏭${res.skipped}`)
+          const summary = `+${res.created} · ↻${res.updated} · ⏭${res.skipped}`
+          setResult(res.failed ? `${summary} — ${t('stu.importFailed', { n: res.failed })}` : summary)
           setRows(null)
           router.refresh()
         }

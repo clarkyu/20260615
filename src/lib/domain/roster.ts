@@ -13,7 +13,8 @@ import type { ParsedRoster } from '@/lib/roster'
 export interface ImportResult {
   created: number
   updated: number
-  skipped: number
+  skipped: number // rows excluded up front by a parse error (shown in the preview)
+  failed: number // rows we tried to create but couldn't (学号 already taken — race/dup)
   classesTouched: number
 }
 
@@ -125,12 +126,15 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
             try {
               await prisma.user.create({ data: { ...row, email: null } })
               created++
-            } catch { /* 学号 collision — skip this row */ }
+            } catch { /* 学号 collision — couldn't import; surfaced via `failed` below */ }
           }
         }
       }
     }
   }
+  // Anything we meant to create but didn't (学号 collided even after dropping email)
+  // is reported so the teacher isn't left silently missing students.
+  const failed = toCreate.length - created
 
   // 6) Update existing students (name / phone-if-provided) in one batch. Class is a
   //    membership now: the import only ever ADDS the named class (step 7), never
@@ -182,5 +186,5 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
     }
   }
 
-  return { created, updated: toUpdate.length, skipped, classesTouched: classNames.length }
+  return { created, updated: toUpdate.length, skipped, failed, classesTouched: classNames.length }
 }
