@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, FilePlus2, Sparkles, PackagePlus, BookOpen, Languages } from 'lucide-react'
 import { importStarterBank, importEnglishFlow, refreshEnglishFlow } from '@/actions/bank'
 import { useT } from '@/components/i18n-provider'
@@ -18,6 +18,15 @@ export function BankActions({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [menu, setMenu] = useState(false)
   const [panel, setPanel] = useState<null | 'create' | 'pack'>(null)
   const { run, pending, msg } = useChunkedImport()
+
+  // Escape closes the open menu — keyboard users aren't stuck relying on a
+  // mouse click outside (the backdrop) to dismiss it.
+  useEffect(() => {
+    if (!menu) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menu])
 
   if (!isSuperAdmin) {
     return (
@@ -43,12 +52,12 @@ export function BankActions({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   return (
     <div className="space-y-3">
       <div className="relative inline-block">
-        <Button size="sm" onClick={() => setMenu((v) => !v)} disabled={pending}>
+        <Button size="sm" onClick={() => setMenu((v) => !v)} disabled={pending} aria-haspopup="true" aria-expanded={menu}>
           <Plus className="h-4 w-4" />{pending ? t('bank.importing') : t('bank.addMenu')}
         </Button>
         {menu ? (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+            <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} aria-hidden="true" />
             <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-xl border border-input bg-background shadow-lg">
               {items.map((it) => (
                 <button
