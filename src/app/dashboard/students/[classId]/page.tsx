@@ -33,10 +33,10 @@ export default async function ClassPage({ params }: { params: Promise<{ classId:
           grade: cls.grade ?? '',
           majorId: cls.majorId,
           major: cls.major?.name ?? '',
-          department: cls.major?.department.name ?? '',
+          department: cls.major?.department?.name ?? '',
         }}
         students={students.map((s) => ({ id: s.id, studentNo: s.studentNo ?? '', name: s.name ?? '', phone: s.phone ?? '', email: s.email ?? '' }))}
-        majors={majors.map((m) => ({ id: m.id, name: m.name, department: m.department.name }))}
+        majors={majors.map((m) => ({ id: m.id, name: m.name, department: m.department?.name ?? '' }))}
         isAdmin={isAdmin}
       />
     </div>

@@ -40,9 +40,10 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
   const majorIdByName = new Map(existingMajors.map((m) => [m.name, m.id]))
   for (const name of majorNames) {
     if (majorIdByName.has(name)) continue
-    const rep = valid.find((r) => r.major === name && r.department)
-    const departmentId = rep?.department ? deptIdByName.get(rep.department) : undefined
-    if (!departmentId) continue // a major with no department — skip linking
+    // Link the major to a department if any row for it carries one; otherwise create it
+    // standalone (common for 教学班 rosters that have 专业 but no 院系 column).
+    const deptRow = valid.find((r) => r.major === name && r.department)
+    const departmentId = deptRow?.department ? deptIdByName.get(deptRow.department) ?? null : null
     const m = await prisma.major.create({ data: { schoolId, departmentId, name } })
     majorIdByName.set(name, m.id)
   }

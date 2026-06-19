@@ -62,6 +62,16 @@ describe('importRoster', () => {
     expect(db._calls.createMany).toBe(1)
   })
 
+  it('creates a major even when the row has no department (专业 without 院系)', async () => {
+    const db = rosterFake()
+    // A 教学班 roster: 专业 extracted from the class name, but no 院系 column anywhere.
+    const res = await importRoster(db, 1, parsed([row({ studentNo: '001', major: '司法信息技术', department: undefined })]))
+    expect(res.created).toBe(1)
+    expect(db._calls.majorCreate).toBe(1) // major created despite the missing department
+    expect(db._calls.deptCreate).toBe(0) // nothing to create — no 院系 in the data
+    expect(db._calls.classCreate).toBe(1) // class created (and linked to the major)
+  })
+
   it('skips rows flagged with a parse error', async () => {
     const db = rosterFake()
     const res = await importRoster(db, 1, parsed([row({ studentNo: '001' }), row({ studentNo: 'bad', error: 'err' })]))

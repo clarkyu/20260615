@@ -113,11 +113,11 @@ model Department {
 model Major {
   id           Int        @id @default(autoincrement())
   schoolId     Int
-  departmentId Int
+  departmentId Int?
   name         String
-  createdAt    DateTime   @default(now())
-  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   classes      ClassGroup[]
 
   @@unique([schoolId, name])
