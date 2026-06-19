@@ -11,6 +11,19 @@ import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
+// Apply the same score and/or feedback to a set of selected submissions at once.
+export async function batchOverride(assignmentId: number, submissionIds: number[], score: number | null, feedback: string): Promise<{ updated?: number; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  const ids = (submissionIds ?? []).filter((n) => Number.isInteger(n)).slice(0, 300)
+  if (ids.length === 0) return { error: t('grade.batchNeedSel') }
+  const fb = (feedback ?? '').trim()
+  if (score == null && !fb) return { error: t('grade.batchNeedField') }
+  if (score != null && (!Number.isFinite(score) || score < 0 || score > MAX_SCORE)) return { error: t('err.scoreRange') }
+  const res = await submissionRepo.applyBatchOverride(prisma, ids, user.schoolId, { score, feedback: fb || null, gradedById: user.userId, at: new Date() })
+  revalidatePath(`/dashboard/assignments/${assignmentId}`)
+  return { updated: res.count }
+}
+
 // Mark everyone in the class who hasn't handed anything in as 缺交 (MISSING) — a
 // non-scoring marker, not a 0. Idempotent (re-running skips the already-marked).
 export async function markMissing(assignmentId: number): Promise<{ marked?: number; error?: string }> {
