@@ -4,11 +4,13 @@ import { ChevronLeft } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
+import { serializeChunks } from '@/lib/bank'
 import * as bankRepo from '@/lib/repo/bank'
 import * as offeringRepo from '@/lib/repo/offerings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AssignmentForm } from '@/components/assignment-form'
+import { EditSetForm } from '../edit-set-form'
 
 export default async function PublishFromSetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -20,8 +22,15 @@ export default async function PublishFromSetPage({ params }: { params: Promise<{
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const set = await bankRepo.findSummaryVisible(prisma, setId, user.schoolId)
+  const set = await bankRepo.findWithChunksVisible(prisma, setId, user.schoolId)
   if (!set) notFound()
+
+  // Same edit policy as the set page: own a school set, or be super-admin for a global
+  // (official) one. Lets the teacher fix a typo inline before publishing instead of
+  // bouncing back to the set page. Editing writes back to the shared set (no per-publish
+  // copy), which matches the existing single-source model.
+  const isGlobal = set.schoolId === null
+  const canEdit = isGlobal ? user.role === 'SUPER_ADMIN' : set.schoolId === user.schoolId
 
   const offerings = await offeringRepo.listForStaff(prisma, user.schoolId, user.userId, user.role)
 
@@ -50,9 +59,20 @@ export default async function PublishFromSetPage({ params }: { params: Promise<{
       <Link href={`/dashboard/bank/${set.id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" />{set.name}
       </Link>
+      {canEdit ? (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">{t('bank.editBeforePublish')}</p>
+          <EditSetForm
+            setId={set.id}
+            name={set.name}
+            chunksText={serializeChunks(set.chunks)}
+            meta={{ cefr: set.cefr, strand: set.strand, domain: set.domain, tags: set.tags, source: set.source }}
+          />
+        </div>
+      ) : null}
       <AssignmentForm
         targets={targets}
-        chunkSet={{ id: set.id, name: set.name, count: set._count.chunks, hasVideo: Boolean(set.shadowVideoKey) }}
+        chunkSet={{ id: set.id, name: set.name, count: set.chunks.length, hasVideo: Boolean(set.shadowVideoKey) }}
       />
     </div>
   )
