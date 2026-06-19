@@ -71,4 +71,5 @@ npm run cf:deploy            # opennextjs-cloudflare deploy
 - ✅ Phase 0：OpenNext + Wrangler 工具链；`cf:build` 产出 Workers 包
 - ✅ Phase 1（核心）：DB→D1（Prisma adapter，请求级 `getDb()`）；交互式事务改 D1 batch
 - ✅ Phase 2：tokens/口令→WebCrypto(PBKDF2)；邮件→Resend；预签名→aws4fetch
-- ⏭️ 待办：限流改 Durable Object（当前进程内 Map，serverless 下偏弱）；后台评阅→Queues/Workflows；接真实 AI（先 Gemini）；CI/CD（GitHub Actions → `cf:deploy`，PR 出 preview）；wrangler dev + 本地 D1 端到端实测；ExcelJS 在 Workers 的运行期验证；真实 PWA 图标 / 隐私同意 / 视频留存
+- ✅ Phase 3：接真实 AI（Gemini / Qwen / MiniMax / DeepSeek / GPT-4o 实接，Whisper / Claude 占位并优雅降级）；Excel 导入/导出走 SheetJS；CI（构建+测试）与「合并 main 自动迁移+部署」（见 `.github/workflows/ci.yml`、`deploy.yml`）
+- ⏭️ 待办（完整优先级队列见 `docs/BACKLOG.md`）：限流改 Durable Object（当前进程内 Map，serverless 下偏弱）；后台评阅→Queues/Workflows；wrangler dev + 本地 D1 端到端实测；真实 PWA 图标 / 隐私同意 / 视频留存
