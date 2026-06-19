@@ -113,12 +113,14 @@ export async function autoGradeSubmission(
 ): Promise<AutoGradeResult> {
   let videoUrl: string | undefined
   let audioUrl: string | undefined
+  let mediaUnavailable = false
   if (storageConfigured()) {
     if (submission.videoKey) {
       try {
         videoUrl = await presignDownload(submission.videoKey)
       } catch (err) {
         console.error('[autoGradeSubmission] video presign failed:', err)
+        mediaUnavailable = true
       }
     }
     if (submission.audioKey) {
@@ -126,8 +128,18 @@ export async function autoGradeSubmission(
         audioUrl = await presignDownload(submission.audioKey)
       } catch (err) {
         console.error('[autoGradeSubmission] audio presign failed:', err)
+        mediaUnavailable = true
       }
     }
+  }
+
+  // A present media key that wouldn't sign means we'd grade WITHOUT the recording the
+  // score is meant to be based on — a silently-degraded grade. Mark it FAILED (a visible
+  // state) and let the durable queue retry: a transient R2 blip self-heals, a persistent
+  // one surfaces as 评阅失败 instead of a misleading score graded on no media.
+  if (mediaUnavailable) {
+    await submissionRepo.markFailed(prisma, submission.id)
+    return { ok: false, error: 'err.mediaUnavailable' }
   }
 
   await submissionRepo.markProcessing(prisma, submission.id)

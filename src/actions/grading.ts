@@ -63,7 +63,9 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
   const res = await autoGradeSubmission(prisma, submission, { perceptionModel, judgeModel, rubric, graderUserId: user.userId })
-  if (!res.ok) return { error: res.error || t('err.gradeFail') }
+  // res.error is an i18n key (e.g. err.mediaUnavailable) or a raw model message; t()
+  // translates the former and passes the latter through unchanged.
+  if (!res.ok) return { error: res.error ? t(res.error) : t('err.gradeFail') }
 
   revalidatePath(`/dashboard/assignments/${submission.assignmentId}`)
   return { success: true }

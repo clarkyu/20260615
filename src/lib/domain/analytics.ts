@@ -359,7 +359,11 @@ export function parsePerSentence(aiResult: string | null | undefined): Analytics
     return ps
       .filter((p) => typeof p?.order === 'number')
       .map((p) => ({ order: p.order, accuracy: Number(p.accuracy) || 0, completeness: Number(p.completeness) || 0 }))
-  } catch {
+  } catch (err) {
+    // Corrupted/truncated GradeResult JSON: log it so a "0 accuracy" on the analytics
+    // page is diagnosable rather than silently empty. Still degrade to [] so one bad
+    // row never breaks the whole aggregation.
+    console.error('[analytics] failed to parse stored aiResult JSON:', err)
     return []
   }
 }
