@@ -1,0 +1,27 @@
+name: grading-queue-drain
+
+# Periodically drains the durable grading queue so queued AI grades run on a cadence
+# instead of waiting for a teacher to open the dashboard. Opt-in: does nothing until the
+# CRON_SECRET repo secret is set. GitHub's scheduler is best-effort (≈5–15 min, not
+# exact); combined with the post-submit kick + dashboard self-heal, that's ample for
+# async grading. (Native Cloudflare Queues would be ~seconds but needs a custom OpenNext
+# Worker entry that can't be verified without a live deploy — deliberately avoided.)
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kick grading drain
+        env:
+          SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SECRET" ]; then echo "CRON_SECRET not set — skipping."; exit 0; fi
+          code=$(curl -fsS -o /tmp/out -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $SECRET" \
+            https://www.hihomework.com/api/cron/drain || true)
+          echo "HTTP $code"; cat /tmp/out 2>/dev/null; echo
+          test "$code" = "200"
