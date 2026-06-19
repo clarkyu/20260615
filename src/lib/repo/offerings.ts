@@ -1,11 +1,15 @@
 import type { PrismaClient, Role } from '@prisma/client'
 
 // Tenant-scoped data access for course offerings (课头：某师·某班·某学期教某课).
-// All reads are scoped by school; the `?? -1` sentinel keeps a missing school
-// from ever matching a row.
+// An offering is owned by a teacher: a TEACHER may only reach their OWN offerings, a
+// school/super admin the whole school. `offeringScope` gates the lists AND every by-id
+// read/write alike — no IDOR by guessing ids. The `?? -1` sentinel keeps a missing
+// school from ever matching a row.
+const offeringScope = (schoolId: number | null | undefined, userId: number, role: Role) =>
+  ({ schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) })
 
-export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
-  return prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
+export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.courseOffering.findFirst({ where: { id, ...offeringScope(schoolId, userId, role) } })
 }
 
 // A staff member's offerings (teacher → own; admin → whole school), newest term
@@ -28,9 +32,9 @@ export function listForStaffWithCounts(prisma: PrismaClient, schoolId: number | 
 }
 
 // One offering with its assignments (each with sentence + submission counts).
-export function findDetailForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+export function findDetailForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.courseOffering.findFirst({
-    where: { id, schoolId: schoolId ?? -1 },
+    where: { id, ...offeringScope(schoolId, userId, role) },
     include: {
       course: true,
       class: { select: { name: true } },
@@ -61,19 +65,19 @@ export function listSiblingsForStaff(
 }
 
 // Of the given offering ids, those that belong to the school (publish-target check).
-export async function findIdsForSchool(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined): Promise<number[]> {
-  const rows = await prisma.courseOffering.findMany({ where: { id: { in: ids }, schoolId: schoolId ?? -1 }, select: { id: true } })
+export async function findIdsForSchool(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role): Promise<number[]> {
+  const rows = await prisma.courseOffering.findMany({ where: { id: { in: ids }, ...offeringScope(schoolId, userId, role) }, select: { id: true } })
   return rows.map((o) => o.id)
 }
 
-export function findForSchoolWithCourse(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
-  return prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 }, include: { course: true } })
+export function findForSchoolWithCourse(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.courseOffering.findFirst({ where: { id, ...offeringScope(schoolId, userId, role) }, include: { course: true } })
 }
 
 // One offering with course + class (no assignments) — the analytics/gradebook header.
-export function findForSchoolWithCourseClass(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+export function findForSchoolWithCourseClass(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.courseOffering.findFirst({
-    where: { id, schoolId: schoolId ?? -1 },
+    where: { id, ...offeringScope(schoolId, userId, role) },
     include: { course: true, class: { select: { id: true, name: true } } },
   })
 }
@@ -120,8 +124,8 @@ export function update(
 }
 
 // Delete iff it belongs to the school; returns whether a row was removed.
-export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined): Promise<boolean> {
-  const found = await prisma.courseOffering.findFirst({ where: { id, schoolId: schoolId ?? -1 }, select: { id: true } })
+export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<boolean> {
+  const found = await prisma.courseOffering.findFirst({ where: { id, ...offeringScope(schoolId, userId, role) }, select: { id: true } })
   if (!found) return false
   await prisma.courseOffering.delete({ where: { id } })
   return true

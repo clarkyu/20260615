@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ off
   if (!Number.isInteger(offeringId)) return new NextResponse('Bad request', { status: 400 })
 
   const prisma = await getDb()
-  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId)
+  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) return new NextResponse('Not found', { status: 404 })
 
   const [students, assignments, rawSubs, rawPractice] = await Promise.all([

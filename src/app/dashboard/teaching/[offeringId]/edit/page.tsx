@@ -14,7 +14,7 @@ export default async function EditOfferingPage({ params }: { params: Promise<{ o
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const o = await offeringRepo.findForSchoolWithCourse(prisma, offeringId, user.schoolId)
+  const o = await offeringRepo.findForSchoolWithCourse(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!o) notFound()
 
   const classes = await classRepo.listForSchool(prisma, user.schoolId)

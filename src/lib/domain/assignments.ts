@@ -2,7 +2,7 @@
 // bank set), edit, and the "weakest sentence" review generator. Free of auth/i18n/
 // Next plumbing — errors are i18n keys, navigation targets are returned.
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Role } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as offerings from '@/lib/repo/offerings'
 import * as bank from '@/lib/repo/bank'
@@ -102,6 +102,8 @@ export type CreateResult = { ok: true; redirectTo: string } | { ok: false; error
 export async function createAssignments(
   prisma: PrismaClient,
   schoolId: number,
+  userId: number,
+  role: Role,
   meta: AssignmentMeta,
   phaseDrafts: PhaseDraft[],
   offeringIds: number[],
@@ -109,7 +111,8 @@ export async function createAssignments(
   primaryOfferingId: number | null,
 ): Promise<CreateResult> {
   if (offeringIds.length === 0) return { ok: false, error: 'err.needPublishTarget' }
-  const validIds = await offerings.findIdsForSchool(prisma, offeringIds, schoolId)
+  // Teacher-scoped: a teacher can only publish to their OWN offerings.
+  const validIds = await offerings.findIdsForSchool(prisma, offeringIds, schoolId, userId, role)
   if (validIds.length === 0) return { ok: false, error: 'err.offeringNotFound' }
 
   const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)
@@ -131,12 +134,14 @@ export type UpdateResult = { ok: true } | { ok: false; error: string }
 export async function updateAssignment(
   prisma: PrismaClient,
   schoolId: number,
+  userId: number,
+  role: Role,
   assignmentId: number,
   meta: AssignmentMeta,
   phaseDrafts: PhaseDraft[],
   chunkSetId: number | null,
 ): Promise<UpdateResult> {
-  const existing = await assignments.findForSchool(prisma, assignmentId, schoolId)
+  const existing = await assignments.findForSchool(prisma, assignmentId, schoolId, userId, role)
   if (!existing) return { ok: false, error: 'err.assignNotFound' }
 
   const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)

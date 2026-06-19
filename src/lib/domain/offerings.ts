@@ -4,7 +4,7 @@
 // edit, free of auth/i18n/Next plumbing. Errors are returned as i18n keys for the
 // action to translate; navigation targets are returned for the action to redirect.
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, Role } from '@prisma/client'
 import * as offerings from '@/lib/repo/offerings'
 import * as classes from '@/lib/repo/classes'
 import * as courses from '@/lib/repo/courses'
@@ -56,11 +56,13 @@ export type UpdateResult = { ok: true } | { ok: false; error: string }
 export async function updateOffering(
   prisma: PrismaClient,
   schoolId: number,
+  userId: number,
+  role: Role,
   offeringId: number,
   input: OfferingInput,
   classId: number,
 ): Promise<UpdateResult> {
-  const offering = await offerings.findForSchoolWithCourse(prisma, offeringId, schoolId)
+  const offering = await offerings.findForSchoolWithCourse(prisma, offeringId, schoolId, userId, role)
   if (!offering) return { ok: false, error: 'err.offeringNotFound' }
 
   const cls = await classes.findClassForSchool(prisma, classId, schoolId)

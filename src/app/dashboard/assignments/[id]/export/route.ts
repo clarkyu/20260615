@@ -30,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const prisma = await getDb()
-  const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId)
+  const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId, user.userId, user.role)
   const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
   if (!assignment || !cls) return new NextResponse('Not found', { status: 404 })
 

@@ -34,7 +34,7 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId)
+  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) notFound()
 
   const [students, assignments, rawSubs, rawPractice] = await Promise.all([

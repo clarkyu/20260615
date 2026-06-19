@@ -20,7 +20,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const offering = await offeringRepo.findDetailForSchool(prisma, offeringId, user.schoolId)
+  const offering = await offeringRepo.findDetailForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) notFound()
   const sem = offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 

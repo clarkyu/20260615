@@ -99,7 +99,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   const chunkSetId = Number(formData.get('chunkSetId')) || null
   const primaryOfferingId = Number(formData.get('primaryOfferingId')) || null
 
-  const res = await createAssignments(cx.prisma, cx.schoolId, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId)
+  const res = await createAssignments(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId)
   if (!res.ok) return { error: cx.t(res.error) }
 
   // Optionally save this publish config as a reusable template (school-shared).
@@ -149,7 +149,7 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
   const fr = readForm(formData)
   if (!fr.ok) return { error: cx.t(fr.error) }
 
-  const res = await updateAssignmentService(cx.prisma, cx.schoolId, assignmentId, fr.data.meta, fr.data.phases, chunkSetId)
+  const res = await updateAssignmentService(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentId, fr.data.meta, fr.data.phases, chunkSetId)
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   redirect(`/dashboard/assignments/${assignmentId}`)
@@ -160,7 +160,7 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
 export async function createReviewAssignment(formData: FormData): Promise<void> {
   const { user, prisma } = await staffContext()
   const offeringId = Number(formData.get('offeringId'))
-  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId)
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) redirect('/dashboard/teaching')
 
   const res = await buildReviewAssignment(prisma, offeringId)
@@ -171,6 +171,6 @@ export async function createReviewAssignment(formData: FormData): Promise<void> 
 export async function deleteAssignment(formData: FormData): Promise<void> {
   const { user, prisma } = await staffContext()
   const assignmentId = Number(formData.get('assignmentId'))
-  const offeringId = await assignmentRepo.deleteForSchool(prisma, assignmentId, user.schoolId)
+  const offeringId = await assignmentRepo.deleteForSchool(prisma, assignmentId, user.schoolId, user.userId, user.role)
   redirect(offeringId ? `/dashboard/teaching/${offeringId}` : '/dashboard/teaching')
 }
