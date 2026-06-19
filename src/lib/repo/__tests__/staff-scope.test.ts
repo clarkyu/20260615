@@ -60,4 +60,27 @@ describe('staff by-id access is teacher-scoped (no within-school IDOR)', () => {
     await submissionRepo.applyBatchOverride(admin.db, [1, 2], 7, 99, 'SCHOOL_ADMIN', opts)
     expect(admin.calls[0].assignment.offering).toEqual({ schoolId: 7 })
   })
+
+  // Delete is the most destructive by-id path; its ownership check (the scoped
+  // findFirst before the delete) must be teacher-scoped too. findFirst returns null
+  // here, so deleteForSchool stops at the guard — exactly the where we want to pin.
+  it('offering delete confines a TEACHER to their own offering', async () => {
+    const teacher = capture()
+    await offeringRepo.deleteForSchool(teacher.db, 1, 7, 99, 'TEACHER')
+    expect(teacher.calls[0]).toEqual({ id: 1, schoolId: 7, teacherId: 99 })
+
+    const admin = capture()
+    await offeringRepo.deleteForSchool(admin.db, 1, 7, 99, 'SCHOOL_ADMIN')
+    expect(admin.calls[0]).toEqual({ id: 1, schoolId: 7 })
+  })
+
+  it('assignment delete confines a TEACHER to their own offering', async () => {
+    const teacher = capture()
+    await assignmentRepo.deleteForSchool(teacher.db, 1, 7, 99, 'TEACHER')
+    expect(teacher.calls[0].offering).toEqual({ schoolId: 7, teacherId: 99 })
+
+    const admin = capture()
+    await assignmentRepo.deleteForSchool(admin.db, 1, 7, 99, 'SCHOOL_ADMIN')
+    expect(admin.calls[0].offering).toEqual({ schoolId: 7 })
+  })
 })
