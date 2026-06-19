@@ -19,6 +19,7 @@ export function ImportClient() {
   const [counts, setCounts] = useState<{ valid: number; error: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<string | null>(null)
+  const [onlyIssues, setOnlyIssues] = useState(false)
   const [pending, startTransition] = useTransition()
 
   function reset() {
@@ -26,6 +27,7 @@ export function ImportClient() {
     setCounts(null)
     setResult(null)
     setError(null)
+    setOnlyIssues(false)
   }
 
   function onPreview() {
@@ -107,28 +109,46 @@ export function ImportClient() {
         </div>
 
         {rows && counts ? (
-          <div className="overflow-hidden rounded-xl border border-border">
-            <div className="max-h-72 overflow-auto text-sm">
-              <table className="w-full">
-                <thead className="sticky top-0 bg-secondary text-left text-xs">
-                  <tr>
-                    <th className="px-3 py-2">{t('stu.colNo')}</th>
-                    <th className="px-3 py-2">{t('stu.colName')}</th>
-                    <th className="px-3 py-2">{t('stu.colClass')}</th>
-                    <th className="px-3 py-2">{t('stu.colIssue')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, 200).map((r) => (
-                    <tr key={r.rowNumber} className={r.error ? 'bg-destructive/8' : 'border-t border-border/50'}>
-                      <td className="px-3 py-1.5">{r.studentNo}</td>
-                      <td className="px-3 py-1.5">{r.name}</td>
-                      <td className="px-3 py-1.5">{r.className}</td>
-                      <td className="px-3 py-1.5 text-destructive">{r.error ?? ''}</td>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className={counts.error > 0 ? 'font-medium text-destructive' : 'text-muted-foreground'}>
+                {counts.error > 0 ? t('stu.issuesSummary', { n: counts.error }) : t('stu.allGood', { n: counts.valid })}
+              </span>
+              {counts.error > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setOnlyIssues((v) => !v)}
+                  className="shrink-0 font-medium text-primary hover:underline"
+                >
+                  {onlyIssues ? t('stu.showAll') : t('stu.onlyIssues')}
+                </button>
+              ) : null}
+            </div>
+            <div className="overflow-hidden rounded-xl border border-border">
+              <div className="max-h-72 overflow-auto text-sm">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-secondary text-left text-xs">
+                    <tr>
+                      <th className="px-3 py-2">{t('stu.colRow')}</th>
+                      <th className="px-3 py-2">{t('stu.colNo')}</th>
+                      <th className="px-3 py-2">{t('stu.colName')}</th>
+                      <th className="px-3 py-2">{t('stu.colClass')}</th>
+                      <th className="px-3 py-2">{t('stu.colIssue')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(onlyIssues ? rows.filter((r) => r.error) : rows).slice(0, 200).map((r) => (
+                      <tr key={r.rowNumber} className={r.error ? 'bg-destructive/8' : 'border-t border-border/50'}>
+                        <td className="px-3 py-1.5 tabular-nums text-muted-foreground">{r.rowNumber}</td>
+                        <td className="px-3 py-1.5">{r.studentNo}</td>
+                        <td className="px-3 py-1.5">{r.name}</td>
+                        <td className="px-3 py-1.5">{r.className}</td>
+                        <td className="px-3 py-1.5 text-destructive">{r.error ? t(r.error) : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         ) : null}

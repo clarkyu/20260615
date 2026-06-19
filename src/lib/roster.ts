@@ -143,11 +143,13 @@ function parseRosterUnsafe(buffer: ArrayBuffer | Uint8Array): ParsedRoster {
     const email = get(row, 'email').toLowerCase() || undefined
     if (!studentNo && !name && !rawClass) continue
 
+    // Row-level errors are i18n KEYS (translated in the import preview), not display
+    // text — so en/es users see the reason in their own language, not Chinese.
     let error: string | undefined
-    if (!studentNo) error = '学号为空'
-    else if (!name) error = '姓名为空'
-    else if (!className) error = '班级为空'
-    else if (seen.has(studentNo)) error = '学号在表内重复'
+    if (!studentNo) error = 'roster.rowNoStudentNo'
+    else if (!name) error = 'roster.rowNoName'
+    else if (!className) error = 'roster.rowNoClass'
+    else if (seen.has(studentNo)) error = 'roster.rowDupNo'
     if (studentNo) seen.add(studentNo)
 
     if (error) errorCount++
