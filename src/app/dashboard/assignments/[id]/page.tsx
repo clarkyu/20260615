@@ -20,7 +20,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const assignment = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId)
+  const assignment = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!assignment) notFound()
 
   // A submission is per-phase: keep the latest attempt per (student, phase). When the

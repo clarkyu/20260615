@@ -13,7 +13,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
   const prisma = await getDb()
   if (!user.schoolId) redirect('/dashboard')
 
-  const a = await assignmentRepo.findForStaffWithPhases(prisma, assignmentId, user.schoolId)
+  const a = await assignmentRepo.findForStaffWithPhases(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!a) notFound()
 
   // The set this assignment draws from (any phase that uses one — all share it).

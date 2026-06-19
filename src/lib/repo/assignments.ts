@@ -1,9 +1,11 @@
 import type { PrismaClient, Role, SubmissionStatus } from '@prisma/client'
 
 // Tenant-scoped data access for assignments. An assignment belongs to a school
-// through its offering, so every scope check goes via `offering.schoolId`.
-
-const inSchool = (schoolId: number | null | undefined) => ({ offering: { schoolId: schoolId ?? -1 } })
+// through its offering, so every scope check goes via `offering`. A TEACHER may only
+// reach their OWN offerings; a school/super admin reaches the whole school. The same
+// `staffScope` gates the list views AND every by-id read/write (no IDOR by guessing ids).
+const staffScope = (schoolId: number | null | undefined, userId: number, role: Role) =>
+  ({ schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) })
 
 export interface SentenceRow {
   order: number
@@ -63,8 +65,8 @@ function legacyColumnsFromPrimary(p: PhaseInput) {
   }
 }
 
-export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
-  return prisma.assignment.findFirst({ where: { id, ...inSchool(schoolId) } })
+export function findForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.assignment.findFirst({ where: { id, offering: staffScope(schoolId, userId, role) } })
 }
 
 // The teacher who owns this assignment's offering + their default grading models —
@@ -80,9 +82,9 @@ export async function offeringTeacher(prisma: PrismaClient, assignmentId: number
 
 // The grading screen: assignment + offering(course/class) + every submission with
 // its student, ordered so the latest attempt per student comes first.
-export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findFirst({
-    where: { id, ...inSchool(schoolId) },
+    where: { id, offering: staffScope(schoolId, userId, role) },
     include: {
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
@@ -97,9 +99,9 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
 
 // Teacher "preview as student", phase-aware: assignment + ordered phases, each with
 // its sentences and (for shadow phases) chunk-set chunks. School-scoped, no submissions.
-export function findForStaffPreviewPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+export function findForStaffPreviewPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findFirst({
-    where: { id, ...inSchool(schoolId) },
+    where: { id, offering: staffScope(schoolId, userId, role) },
     include: {
       phases: {
         orderBy: { order: 'asc' },
@@ -192,9 +194,9 @@ export async function updateWithPhases(prisma: PrismaClient, id: number, meta: A
 }
 
 // The edit screen: assignment + its ordered phases, each with sentences + chunk-set name.
-export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findFirst({
-    where: { id, ...inSchool(schoolId) },
+    where: { id, offering: staffScope(schoolId, userId, role) },
     include: {
       phases: {
         orderBy: { order: 'asc' },
@@ -236,8 +238,8 @@ export function createReview(prisma: PrismaClient, offeringId: number, title: st
 }
 
 // Delete iff it belongs to the school; returns the offering id (for redirect) or null.
-export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined): Promise<number | null> {
-  const found = await prisma.assignment.findFirst({ where: { id, ...inSchool(schoolId) }, select: { offeringId: true } })
+export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<number | null> {
+  const found = await prisma.assignment.findFirst({ where: { id, offering: staffScope(schoolId, userId, role) }, select: { offeringId: true } })
   if (!found) return null
   await prisma.assignment.delete({ where: { id } })
   return found.offeringId
@@ -249,10 +251,6 @@ export function listForOfferingBrief(prisma: PrismaClient, offeringId: number) {
 }
 
 // ── the staff "作业" menu: every assignment in the actor's scope ──────────────────
-// A teacher sees their own offerings; an admin sees the whole school.
-const staffScope = (schoolId: number | null | undefined, userId: number, role: Role) =>
-  ({ schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) })
-
 const NEEDS_TEACHER: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
 // All assignments the staff member can see, newest first, with course/class, due

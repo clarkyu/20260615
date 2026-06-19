@@ -55,16 +55,16 @@ describe('createOfferings', () => {
 
 describe('updateOffering', () => {
   it('errors when the offering is not in the school', async () => {
-    expect(await updateOffering(fake({ offering: null }), 1, 7, input, 5)).toEqual({ ok: false, error: 'err.offeringNotFound' })
+    expect(await updateOffering(fake({ offering: null }), 1, 9, 'SCHOOL_ADMIN', 7, input, 5)).toEqual({ ok: false, error: 'err.offeringNotFound' })
   })
 
   it('errors when the target class is not in the school', async () => {
-    expect(await updateOffering(fake({ offering: { id: 7, course: {} }, classForSchool: null }), 1, 7, input, 5)).toEqual({ ok: false, error: 'err.classNotFound' })
+    expect(await updateOffering(fake({ offering: { id: 7, course: {} }, classForSchool: null }), 1, 9, 'SCHOOL_ADMIN', 7, input, 5)).toEqual({ ok: false, error: 'err.classNotFound' })
   })
 
   it('updates on the happy path', async () => {
     const db = fake({ offering: { id: 7, course: {} }, classForSchool: { id: 5 } })
-    expect(await updateOffering(db, 1, 7, input, 5)).toEqual({ ok: true })
+    expect(await updateOffering(db, 1, 9, 'SCHOOL_ADMIN', 7, input, 5)).toEqual({ ok: true })
     expect(db._update).toHaveBeenCalled()
   })
 })

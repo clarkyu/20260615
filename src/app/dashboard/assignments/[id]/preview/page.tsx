@@ -111,7 +111,7 @@ export default async function AssignmentPreviewPage({ params }: { params: Promis
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const a = await assignmentRepo.findForStaffPreviewPhases(prisma, assignmentId, user.schoolId)
+  const a = await assignmentRepo.findForStaffPreviewPhases(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!a) notFound()
   const single = a.phases.length === 1
 

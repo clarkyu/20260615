@@ -1,15 +1,16 @@
-import type { PrismaClient, SubmissionStatus, Prisma } from '@prisma/client'
+import type { PrismaClient, SubmissionStatus, Prisma, Role } from '@prisma/client'
 
 // Submission data access. A submission belongs to a school through
-// assignment.offering.schoolId; staff reads/writes are scoped that way.
-
-const inSchool = (schoolId: number | null | undefined) => ({ assignment: { offering: { schoolId: schoolId ?? -1 } } })
+// assignment.offering; staff reads/writes are scoped by offering — a TEACHER only
+// reaches their OWN offerings' submissions, an admin the whole school.
+const staffSub = (schoolId: number | null | undefined, userId: number, role: Role) =>
+  ({ assignment: { offering: { schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) } } })
 
 // One submission the staff member may grade, with its assignment + ordered
 // reference sentences (everything autoGradeSubmission needs).
-export function findForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined) {
+export function findForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.submission.findFirst({
-    where: { id, ...inSchool(schoolId) },
+    where: { id, ...staffSub(schoolId, userId, role) },
     include: {
       phase: { include: { sentences: { orderBy: { order: 'asc' } } } },
       assignment: { include: { sentences: { orderBy: { order: 'asc' } } } },
@@ -52,6 +53,8 @@ export function applyBatchOverride(
   prisma: PrismaClient,
   ids: number[],
   schoolId: number | null | undefined,
+  userId: number,
+  role: Role,
   opts: { score: number | null; feedback: string | null; gradedById: number; at: Date },
 ) {
   const data: Prisma.SubmissionUpdateManyMutationInput = {
@@ -60,8 +63,11 @@ export function applyBatchOverride(
       : {}),
     ...(opts.feedback != null ? { feedback: opts.feedback } : {}),
   }
+  // Teacher-scoped: this is a direct id-list mutation with no prior ownership gate, so the
+  // teacherId filter here IS the access boundary (a teacher can't override another
+  // teacher's submissions by passing their ids).
   return prisma.submission.updateMany({
-    where: { id: { in: ids }, assignment: { offering: { schoolId: schoolId ?? -1 } } },
+    where: { id: { in: ids }, ...staffSub(schoolId, userId, role) },
     data,
   })
 }

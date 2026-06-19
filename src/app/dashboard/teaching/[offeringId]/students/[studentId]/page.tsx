@@ -30,7 +30,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   if (!user.schoolId) redirect('/dashboard')
 
   const [offering, student] = await Promise.all([
-    offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId),
+    offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId, user.userId, user.role),
     userRepo.findStudentForSchool(prisma, studentId, user.schoolId),
   ])
   if (!offering || !student) notFound()

@@ -19,7 +19,7 @@ export async function batchOverride(assignmentId: number, submissionIds: number[
   const fb = (feedback ?? '').trim()
   if (score == null && !fb) return { error: t('grade.batchNeedField') }
   if (score != null && (!Number.isFinite(score) || score < 0 || score > MAX_SCORE)) return { error: t('err.scoreRange') }
-  const res = await submissionRepo.applyBatchOverride(prisma, ids, user.schoolId, { score, feedback: fb || null, gradedById: user.userId, at: new Date() })
+  const res = await submissionRepo.applyBatchOverride(prisma, ids, user.schoolId, user.userId, user.role, { score, feedback: fb || null, gradedById: user.userId, at: new Date() })
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   return { updated: res.count }
 }
@@ -29,7 +29,7 @@ export async function batchOverride(assignmentId: number, submissionIds: number[
 export async function markMissing(assignmentId: number): Promise<{ marked?: number; error?: string }> {
   const { user, prisma, t } = await staffContext()
   if (!Number.isInteger(assignmentId)) return { error: t('err.assignNotFound') }
-  const a = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId)
+  const a = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!a) return { error: t('err.assignNotFound') }
   const roster = await userRepo.listClassRoster(prisma, user.schoolId, a.offering.class.id)
   const submittedIds = new Set(a.submissions.filter((s) => s.status !== 'DRAFT').map((s) => s.studentId))
@@ -58,7 +58,7 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   const { submissionId, perceptionModel, judgeModel } = parsed.data
   const rubric = parsed.data.rubric || DEFAULT_RUBRIC
 
-  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId, user.userId, user.role)
   if (!submission) return { error: t('err.subNoAccess') }
   if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
@@ -75,7 +75,7 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
 export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' | 'audio' | 'image' = 'video'): Promise<{ url?: string; error?: string }> {
   const { user, prisma, t } = await staffContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId, user.userId, user.role)
   const key = kind === 'audio' ? submission?.audioKey : kind === 'image' ? submission?.imageKey : submission?.videoKey
   if (!key) return { error: t('err.noVideo') }
   try {
@@ -89,7 +89,7 @@ export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' 
 export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?: { order: number; url: string; score: number | null; spokenText: string | null }[]; error?: string }> {
   const { user, prisma, t } = await staffContext()
   if (!storageConfigured()) return { error: t('err.storageNot') }
-  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId, user.userId, user.role)
   if (!submission) return { error: t('err.subNoAccess') }
   const takes = await submissionRepo.listShadowTakes(prisma, submissionId)
   const out: { order: number; url: string; score: number | null; spokenText: string | null }[] = []
@@ -117,7 +117,7 @@ export async function overrideScore(prevState: unknown, formData: FormData): Pro
   if (!parsed.ok) return { error: t(parsed.error) }
   const { submissionId, score, feedback } = parsed.data
 
-  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId)
+  const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId, user.userId, user.role)
   if (!submission) return { error: t('err.subNoAccess') }
 
   await submissionRepo.applyTeacherOverride(prisma, submission.id, {
@@ -139,7 +139,7 @@ export async function acceptAiForAssignment(prevState: unknown, formData: FormDa
   if (!parsed.ok) return { error: t(parsed.error) }
   const assignmentId = parsed.data.assignmentId
 
-  const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId)
+  const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!assignment) return { error: t('err.subNoAccess') }
 
   const count = await submissionRepo.acceptAiForAssignment(prisma, assignmentId, user.userId, new Date())

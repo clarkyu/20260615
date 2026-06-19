@@ -54,7 +54,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('createAssignments — phase resolution', () => {
   it('maps a typed phase to ordered sentences with no bank link', async () => {
-    const res = await createAssignments(prisma, 1, meta, [draft({ typedSentences: ['a', 'b'], requireAudio: true })], [10], null, null)
+    const res = await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [draft({ typedSentences: ['a', 'b'], requireAudio: true })], [10], null, null)
     expect(res).toEqual({ ok: true, redirectTo: '/dashboard/teaching/10' })
     expect(created).toHaveBeenCalledTimes(1)
     const phases = lastPhases()
@@ -67,7 +67,7 @@ describe('createAssignments — phase resolution', () => {
   })
 
   it('forces real video on a formal-test phase even if the teacher left video off', async () => {
-    await createAssignments(prisma, 1, meta, [draft({ typedSentences: ['a'], requireText: true, requireVideo: false, isFormalTest: true })], [10], null, null)
+    await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [draft({ typedSentences: ['a'], requireText: true, requireVideo: false, isFormalTest: true })], [10], null, null)
     const phases = lastPhases()
     expect(phases[0]).toMatchObject({ isFormalTest: true, requireVideo: true })
   })
@@ -77,6 +77,8 @@ describe('createAssignments — phase resolution', () => {
     await createAssignments(
       prisma,
       1,
+      9,
+      'SCHOOL_ADMIN',
       meta,
       [draft({ useBankSet: true, requireAudio: true }), draft({ useBankSet: true, requireVideo: true, requireEyesClosed: true })],
       [10],
@@ -95,26 +97,26 @@ describe('createAssignments — phase resolution', () => {
   })
 
   it('rejects a phase with no submission kind, and writes nothing', async () => {
-    const res = await createAssignments(prisma, 1, meta, [draft({ typedSentences: ['a'] })], [10], null, null)
+    const res = await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [draft({ typedSentences: ['a'] })], [10], null, null)
     expect(res).toEqual({ ok: false, error: 'err.needSubmitKind' })
     expect(created).not.toHaveBeenCalled()
   })
 
   it('rejects an empty phase list', async () => {
-    const res = await createAssignments(prisma, 1, meta, [], [10], null, null)
+    const res = await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [], [10], null, null)
     expect(res).toEqual({ ok: false, error: 'err.needPhase' })
     expect(created).not.toHaveBeenCalled()
   })
 
   it('rejects when no publish target resolves', async () => {
-    const res = await createAssignments(prisma, 1, meta, [draft({ requireAudio: true, typedSentences: ['a'] })], [], null, null)
+    const res = await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [draft({ requireAudio: true, typedSentences: ['a'] })], [], null, null)
     expect(res).toEqual({ ok: false, error: 'err.needPublishTarget' })
   })
 })
 
 describe('updateAssignment — phase resolution', () => {
   it('replaces phases via updateWithPhases', async () => {
-    const res = await updateAssignment(prisma, 1, 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null)
+    const res = await updateAssignment(prisma, 1, 9, 'SCHOOL_ADMIN', 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null)
     expect(res).toEqual({ ok: true })
     expect(assignmentsRepo.updateWithPhases as Mock).toHaveBeenCalledTimes(1)
     const call = (assignmentsRepo.updateWithPhases as Mock).mock.calls[0]

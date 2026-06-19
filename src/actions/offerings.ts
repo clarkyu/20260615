@@ -38,7 +38,7 @@ export async function updateOffering(prevState: unknown, formData: FormData): Pr
   const parsed = parseForm(z.object({ ...courseFields, offeringId: reqId, classId: reqId }), formData)
   if (!parsed.ok) return { error: cx.t(parsed.error) }
 
-  const res = await updateOfferingService(cx.prisma, cx.schoolId, parsed.data.offeringId, toInput(parsed.data), parsed.data.classId)
+  const res = await updateOfferingService(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, parsed.data.offeringId, toInput(parsed.data), parsed.data.classId)
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath(`/dashboard/teaching/${parsed.data.offeringId}`)
   redirect(`/dashboard/teaching/${parsed.data.offeringId}`)
@@ -47,7 +47,7 @@ export async function updateOffering(prevState: unknown, formData: FormData): Pr
 export async function deleteOffering(formData: FormData): Promise<void> {
   const { user, prisma } = await staffContext()
   const offeringId = Number(formData.get('offeringId'))
-  await offeringRepo.deleteForSchool(prisma, offeringId, user.schoolId)
+  await offeringRepo.deleteForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
   revalidatePath('/dashboard/teaching')
   redirect('/dashboard/teaching')
 }
