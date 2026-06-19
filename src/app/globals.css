@@ -142,10 +142,68 @@
   }
 }
 
+/* ── Ambient aurora backdrop (logged-out / auth surfaces) ────────────────────── */
+/* Decorative only: soft drifting colour blobs behind the auth card. GPU-only
+   (transform/opacity), non-interactive, sits behind all content. Disabled under
+   prefers-reduced-motion below. */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.45;
+  will-change: transform;
+}
+.aurora-1 {
+  width: 44vmax;
+  height: 44vmax;
+  top: -16vmax;
+  left: -10vmax;
+  background: hsl(var(--primary) / 0.5);
+  animation: auroraDrift1 22s ease-in-out infinite;
+}
+.aurora-2 {
+  width: 38vmax;
+  height: 38vmax;
+  right: -8vmax;
+  bottom: -14vmax;
+  background: hsl(270 70% 62% / 0.45);
+  animation: auroraDrift2 28s ease-in-out infinite;
+}
+.aurora-3 {
+  width: 30vmax;
+  height: 30vmax;
+  top: 28%;
+  left: 42%;
+  background: hsl(200 80% 60% / 0.35);
+  animation: auroraDrift1 34s ease-in-out infinite reverse;
+}
+
+@keyframes auroraDrift1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(5%, 6%, 0) scale(1.15); }
+}
+@keyframes auroraDrift2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.1); }
+  50% { transform: translate3d(-6%, -5%, 0) scale(0.92); }
+}
+
+/* Honour the OS "reduce motion" setting everywhere: stop looping animations
+   (pulse / spin / ping / aurora) and collapse transitions to near-instant, so
+   motion-sensitive users get a still UI without losing any information. */
 @media (prefers-reduced-motion: reduce) {
-  .animate-in-up,
-  .animate-pop,
-  .skeleton::after {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
