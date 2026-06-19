@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { claimAndRunDue, enqueueGrading, backoffMs, MAX_ATTEMPTS, type JobRunner } from '../jobs'
+import { claimAndRunDue, enqueueGrading, heartbeatJob, backoffMs, MAX_ATTEMPTS, type JobRunner } from '../jobs'
 
 // ── A tiny in-memory stand-in for the bits of prisma.gradingJob the queue uses ──
 
@@ -170,6 +170,21 @@ describe('enqueueGrading', () => {
     await enqueueGrading(db, 100, 'shadow')
     expect(jobs).toHaveLength(1)
     expect(jobs[0]).toMatchObject({ status: 'PENDING', attempts: 0, lastError: null })
+  })
+})
+
+describe('heartbeatJob', () => {
+  it('refreshes a PROCESSING job so a slow-but-alive run is not reclaimed', async () => {
+    const stale = new Date(Date.now() - 10 * 60_000)
+    const jobs = [job({ status: 'PROCESSING', submissionId: 100, updatedAt: stale })]
+    const res = await heartbeatJob(fakePrisma(jobs), 100)
+    expect(res.count).toBe(1)
+    expect(jobs[0].updatedAt.getTime()).toBeGreaterThan(stale.getTime())
+  })
+
+  it('is fenced to PROCESSING — it never touches a settled/pending job', async () => {
+    const jobs = [job({ status: 'PENDING', submissionId: 100 })]
+    expect((await heartbeatJob(fakePrisma(jobs), 100)).count).toBe(0)
   })
 })
 

@@ -24,11 +24,11 @@ export type GradingKind = 'submission' | 'shadow'
 // After this many tries a job dead-letters instead of retrying forever.
 export const MAX_ATTEMPTS = 4
 // A PROCESSING row older than this is assumed orphaned (worker died) and reclaimed.
-// `updatedAt` is stamped at claim and not heartbeat during the run, so this must
-// sit above the realistic max single-job runtime — a per-sentence shadow grade of
-// a large set runs in sequential batches and can take several minutes — otherwise
-// a slow-but-alive job gets reclaimed and double-run. 15 min is comfortably above
-// that while still recovering a genuinely dead worker reasonably soon.
+// Shadow grading heartbeats `updatedAt` after every sentence batch (see heartbeatJob),
+// so a slow-but-alive run keeps its row fresh — STALE_MS only has to exceed the gap
+// BETWEEN heartbeats (one batch of a few sentences) and the single-shot submission
+// grade's runtime, both well under this. 15 min still recovers a genuinely dead worker
+// reasonably soon.
 const STALE_MS = 15 * 60 * 1000
 const BASE_BACKOFF_MS = 60 * 1000
 
@@ -57,7 +57,7 @@ async function defaultRunner(prisma: PrismaClient, job: JobRow): Promise<RunOutc
   let error: string | undefined
   try {
     if (job.kind === 'shadow') {
-      await gradeShadowSubmission(prisma, job.submissionId)
+      await gradeShadowSubmission(prisma, job.submissionId, () => heartbeatJob(prisma, job.submissionId))
     } else {
       const r = await autoGradeById(prisma, job.submissionId)
       if (r === null) return { done: true } // nothing to grade — settle, don't loop
@@ -155,6 +155,14 @@ export async function claimAndRunDue(
     }
   }
   return { ran }
+}
+
+// Keep a running job's row fresh so the stale-reclaim (which keys on `updatedAt`) never
+// treats a slow-but-alive run as orphaned and double-runs it (wasting AI spend). Fenced
+// to PROCESSING so it never disturbs a job another isolate has already settled or
+// reclaimed. Writing `status` to its own value still bumps the @updatedAt column.
+export function heartbeatJob(prisma: PrismaClient, submissionId: number) {
+  return prisma.gradingJob.updateMany({ where: { submissionId, status: 'PROCESSING' }, data: { status: 'PROCESSING' } })
 }
 
 // Fire-and-forget drain for background use (runAfterResponse / waitUntil). Never

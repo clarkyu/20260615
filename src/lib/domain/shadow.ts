@@ -58,7 +58,10 @@ export function summarizeShadow(scoreByOrder: Map<number, number>): ShadowSummar
   return { overall, minScore, weakestOrder: weakest[0], weakestScore: weakest[1], needsReview }
 }
 
-export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: number): Promise<void> {
+// `onBatch` (the durable queue passes a job heartbeat) is awaited after each sentence
+// batch so a large, slow shadow grade keeps its job row fresh and isn't reclaimed +
+// double-run mid-flight.
+export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: number, onBatch?: () => Promise<unknown>): Promise<void> {
   if (!storageConfigured()) return
   const submission = await submissionRepo.findGradableShadow(prisma, submissionId)
   if (!submission || submission.shadowTakes.length === 0) return
@@ -102,6 +105,8 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
           console.error('[gradeShadowSubmission] take failed:', res.reason)
         }
       }
+      // Heartbeat between batches so a slow-but-alive run isn't reclaimed as orphaned.
+      try { await onBatch?.() } catch { /* heartbeat is best-effort */ }
     }
 
     const summary = summarizeShadow(scoreByOrder)
