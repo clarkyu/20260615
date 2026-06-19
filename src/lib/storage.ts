@@ -40,6 +40,12 @@ export async function presignDownload(key: string, expiresIn = 3600): Promise<st
   return presign(key, 'GET', expiresIn)
 }
 
+// Delete one object. Best-effort: an already-gone object (404) counts as success.
+export async function deleteObject(key: string): Promise<void> {
+  const res = await client().fetch(objectUrl(key), { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) throw new Error(`R2 delete failed: ${res.status}`)
+}
+
 // Media keys carry the phaseId so the per-phase submissions of one assignment never
 // collide on the same attempt number. (A single-phase assignment still has exactly
 // one phase, so this is just an extra path segment.)

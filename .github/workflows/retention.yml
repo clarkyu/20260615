@@ -1,0 +1,26 @@
+name: media-retention-sweep
+
+# Daily sweep that deletes student recordings older than VIDEO_RETENTION_DAYS (set on the
+# Worker). Opt-in: it does nothing until both the CRON_SECRET repo secret and a positive
+# VIDEO_RETENTION_DAYS Worker var are configured. Cloudflare Cron Triggers need a custom
+# Worker `scheduled` handler under OpenNext; hitting the protected route from Actions keeps
+# this verifiable and off the request worker.
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger retention sweep
+        env:
+          SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SECRET" ]; then echo "CRON_SECRET not set — retention disabled, skipping."; exit 0; fi
+          code=$(curl -fsS -o /tmp/out -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $SECRET" \
+            https://www.hihomework.com/api/cron/retention || true)
+          echo "HTTP $code"; cat /tmp/out 2>/dev/null; echo
+          test "$code" = "200"
