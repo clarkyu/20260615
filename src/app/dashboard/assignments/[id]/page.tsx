@@ -1,7 +1,8 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronLeft, Eye } from 'lucide-react'
-import { requireStaff } from '@/lib/auth'
+import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
@@ -9,6 +10,21 @@ import { countViolations } from '@/lib/domain/grading'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 import { GradingClient } from './grading-client'
+
+// Tab title = the assignment's own title (teachers often have several grading tabs
+// open). Scoped exactly like the page (own offering for a TEACHER) so a guessed id
+// can't leak another teacher's title; falls back to the generic menu name otherwise.
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { t } = await getT()
+  const fallback = { title: t('nav.assignments') }
+  const id = Number((await params).id)
+  if (!Number.isInteger(id)) return fallback
+  const user = await getCurrentUser()
+  if (!user?.schoolId) return fallback
+  const prisma = await getDb()
+  const a = await assignmentRepo.findForSchool(prisma, id, user.schoolId, user.userId, user.role)
+  return a ? { title: a.title } : fallback
+}
 
 export default async function AssignmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
