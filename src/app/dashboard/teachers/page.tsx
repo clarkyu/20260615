@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
+import * as inviteRepo from '@/lib/repo/invites'
 import { setStaffRole } from '@/actions/staff'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +21,9 @@ export default async function TeachersPage() {
 
   const teachers = await userRepo.listStaffForSchool(prisma, user.schoolId)
   const viewerIsAdmin = user.role === 'SCHOOL_ADMIN' || user.role === 'SUPER_ADMIN'
+  const pendingInvites = viewerIsAdmin
+    ? (await inviteRepo.listPendingForSchool(prisma, user.schoolId, new Date())).map((i) => ({ id: i.id, expiresAt: i.expiresAt.toISOString() }))
+    : []
 
   return (
     <div className="space-y-4 py-2">
@@ -32,7 +36,7 @@ export default async function TeachersPage() {
       </div>
 
       {viewerIsAdmin ? <AddTeacherForm /> : null}
-      {viewerIsAdmin ? <InviteTeacher /> : null}
+      {viewerIsAdmin ? <InviteTeacher pending={pendingInvites} /> : null}
 
       <Card>
         <CardContent className="divide-y divide-border/60 p-0">

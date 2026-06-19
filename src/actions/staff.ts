@@ -26,7 +26,18 @@ export async function createSchoolInvite(): Promise<{ url?: string; error?: stri
     createdById: cx.user.userId,
     expiresAt: new Date(Date.now() + INVITE_TTL_MS),
   })
+  revalidatePath('/dashboard/teachers')
   return { url: `${await getAppUrl()}/join?token=${token}` }
+}
+
+// Revoke a still-pending invite (school-admin). Scoped to their own school.
+export async function revokeSchoolInvite(formData: FormData): Promise<void> {
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return
+  const id = Number(formData.get('inviteId'))
+  if (!Number.isInteger(id)) return
+  await inviteRepo.revoke(cx.prisma, id, cx.schoolId)
+  revalidatePath('/dashboard/teachers')
 }
 
 // Adds a colleague teacher to the caller's own school. The initial password equals
