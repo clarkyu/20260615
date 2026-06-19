@@ -38,10 +38,13 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260613.1",
+    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.20",
+    "better-sqlite3": "^12.10.1",
     "dotenv": "^16.4.7",
     "eslint": "^8",
     "eslint-config-next": "15.5.18",

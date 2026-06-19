@@ -1,0 +1,73 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import type { PrismaClient } from '@prisma/client'
+import { freshDb, type TestDb } from './harness'
+import * as classRepo from '@/lib/repo/classes'
+import * as submissionRepo from '@/lib/repo/submissions'
+
+// Behaviours only a REAL database can prove: ON DELETE CASCADE, and the raw-SQL
+// `acceptAiForAssignment` (deliberately not unit-tested — mocking raw SQL only
+// snapshots the template; a real engine actually runs the COALESCE + status guards).
+
+async function assignmentWithSubs(p: PrismaClient, subs: { no: string; status: string; needsReview: boolean; aiScore: number | null; teacherScore: number | null }[]) {
+  const school = await p.school.create({ data: { name: 'S', code: 'S' } })
+  const teacher = await p.user.create({ data: { role: 'TEACHER', schoolId: school.id, staffNo: 'T', passwordHash: 'x' } })
+  const course = await p.course.create({ data: { schoolId: school.id, name: 'C', code: 'C' } })
+  const cls = await p.classGroup.create({ data: { schoolId: school.id, name: 'K' } })
+  const offering = await p.courseOffering.create({ data: { schoolId: school.id, courseId: course.id, teacherId: teacher.id, classId: cls.id, year: 'Y', semester: '1' } })
+  const asg = await p.assignment.create({ data: { offeringId: offering.id, title: 'A' } })
+  const ids: Record<string, number> = {}
+  for (const s of subs) {
+    const stu = await p.user.create({ data: { role: 'STUDENT', schoolId: school.id, studentNo: s.no, passwordHash: 'x' } })
+    const sub = await p.submission.create({ data: { assignmentId: asg.id, studentId: stu.id, attempt: 1, status: s.status as never, needsReview: s.needsReview, aiScore: s.aiScore, teacherScore: s.teacherScore } })
+    ids[s.no] = sub.id
+  }
+  return { asg, ids, teacherId: teacher.id }
+}
+
+describe('real cascade + raw SQL behaviours', () => {
+  let db: TestDb
+  beforeEach(async () => { db = freshDb(); await db.prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON') })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('deleteWithStudents cascades memberships and deletes only the orphaned student', async () => {
+    const p = db.prisma
+    const school = await p.school.create({ data: { name: 'S', code: 'S' } })
+    const c1 = await p.classGroup.create({ data: { schoolId: school.id, name: 'C1' } })
+    const c2 = await p.classGroup.create({ data: { schoolId: school.id, name: 'C2' } })
+    const both = await p.user.create({ data: { role: 'STUDENT', schoolId: school.id, studentNo: 'both', passwordHash: 'x' } })
+    const only1 = await p.user.create({ data: { role: 'STUDENT', schoolId: school.id, studentNo: 'only1', passwordHash: 'x' } })
+    await p.studentClass.create({ data: { studentId: both.id, classId: c1.id } })
+    await p.studentClass.create({ data: { studentId: both.id, classId: c2.id } })
+    await p.studentClass.create({ data: { studentId: only1.id, classId: c1.id } })
+
+    expect(await classRepo.deleteWithStudents(p, c1.id, school.id)).toBe(true)
+
+    expect(await p.classGroup.findUnique({ where: { id: c1.id } })).toBeNull()
+    // The cross-class student is kept and still in C2 (their C1 membership cascaded away).
+    expect(await p.user.findUnique({ where: { id: both.id } })).not.toBeNull()
+    expect(await p.studentClass.count({ where: { studentId: both.id } })).toBe(1)
+    // The student who was only in C1 is gone (orphan cleanup).
+    expect(await p.user.findUnique({ where: { id: only1.id } })).toBeNull()
+  })
+
+  it('acceptAiForAssignment finalizes only AI-scored rows needing review, never clobbering a teacher score or a flagged row', async () => {
+    const p = db.prisma
+    const { asg, ids, teacherId } = await assignmentWithSubs(p, [
+      { no: 'ai', status: 'GRADED', needsReview: true, aiScore: 80, teacherScore: null }, // → finalScore 80
+      { no: 'teacher', status: 'GRADED', needsReview: true, aiScore: 80, teacherScore: 90 }, // → keeps 90
+      { no: 'noai', status: 'GRADED', needsReview: true, aiScore: null, teacherScore: null }, // → untouched (no AI score)
+      { no: 'flagged', status: 'FLAGGED', needsReview: true, aiScore: 70, teacherScore: null }, // → untouched (flagged)
+      { no: 'done', status: 'GRADED', needsReview: false, aiScore: 60, teacherScore: null }, // → untouched (already reviewed)
+    ])
+
+    const affected = await submissionRepo.acceptAiForAssignment(p, asg.id, teacherId, new Date())
+    expect(affected).toBe(2) // only 'ai' and 'teacher' match the WHERE
+
+    const get = async (no: string) => p.submission.findUnique({ where: { id: ids[no] } })
+    expect(await get('ai')).toMatchObject({ finalScore: 80, status: 'GRADED', needsReview: false, gradedById: teacherId })
+    expect(await get('teacher')).toMatchObject({ finalScore: 90, needsReview: false }) // COALESCE(teacherScore, aiScore)
+    expect(await get('noai')).toMatchObject({ finalScore: null, needsReview: true })
+    expect(await get('flagged')).toMatchObject({ status: 'FLAGGED', needsReview: true })
+    expect(await get('done')).toMatchObject({ finalScore: null, needsReview: false })
+  })
+})
