@@ -13,6 +13,7 @@ import { I18nProvider } from '@/components/i18n-provider'
 import { TzOffsetProvider } from '@/components/tz-provider'
 import { AppHeader } from '@/components/app-header'
 import { BottomNav } from '@/components/bottom-nav'
+import { AuroraBg } from '@/components/aurora-bg'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
@@ -58,6 +59,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale === 'zh' ? 'zh-CN' : locale} className={inter.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        {/* Ambient backdrop only on the logged-out / auth surfaces (login, register,
+            forgot/reset, join) — exactly the pages an unauthenticated visitor sees. */}
+        {!user ? <AuroraBg /> : null}
         <I18nProvider locale={locale}>
           <TzOffsetProvider offset={tzo}>
             <AppHeader user={user} />
