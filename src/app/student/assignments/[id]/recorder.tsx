@@ -6,6 +6,7 @@ import { Eye, ListChecks, Video, Mic, Wifi } from 'lucide-react'
 import { getUploadUrl, recordMedia } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
+import { RecordConsentNotice, hasRecordConsent } from '@/components/record-consent'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -55,6 +56,7 @@ export function Recorder(props: {
   const [elapsed, setElapsed] = useState(0)
   const [count, setCount] = useState(3)
   const [violations, setViolations] = useState<Violation[]>([])
+  const [needConsent, setNeedConsent] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -203,6 +205,9 @@ export function Recorder(props: {
 
   return (
     <div className="space-y-3">
+      {needConsent ? (
+        <RecordConsentNotice onAccept={() => { setNeedConsent(false); void arm() }} onCancel={() => setNeedConsent(false)} />
+      ) : null}
       {phase === 'review' ? (
         <Card>
           <CardContent className="space-y-3 p-4 text-sm">
@@ -281,7 +286,7 @@ export function Recorder(props: {
           {props.attemptsLeft <= 0 && phase === 'review' ? (
             <FormMessage>{t('rec.usedUp')}</FormMessage>
           ) : phase === 'review' ? (
-            <Button className="w-full" size="lg" onClick={arm}>{isAudio ? t('rec.startAudio') : t('rec.start')}</Button>
+            <Button className="w-full" size="lg" onClick={() => (hasRecordConsent() ? arm() : setNeedConsent(true))}>{isAudio ? t('rec.startAudio') : t('rec.start')}</Button>
           ) : phase === 'countdown' ? (
             <Button className="w-full" size="lg" variant="outline" onClick={() => { cleanupStream(); setPhase('review') }}>{t('rec.cancel')}</Button>
           ) : phase === 'recording' ? (

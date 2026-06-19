@@ -9,6 +9,7 @@ import { getShadowVideoUrl, getShadowTakeUploadUrl, finishShadowing } from '@/ac
 import { useT } from '@/components/i18n-provider'
 import { useChunkLang, ChunkLangToggle, BilingualChunk } from '@/components/bilingual'
 import { FormMessage } from '@/components/form-message'
+import { RecordConsentNotice, hasRecordConsent } from '@/components/record-consent'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +41,7 @@ function SentenceRecorder({ phaseId, order, recorded, onRecorded }: { phaseId: n
   const t = useT()
   const [phase, setPhase] = useState<'idle' | 'recording' | 'uploading'>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [needConsent, setNeedConsent] = useState(false)
   const streamRef = useRef<MediaStream | null>(null)
   const recRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -87,12 +89,15 @@ function SentenceRecorder({ phaseId, order, recorded, onRecorded }: { phaseId: n
 
   return (
     <div className="mt-1.5 flex items-center gap-2">
+      {needConsent ? (
+        <RecordConsentNotice onAccept={() => { setNeedConsent(false); void start() }} onCancel={() => setNeedConsent(false)} />
+      ) : null}
       {phase === 'recording' ? (
         <Button size="sm" variant="destructive" onClick={() => recRef.current?.stop()}><Square className="h-3.5 w-3.5" />{t('shadow.stop')}</Button>
       ) : phase === 'uploading' ? (
         <Button size="sm" disabled>{t('photo.uploading')}</Button>
       ) : (
-        <Button size="sm" variant={recorded ? 'outline' : 'default'} onClick={start}>
+        <Button size="sm" variant={recorded ? 'outline' : 'default'} onClick={() => (hasRecordConsent() ? start() : setNeedConsent(true))}>
           <Mic className="h-3.5 w-3.5" />{recorded ? t('shadow.reRecord') : t('shadow.record')}
         </Button>
       )}

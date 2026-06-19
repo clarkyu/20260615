@@ -5,6 +5,7 @@ import { Sparkles, Mic, Square, RotateCcw, CheckCircle2, AlertTriangle, Info } f
 import { getPracticeUploadUrl, gradePracticeAttempt, type PracticeFeedback } from '@/actions/practice'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
+import { RecordConsentNotice, hasRecordConsent } from '@/components/record-consent'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -35,6 +36,7 @@ export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentenc
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<PracticeFeedback | null>(null)
+  const [needConsent, setNeedConsent] = useState(false)
 
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -143,6 +145,9 @@ export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentenc
   return (
     <Card className="border-primary/30">
       <CardContent className="space-y-3 p-4">
+        {needConsent ? (
+          <RecordConsentNotice onAccept={() => { setNeedConsent(false); void start() }} onCancel={() => setNeedConsent(false)} />
+        ) : null}
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-semibold">{t('practice.cardTitle')}</span>
@@ -165,7 +170,7 @@ export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentenc
               </details>
             ) : null}
             {error ? <FormMessage>{error}</FormMessage> : null}
-            <Button className="w-full" size="lg" onClick={start}>
+            <Button className="w-full" size="lg" onClick={() => (hasRecordConsent() ? start() : setNeedConsent(true))}>
               <Mic className="h-4 w-4" />
               {t('practice.start')}
             </Button>
