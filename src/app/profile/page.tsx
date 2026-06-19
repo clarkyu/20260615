@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Bot, ChevronRight, MessageSquarePlus, Trophy } from 'lucide-react'
 import { requireAuth } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as departmentRepo from '@/lib/repo/departments'
@@ -11,6 +12,11 @@ import { Badge } from '@/components/ui/badge'
 import { ProfileClient } from './profile-client'
 import { StaffSettings } from './staff-settings'
 import { ContactSettings } from './contact-settings'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.profile') }
+}
 
 export default async function ProfilePage() {
   const session = await requireAuth()

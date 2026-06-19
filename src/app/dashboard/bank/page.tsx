@@ -3,10 +3,16 @@ import { redirect } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
 import { BankActions } from './bank-actions'
 import { BankList } from './bank-list'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.bank') }
+}
 
 export default async function BankPage({ searchParams }: { searchParams: Promise<{ cefr?: string; strand?: string; domain?: string; series?: string; video?: string }> }) {
   const user = await requireStaff()

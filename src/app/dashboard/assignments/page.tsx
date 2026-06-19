@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ClipboardList, ChevronRight, Inbox } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { Card, CardContent } from '@/components/ui/card'
@@ -10,6 +11,11 @@ import { LocalDate } from '@/components/local-date'
 
 // The staff "作业" menu: every assignment in the teacher's scope, newest first,
 // each linking to its grading screen.
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.assignments') }
+}
+
 export default async function StaffAssignmentsPage() {
   const user = await requireStaff()
   const prisma = await getDb()

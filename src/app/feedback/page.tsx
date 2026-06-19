@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { MessageSquarePlus, Star } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as feedbackRepo from '@/lib/repo/feedback'
 import { reviewFeedback } from '@/actions/feedback'
@@ -13,6 +14,11 @@ import { FeedbackForm } from './feedback-form'
 
 const STATUS_TONE = { ADOPTED: 'success', DECLINED: 'muted', PENDING: 'warning' } as const
 const STATUS_KEY = { ADOPTED: 'fb.adopted', DECLINED: 'fb.declined', PENDING: 'fb.pending' } as const
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.feedback') }
+}
 
 export default async function FeedbackPage() {
   const user = await getCurrentUser()
