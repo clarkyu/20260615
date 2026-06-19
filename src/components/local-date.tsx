@@ -1,10 +1,13 @@
 'use client'
 
-// Renders a UTC instant as a YYYY-MM-DD date in the BROWSER's local timezone, so a
-// due date reads as the teacher/student's own calendar day (not the server's UTC day).
-// suppressHydrationWarning: the server (UTC) and client (local) can differ by a day.
+import { formatLocalDay } from '@/lib/time'
+import { useTzOffset } from './tz-provider'
+
+// Renders a UTC instant as a YYYY-MM-DD date in the user's timezone. The offset comes
+// from the `tzo` cookie via TzOffsetProvider, so the SERVER and the CLIENT compute the
+// exact same day from (iso, offset) — no hydration mismatch, no first-paint UTC→local
+// flash. (Previously this read the browser's local timezone only on the client, which
+// diverged from the UTC server render and flashed on hydration.)
 export function LocalDate({ iso }: { iso: string }) {
-  const d = new Date(iso)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return <span suppressHydrationWarning>{`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`}</span>
+  return <span>{formatLocalDay(iso, useTzOffset())}</span>
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localDayWindowUtc, parseTzOffset } from '@/lib/time'
+import { localDayWindowUtc, parseTzOffset, formatLocalDay } from '@/lib/time'
 
 describe('localDayWindowUtc', () => {
   it('UTC+8 (tzo=-480): a UTC instant near local midnight maps to the right local day', () => {
@@ -29,5 +29,19 @@ describe('parseTzOffset', () => {
     expect(parseTzOffset(undefined)).toBe(0)
     expect(parseTzOffset('abc')).toBe(0)
     expect(parseTzOffset('99999')).toBe(0) // out of sane range
+  })
+})
+
+describe('formatLocalDay', () => {
+  it('renders the same calendar day the user sees, given their tz offset', () => {
+    // 2026-06-19T16:30Z is already the 20th in UTC+8 (tzo=-480) — server (UTC) and the
+    // browser must BOTH say 2026-06-20, otherwise the date flashes on hydration.
+    expect(formatLocalDay('2026-06-19T16:30:00Z', -480)).toBe('2026-06-20')
+    expect(formatLocalDay('2026-06-19T16:30:00Z', 0)).toBe('2026-06-19') // plain UTC day
+    // UTC-5 (tzo=300): an early-UTC instant is still the previous local day.
+    expect(formatLocalDay('2026-06-19T02:00:00Z', 300)).toBe('2026-06-18')
+  })
+  it('returns empty string for an unparseable instant', () => {
+    expect(formatLocalDay('not-a-date', -480)).toBe('')
   })
 })

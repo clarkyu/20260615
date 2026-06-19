@@ -15,3 +15,14 @@ export function parseTzOffset(raw: string | undefined | null): number {
   const n = Number(raw)
   return Number.isFinite(n) && Math.abs(n) <= 900 ? n : 0
 }
+
+// Format a UTC instant as YYYY-MM-DD in the timezone given by `tzo` (minutes from
+// Date.getTimezoneOffset(); UTC+8 → -480). Deterministic from (iso, tzo) — the server
+// and the browser produce the SAME string, so a date never flashes from UTC to local.
+export function formatLocalDay(iso: string, tzo: number): string {
+  // Shift the instant so its UTC fields read as the user's local wall-clock day.
+  const d = new Date(new Date(iso).getTime() - tzo * 60000)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+}
