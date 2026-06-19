@@ -33,12 +33,12 @@
 | 80 | Whisper(perception) 接真实 API | A8a | 当前为占位 stub；已有 Gemini/Qwen/OpenAI 真实可用并优雅降级，**可选，待产品确认是否要这家** |
 | 81 | Claude(judge) 接真实 API | A8b | 当前为占位 stub；已有 Gemini/Qwen/MiniMax/DeepSeek/GPT-4o 真实 judge，**可选，待产品确认** |
 
-## P4 · 基础设施 epic，需 Workers Paid（增量82–83）
+## P4 · 基础设施（已重新评估，2026-06）
 
-| 增量 | 标题 | 来源 | 范围 / 做法 |
+| 增量 | 标题 | 来源 | 结论 / 做法 |
 |---|---|---|---|
-| 82 | 限流迁移 Durable Object | B1 | 进程内 Map（多 isolate 下偏弱）→ Durable Object 强一致限流；现有 D1 兜底先顶着 |
-| 83 | 后台评阅迁移 Cloudflare Queues/Workflows | B2 | D1 轮询队列（持久+重试+自愈，够用）→ 原生 Queues/Workflows，属优化 |
+| — | 限流迁移 Durable Object | B1 | **跳过**。复核发现现有限流**已是 D1 共享存储**（`rate-limit.ts` 主路径 `checkRateLimitD1`，跨 isolate 一致），README 说的「进程内 Map 偏弱」其实已解决；DO 仅是省每次 D1 写的边际优化，却要冒 OpenNext Worker 入口改造（无干净注入点、运行期无法本地验证、改错断所有部署）的风险，不划算。 |
+| 82 | 后台评阅定时排空（安全 drain 版） | B2 | **采用安全方案**替代原生 Queues：受保护 `POST /api/cron/drain` 路由 + GitHub Action 每 ~5 分钟排空 D1 评阅队列，让评阅不再等人开看板触发。复用现有持久队列（退避/死信/心跳/幂等），零 Worker 入口改造、可完整验证。原生 Cloudflare Queues（秒级、平台托管）需自定义 Worker `queue()` 入口，运行期不可本地验证、风险高，**故不采用**——正式提交本就异步、老师事后复核，分钟级延迟无感（秒级实时已由同步评的「练一练」覆盖）。 |
 
 ## Parked · 条件触发，不预编号
 
