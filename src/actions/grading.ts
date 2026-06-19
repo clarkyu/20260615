@@ -92,15 +92,19 @@ export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?:
   const submission = await submissionRepo.findForStaff(prisma, submissionId, user.schoolId, user.userId, user.role)
   if (!submission) return { error: t('err.subNoAccess') }
   const takes = await submissionRepo.listShadowTakes(prisma, submissionId)
-  const out: { order: number; url: string; score: number | null; spokenText: string | null }[] = []
-  for (const tk of takes) {
-    try {
-      out.push({ order: tk.order, url: await presignDownload(tk.audioKey), score: tk.aiScore, spokenText: tk.spokenText })
-    } catch {
-      // skip a take whose URL can't be signed
-    }
-  }
-  return { takes: out }
+  // Presign every take in parallel — a shadowing review can have many sentences, and
+  // each presign is an independent async signing op; serial awaits would stack their
+  // latency. Promise.all preserves order; a take whose URL can't be signed is skipped.
+  const signed = await Promise.all(
+    takes.map(async (tk) => {
+      try {
+        return { order: tk.order, url: await presignDownload(tk.audioKey), score: tk.aiScore, spokenText: tk.spokenText }
+      } catch {
+        return null
+      }
+    }),
+  )
+  return { takes: signed.filter((x): x is NonNullable<typeof x> => x !== null) }
 }
 
 // Teacher manual override — the AI score is advisory, the teacher's is final.
