@@ -49,10 +49,13 @@ npm test && npx tsc --noEmit && npm run lint && npm run cf:build
 
 ## 部署到 Cloudflare
 
+> 📖 完整的运维/部署手册（环境变量全表、迁移与回滚、定时任务、密钥轮换、故障排查、
+> 灾备、部署后健康检查）见 **[`docs/OPERATIONS.md`](docs/OPERATIONS.md)**。下面是速览。
+
 ```bash
 # 一次性：建资源
 npx wrangler d1 create recitation-db      # 把返回的 database_id 填进 wrangler.jsonc
-npx wrangler r2 bucket create recitations
+npx wrangler r2 bucket create hihomework
 # secrets（逐个）
 npx wrangler secret put SESSION_SECRET
 npx wrangler secret put RESEND_API_KEY
