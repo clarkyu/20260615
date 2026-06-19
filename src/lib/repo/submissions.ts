@@ -196,6 +196,21 @@ export function clearMedia(prisma: PrismaClient, id: number) {
   return prisma.submission.update({ where: { id }, data: { videoKey: null, audioKey: null, imageKey: null } })
 }
 
+// Per-sentence shadow-take recordings older than `cutoff`. The retention sweep deletes
+// the take row + its audio; the submission keeps its overall grade.
+export function listExpiredShadowTakes(prisma: PrismaClient, cutoff: Date, limit: number) {
+  return prisma.shadowTake.findMany({
+    where: { createdAt: { lt: cutoff } },
+    select: { id: true, audioKey: true },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+  })
+}
+
+export function deleteShadowTake(prisma: PrismaClient, id: number) {
+  return prisma.shadowTake.delete({ where: { id } })
+}
+
 export function findGradable(prisma: PrismaClient, id: number) {
   return prisma.submission.findUnique({ where: { id }, include: gradingInclude })
 }

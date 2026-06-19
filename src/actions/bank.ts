@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import type { CurrentUser } from '@/lib/auth'
-import { presignUpload, storageConfigured, chunkSetVideoKey } from '@/lib/storage'
+import { presignUpload, storageConfigured, chunkSetVideoKey, deleteObject } from '@/lib/storage'
 import { parseChunks, splitIntoSets } from '@/lib/bank'
 import { starterSets, englishFlowSets } from '@/lib/curriculum/starter-bank'
 import { importPack, refreshPack } from '@/lib/domain/bank'
@@ -161,7 +161,11 @@ export async function updateChunkSet(prevState: unknown, formData: FormData): Pr
 export async function deleteChunkSet(formData: FormData): Promise<void> {
   const { user, prisma } = await staffContext()
   const id = Number(formData.get('chunkSetId'))
-  await bankRepo.deleteOwned(prisma, id, user.schoolId, isSuper(user))
+  const res = await bankRepo.deleteOwned(prisma, id, user.schoolId, isSuper(user))
+  // The DB cascade-deletes the set's rows but not its R2 video — clean it up (best-effort).
+  if (res.videoKey && storageConfigured()) {
+    try { await deleteObject(res.videoKey) } catch (err) { console.error('[deleteChunkSet] R2 cleanup failed:', err) }
+  }
   revalidatePath('/dashboard/bank')
   redirect('/dashboard/bank')
 }
