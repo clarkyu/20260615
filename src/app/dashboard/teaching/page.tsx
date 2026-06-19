@@ -3,11 +3,17 @@ import { redirect } from 'next/navigation'
 import { Plus, GraduationCap, ClipboardPen } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as offeringRepo from '@/lib/repo/offerings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { TeachingList } from './teaching-list'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.teaching') }
+}
 
 export default async function TeachingPage() {
   const user = await requireStaff()
