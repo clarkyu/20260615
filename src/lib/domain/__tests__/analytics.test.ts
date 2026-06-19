@@ -240,4 +240,8 @@ describe('parsePerSentence', () => {
     expect(parsePerSentence(null)).toEqual([])
     expect(parsePerSentence('not json')).toEqual([])
   })
+  it('returns [] when valid JSON lacks a perSentence array', () => {
+    expect(parsePerSentence(JSON.stringify({ judge: { score: 5 } }))).toEqual([])
+    expect(parsePerSentence(JSON.stringify({ perception: { perSentence: 'nope' } }))).toEqual([])
+  })
 })
