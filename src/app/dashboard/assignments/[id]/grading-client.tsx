@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -73,6 +73,10 @@ export function GradingClient(props: {
   // can't shift the list under the index — otherwise the index would point at a
   // different submission, especially with the "only to-review" filter on.
   const [focusRows, setFocusRows] = useState<Row[]>([])
+  // Multi-select for batch grading.
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [batchScore, setBatchScore] = useState('')
+  const [batchFeedback, setBatchFeedback] = useState('')
 
   // AI-first triage: rows the AI has handed to the teacher vs. ones it finished.
   const submitted = useMemo(() => props.rows.filter((r) => r.status !== 'DRAFT' && r.status !== 'MISSING'), [props.rows])
@@ -96,6 +100,29 @@ export function GradingClient(props: {
         (!needle || r.studentName.toLowerCase().includes(needle) || r.studentNo.toLowerCase().includes(needle)),
     )
   }, [props.rows, statusFilter, search, reviewOnly])
+
+  const toggleSel = (id: number) => setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id))
+  function toggleAllVisible() {
+    setSelected((prev) => {
+      const n = new Set(prev)
+      if (allVisibleSelected) visibleRows.forEach((r) => n.delete(r.id))
+      else visibleRows.forEach((r) => n.add(r.id))
+      return n
+    })
+  }
+  function applyBatch() {
+    const sc = batchScore.trim()
+    const scoreNum = sc === '' ? null : Number(sc)
+    if (scoreNum == null && !batchFeedback.trim()) { setError(t('grade.batchNeedField')); return }
+    if (!confirm(t('grade.batchConfirm', { n: selected.size }))) return
+    setError(null)
+    startTransition(async () => {
+      const res = await batchOverride(props.assignmentId, [...selected], scoreNum, batchFeedback)
+      if (res.error) setError(res.error)
+      else { setSelected(new Set()); setBatchScore(''); setBatchFeedback(''); router.refresh() }
+    })
+  }
 
   function markMissing() {
     if (!confirm(t('grade.markMissingConfirm', { n: props.notSubmitted.length }))) return
@@ -319,13 +346,37 @@ export function GradingClient(props: {
               </select>
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.searchStudent')} className="h-11" />
             </div>
+
+            {visibleRows.length > 0 ? (
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <label className="flex items-center gap-1.5">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-4 w-4 accent-primary" />
+                  {t('grade.selectAll')}
+                </label>
+                {selected.size > 0 ? (
+                  <button type="button" onClick={() => setSelected(new Set())} className="font-medium text-primary hover:underline">{t('grade.clearSel', { n: selected.size })}</button>
+                ) : null}
+              </div>
+            ) : null}
+            {selected.size > 0 ? (
+              <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs font-medium">{t('grade.batchTitle', { n: selected.size })}</p>
+                <div className="flex gap-2">
+                  <Input value={batchScore} onChange={(e) => setBatchScore(e.target.value)} type="number" min={0} max={100} placeholder={t('grade.score')} className="h-10 w-24" />
+                  <Input value={batchFeedback} onChange={(e) => setBatchFeedback(e.target.value)} placeholder={t('grade.batchFeedbackPh')} className="h-10 flex-1" />
+                </div>
+                <Button size="sm" className="w-full" disabled={pending} onClick={applyBatch}>{t('grade.batchApply', { n: selected.size })}</Button>
+              </div>
+            ) : null}
+
             {visibleRows.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">{t('filter.none')}</p>
             ) : null}
             {visibleRows.map((r) => (
-              <div key={r.id} className="rounded-xl border border-border/70 p-3 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
+              <div key={r.id} className={'rounded-xl border p-3 text-sm ' + (selected.has(r.id) ? 'border-primary bg-primary/5' : 'border-border/70')}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} className="h-4 w-4 shrink-0 accent-primary" aria-label={r.studentName} />
+                  <div className="min-w-0 flex-1">
                     <div className="font-medium">{r.studentName} <span className="text-muted-foreground">{r.studentNo}</span></div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{r.className}</span>
@@ -335,7 +386,7 @@ export function GradingClient(props: {
                       {r.violations > 0 ? <span className="text-[hsl(var(--warning))]">⚠️ {r.violations} {t('grade.leftCount')}</span> : null}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     {r.finalScore != null ? <div className="text-xl font-extrabold">{r.finalScore}</div> : <div className="text-muted-foreground">—</div>}
                     {r.aiScore != null ? <div className="text-[11px] text-muted-foreground">AI {r.aiScore}</div> : null}
                   </div>

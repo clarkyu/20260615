@@ -1,4 +1,4 @@
-import type { PrismaClient, SubmissionStatus } from '@prisma/client'
+import type { PrismaClient, SubmissionStatus, Prisma } from '@prisma/client'
 
 // Submission data access. A submission belongs to a school through
 // assignment.offering.schoolId; staff reads/writes are scoped that way.
@@ -43,6 +43,26 @@ export function applyTeacherOverride(
   return prisma.submission.update({
     where: { id },
     data: { ...data, status: 'GRADED', needsReview: false, gradedAt: new Date() },
+  })
+}
+
+// Apply the same teacher score and/or feedback to many submissions in one write
+// (school-scoped). A score → marks them GRADED; feedback-only just sets the text.
+export function applyBatchOverride(
+  prisma: PrismaClient,
+  ids: number[],
+  schoolId: number | null | undefined,
+  opts: { score: number | null; feedback: string | null; gradedById: number; at: Date },
+) {
+  const data: Prisma.SubmissionUpdateManyMutationInput = {
+    ...(opts.score != null
+      ? { teacherScore: opts.score, finalScore: opts.score, status: 'GRADED', needsReview: false, gradedById: opts.gradedById, gradedAt: opts.at }
+      : {}),
+    ...(opts.feedback != null ? { feedback: opts.feedback } : {}),
+  }
+  return prisma.submission.updateMany({
+    where: { id: { in: ids }, assignment: { offering: { schoolId: schoolId ?? -1 } } },
+    data,
   })
 }
 
