@@ -180,6 +180,22 @@ const gradingInclude = {
 }
 
 // One submission to auto-grade, with its phase/assignment + ordered reference sentences.
+// Submissions whose recording media is older than `cutoff` — the retention sweep target.
+// Bounded by `limit` so a scheduled run processes a predictable batch.
+export function listExpiredMedia(prisma: PrismaClient, cutoff: Date, limit: number) {
+  return prisma.submission.findMany({
+    where: { createdAt: { lt: cutoff }, OR: [{ videoKey: { not: null } }, { audioKey: { not: null } }, { imageKey: { not: null } }] },
+    select: { id: true, videoKey: true, audioKey: true, imageKey: true },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+  })
+}
+
+// Null the media keys once the objects are deleted, so nothing points at a gone file.
+export function clearMedia(prisma: PrismaClient, id: number) {
+  return prisma.submission.update({ where: { id }, data: { videoKey: null, audioKey: null, imageKey: null } })
+}
+
 export function findGradable(prisma: PrismaClient, id: number) {
   return prisma.submission.findUnique({ where: { id }, include: gradingInclude })
 }

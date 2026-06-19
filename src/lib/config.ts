@@ -24,6 +24,10 @@ export const config = {
     secretAccessKey: env('R2_SECRET_ACCESS_KEY'),
     bucket: env('R2_BUCKET'),
   }),
+  cronSecret: (): string | undefined => env('CRON_SECRET'),
+  // Days to keep student recordings before the retention sweep deletes them. 0 (the
+  // default, when unset/invalid) disables retention entirely — nothing is ever deleted.
+  videoRetentionDays: (): number => { const n = Number(env('VIDEO_RETENTION_DAYS')); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0 },
   geminiKey: (): string | undefined => env('GEMINI_API_KEY'),
   geminiBaseUrl: (): string => env('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com',
   // Generic read for dynamically-named provider vars (per-provider apiKey /
