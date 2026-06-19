@@ -194,7 +194,7 @@ export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentenc
         ) : null}
 
         {phase === 'grading' ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <div role="status" aria-live="polite" className="flex flex-col items-center gap-3 py-10 text-center">
             <Sparkles className="h-8 w-8 animate-pulse text-primary" />
             <p className="text-sm text-muted-foreground">{t('practice.grading')}</p>
           </div>

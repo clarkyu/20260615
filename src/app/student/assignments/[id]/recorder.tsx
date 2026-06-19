@@ -245,7 +245,7 @@ export function Recorder(props: {
                 </div>
               ) : null}
               {phase === 'countdown' ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-foreground/10">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-foreground/10" aria-live="assertive">
                   <span key={count} className="animate-in-up text-7xl font-black tabular-nums">{count > 0 ? count : ''}</span>
                   <span className="text-sm font-medium opacity-80">{t('rec.getReady')}</span>
                 </div>
@@ -267,7 +267,7 @@ export function Recorder(props: {
                 </div>
               ) : null}
               {phase === 'countdown' ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/45 text-white">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/45 text-white" aria-live="assertive">
                   <span key={count} className="animate-in-up text-7xl font-black tabular-nums">{count > 0 ? count : ''}</span>
                   <span className="text-sm font-medium opacity-90">{t('rec.getReady')}</span>
                 </div>
