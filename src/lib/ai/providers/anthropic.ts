@@ -15,14 +15,14 @@ const JUDGE_JSON_HINT =
 
 function apiKey(): string {
   // The grading teacher's own key (BYOK) wins; otherwise the platform key.
-  const key = overrideKey('claude') ?? config.env('ANTHROPIC_API_KEY')
+  const key = overrideKey('claude') ?? config.anthropicKey()
   if (!key) throw unavailable('ANTHROPIC_API_KEY 未配置')
   return key
 }
 
 export const claudeJudge: JudgeProvider = {
   async judge(input: JudgeInput, modelId: string): Promise<JudgeResult> {
-    const base = (config.env('ANTHROPIC_BASE_URL') || 'https://api.anthropic.com').replace(/\/$/, '')
+    const base = config.anthropicBaseUrl().replace(/\/$/, '')
     const res = await fetch(`${base}/v1/messages`, {
       method: 'POST',
       headers: {

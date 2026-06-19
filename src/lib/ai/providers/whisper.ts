@@ -38,7 +38,7 @@ export function alignToReference(referenceSentences: ReferenceSentence[], transc
 function apiKey(): string {
   // The grading teacher's own key (BYOK) wins; otherwise the platform key. Whisper shares
   // the OpenAI credential.
-  const key = overrideKey('whisper') ?? config.env('OPENAI_API_KEY')
+  const key = overrideKey('whisper') ?? config.openaiKey()
   if (!key) throw unavailable('OPENAI_API_KEY 未配置')
   return key
 }
@@ -47,7 +47,7 @@ export const whisperPerception: PerceptionProvider = {
   async perceive(input: PerceptionInput, modelId: string): Promise<PerceptionResult> {
     const media = input.audioUrl || input.videoUrl
     if (!media) throw new Error('Whisper 需要音频（请确认已上传录音）')
-    const base = (config.env('OPENAI_BASE_URL') || 'https://api.openai.com/v1').replace(/\/$/, '')
+    const base = config.openaiBaseUrl().replace(/\/$/, '')
 
     // Pull the recording from R2 (presigned URL) and hand the bytes to Whisper.
     const mediaRes = await fetch(media, { signal: AbortSignal.timeout(120_000) })

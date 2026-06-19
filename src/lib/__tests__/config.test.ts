@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { config, storageConfigured, emailConfigured, aiConfigured, configReport } from '../config'
 
-const KEYS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'QWEN_API_KEY', 'SESSION_SECRET', 'APP_URL', 'EMAIL_FROM', 'APP_NAME']
+const KEYS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'QWEN_API_KEY', 'VIDEO_RETENTION_DAYS', 'SESSION_SECRET', 'APP_URL', 'EMAIL_FROM', 'APP_NAME']
 const SAVED = new Map(KEYS.map((k) => [k, process.env[k]]))
 
 beforeEach(() => { for (const k of KEYS) delete process.env[k] })
@@ -49,6 +49,18 @@ describe('getters + defaults', () => {
     expect(config.email().from).toBe('onboarding@resend.dev')
     expect(config.geminiBaseUrl()).toBe('https://generativelanguage.googleapis.com')
     expect(config.appUrl()).toBeUndefined()
+  })
+
+  it('videoRetentionDays is disabled (0) by default, parses positive ints, rejects junk/negative', () => {
+    expect(config.videoRetentionDays()).toBe(0) // unset → retention off
+    process.env.VIDEO_RETENTION_DAYS = '90'
+    expect(config.videoRetentionDays()).toBe(90)
+    process.env.VIDEO_RETENTION_DAYS = '7.9'
+    expect(config.videoRetentionDays()).toBe(7) // floored
+    for (const junk of ['-5', '0', 'abc', '']) {
+      process.env.VIDEO_RETENTION_DAYS = junk
+      expect(config.videoRetentionDays()).toBe(0)
+    }
   })
 
   it('honours overrides', () => {

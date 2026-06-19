@@ -30,6 +30,11 @@ export const config = {
   videoRetentionDays: (): number => { const n = Number(env('VIDEO_RETENTION_DAYS')); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0 },
   geminiKey: (): string | undefined => env('GEMINI_API_KEY'),
   geminiBaseUrl: (): string => env('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com',
+  // OpenAI powers GPT-4o (judge) + Whisper (transcription); Anthropic powers Claude (judge).
+  openaiKey: (): string | undefined => env('OPENAI_API_KEY'),
+  openaiBaseUrl: (): string => env('OPENAI_BASE_URL') ?? 'https://api.openai.com/v1',
+  anthropicKey: (): string | undefined => env('ANTHROPIC_API_KEY'),
+  anthropicBaseUrl: (): string => env('ANTHROPIC_BASE_URL') ?? 'https://api.anthropic.com',
   // Generic read for dynamically-named provider vars (per-provider apiKey /
   // baseUrl / groupId env names), so config stays the single source of truth.
   env: (name: string): string | undefined => env(name),
