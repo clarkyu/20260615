@@ -20,7 +20,9 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'sw
 const APP_NAME = config.appName()
 
 export const metadata: Metadata = {
-  title: APP_NAME,
+  // Per-page titles fill the template (e.g. "登录 · 你好！作业"); pages without one
+  // fall back to the bare app name.
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: '你好！作业 — 手机端背诵作业：录制提交、AI 评阅、按班级统计导出',
   manifest: '/manifest.webmanifest',
   // iOS ignores SVG/manifest icons for the home screen — give it a real PNG.

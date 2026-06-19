@@ -6,6 +6,7 @@ import { parseTzOffset } from '@/lib/time'
 import { getDb } from '@/lib/db'
 import { runAfterResponse } from '@/lib/cf'
 import { drainGradingJobs } from '@/lib/domain/jobs'
+import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as dashboardRepo from '@/lib/repo/dashboard'
@@ -15,6 +16,11 @@ import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
 import { PlatformHome } from './platform-home'
 import { PanelSwitcher } from './panel-switcher'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT()
+  return { title: t('nav.dashboard') }
+}
 
 export default async function DashboardPage() {
   const user = await requireStaff()
