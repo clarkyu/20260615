@@ -1,7 +1,8 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ChevronLeft, AlertTriangle, ChevronRight } from 'lucide-react'
-import { requireStaff } from '@/lib/auth'
+import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,6 +19,20 @@ const mean = (xs: number[]) => (xs.length ? round1(xs.reduce((a, b) => a + b, 0)
 
 // Teacher's drill-down on ONE student in ONE offering: per-assignment scores
 // (missing/待批/分数), 平时与测试均分、完成度, and their weakest lines.
+// Tab title = the student's name (a teacher reviewing a class opens several of these).
+// School-scoped exactly like the page's own student lookup.
+export async function generateMetadata({ params }: { params: Promise<{ offeringId: string; studentId: string }> }): Promise<Metadata> {
+  const { t } = await getT()
+  const fallback = { title: t('nav.students') }
+  const sid = Number((await params).studentId)
+  if (!Number.isInteger(sid)) return fallback
+  const user = await getCurrentUser()
+  if (!user?.schoolId) return fallback
+  const prisma = await getDb()
+  const s = await userRepo.findStudentForSchool(prisma, sid, user.schoolId)
+  return s ? { title: s.name || s.studentNo || t('nav.students') } : fallback
+}
+
 export default async function StudentDetailPage({ params }: { params: Promise<{ offeringId: string; studentId: string }> }) {
   const { offeringId: oid, studentId: sid } = await params
   const offeringId = Number(oid)
