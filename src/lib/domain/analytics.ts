@@ -84,7 +84,7 @@ export function collapsePhases(rows: PhaseSubmission[]): AnalyticsSubmission[] {
   }
   const out: AnalyticsSubmission[] = []
   for (const group of byPair.values()) {
-    const submitted = group.filter((g) => g.status !== 'DRAFT')
+    const submitted = group.filter((g) => isSubmitted(g.status))
     const gradedScores = submitted.filter((g) => g.graded && g.finalScore != null).map((g) => g.finalScore as number)
     const finalScore = gradedScores.length ? gradedScores.reduce((a, b) => a + b, 0) / gradedScores.length : null
     out.push({
@@ -122,8 +122,10 @@ function bestPracticeByPair(practice: AnalyticsPractice[]): Map<string, number> 
 export const RISK_SCORE = 60
 export const RISK_SUBMIT_RATE = 0.5
 
+// MISSING = teacher explicitly marked a non-submitter as 缺交; it's NOT a real
+// submission, so it counts as not-submitted (and carries no score).
 function isSubmitted(status: string): boolean {
-  return status !== 'DRAFT'
+  return status !== 'DRAFT' && status !== 'MISSING'
 }
 function round1(n: number): number {
   return Math.round(n * 10) / 10

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -75,7 +75,7 @@ export function GradingClient(props: {
   const [focusRows, setFocusRows] = useState<Row[]>([])
 
   // AI-first triage: rows the AI has handed to the teacher vs. ones it finished.
-  const submitted = useMemo(() => props.rows.filter((r) => r.status !== 'DRAFT'), [props.rows])
+  const submitted = useMemo(() => props.rows.filter((r) => r.status !== 'DRAFT' && r.status !== 'MISSING'), [props.rows])
   const reviewQueue = useMemo(() => submitted.filter((r) => r.needsReview), [submitted])
   const aiAcceptable = useMemo(() => reviewQueue.filter((r) => r.aiScore != null).length, [reviewQueue])
   const doneCount = submitted.length - reviewQueue.length
@@ -96,6 +96,16 @@ export function GradingClient(props: {
         (!needle || r.studentName.toLowerCase().includes(needle) || r.studentNo.toLowerCase().includes(needle)),
     )
   }, [props.rows, statusFilter, search, reviewOnly])
+
+  function markMissing() {
+    if (!confirm(t('grade.markMissingConfirm', { n: props.notSubmitted.length }))) return
+    setError(null)
+    startTransition(async () => {
+      const res = await markMissingAction(props.assignmentId)
+      if (res.error) setError(res.error)
+      else router.refresh()
+    })
+  }
 
   function acceptAi() {
     setError(null)
@@ -206,6 +216,9 @@ export function GradingClient(props: {
                   </span>
                 ))}
               </div>
+              <Button size="sm" variant="outline" className="mt-3" disabled={pending} onClick={markMissing}>
+                {t('grade.markMissing', { n: props.notSubmitted.length })}
+              </Button>
             </details>
           </CardContent>
         </Card>

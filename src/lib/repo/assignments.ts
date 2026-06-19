@@ -86,7 +86,7 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
     include: {
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
-      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true } },
       submissions: {
         include: { student: { select: { name: true, studentNo: true } }, phase: { select: { order: true, title: true } } },
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],

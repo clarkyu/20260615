@@ -90,6 +90,24 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
   })
 }
 
+// Mark a set of non-submitting students as 缺交 (MISSING) for an assignment — one row
+// per student on the given phase, no score. Caller passes only students who currently
+// have no submission, so the (assignment, phase, student, attempt) unique key is safe.
+export function createMissingMarkers(prisma: PrismaClient, params: { assignmentId: number; phaseId: number; studentIds: number[]; gradedById: number; at: Date }) {
+  return prisma.submission.createMany({
+    data: params.studentIds.map((studentId) => ({
+      assignmentId: params.assignmentId,
+      phaseId: params.phaseId,
+      studentId,
+      attempt: 1,
+      status: 'MISSING' as const,
+      needsReview: false,
+      gradedById: params.gradedById,
+      gradedAt: params.at,
+    })),
+  })
+}
+
 // How many of a student's graded submissions are newer than they've seen — drives the
 // in-app "new score" red dot. `since` null → everything graded is new.
 export function countNewlyGraded(prisma: PrismaClient, studentId: number, since: Date | null) {

@@ -6,9 +6,27 @@ import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as userRepo from '@/lib/repo/users'
 import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
+
+// Mark everyone in the class who hasn't handed anything in as 缺交 (MISSING) — a
+// non-scoring marker, not a 0. Idempotent (re-running skips the already-marked).
+export async function markMissing(assignmentId: number): Promise<{ marked?: number; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(assignmentId)) return { error: t('err.assignNotFound') }
+  const a = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId)
+  if (!a) return { error: t('err.assignNotFound') }
+  const roster = await userRepo.listClassRoster(prisma, user.schoolId, a.offering.class.id)
+  const submittedIds = new Set(a.submissions.filter((s) => s.status !== 'DRAFT').map((s) => s.studentId))
+  const missing = roster.filter((r) => !submittedIds.has(r.id))
+  const phaseId = (a.phases.find((p) => p.graded) ?? a.phases[0])?.id
+  if (missing.length === 0 || phaseId == null) return { marked: 0 }
+  await submissionRepo.createMissingMarkers(prisma, { assignmentId, phaseId, studentIds: missing.map((m) => m.id), gradedById: user.userId, at: new Date() })
+  revalidatePath(`/dashboard/assignments/${assignmentId}`)
+  return { marked: missing.length }
+}
 
 const MAX_SCORE = DEFAULT_MAX_SCORE
 
