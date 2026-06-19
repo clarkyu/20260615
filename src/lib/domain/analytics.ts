@@ -32,7 +32,9 @@ export interface RawPhaseRow {
   status: string
   finalScore: number | null
   needsReview: boolean
-  aiResult: string | null
+  // Optional: the gradebook collapses phases and never needs per-sentence detail, so it
+  // omits the (potentially large) aiResult JSON. Absent → perSentence is [].
+  aiResult?: string | null
   phase: { graded: boolean } | null
 }
 
