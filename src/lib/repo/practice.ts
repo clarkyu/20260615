@@ -20,6 +20,22 @@ export function createAttempt(prisma: PrismaClient, data: NewPracticeAttempt) {
   return prisma.practiceAttempt.create({ data })
 }
 
+// Throwaway practice recordings older than `cutoff` — the retention sweep deletes the
+// whole attempt (row + its media object), since practice is formative and not part of
+// any grade of record.
+export function listExpiredAttemptsWithMedia(prisma: PrismaClient, cutoff: Date, limit: number) {
+  return prisma.practiceAttempt.findMany({
+    where: { createdAt: { lt: cutoff }, mediaKey: { not: null } },
+    select: { id: true, mediaKey: true },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+  })
+}
+
+export function deleteAttempt(prisma: PrismaClient, id: number) {
+  return prisma.practiceAttempt.delete({ where: { id } })
+}
+
 // Scored practice rounds (训练 → 平时成绩) across an offering — analytics input.
 export function listScoredForOffering(prisma: PrismaClient, offeringId: number) {
   return prisma.practiceAttempt.findMany({

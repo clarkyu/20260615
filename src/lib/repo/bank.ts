@@ -216,10 +216,12 @@ export function setVideoKey(prisma: PrismaClient, id: number, key: string) {
   return prisma.chunkSet.update({ where: { id }, data: { shadowVideoKey: key } })
 }
 
-// Delete only if the actor owns the set (own school, or global when super-admin).
-export async function deleteOwned(prisma: PrismaClient, id: number, schoolId: number | null | undefined, isSuperAdmin: boolean): Promise<boolean> {
-  const found = await prisma.chunkSet.findFirst({ where: { id, ...ownedWhere(schoolId, isSuperAdmin) }, select: { id: true } })
-  if (!found) return false
+// Delete only if the actor owns the set (own school, or global when super-admin). Returns
+// the set's shadow-video key (if any) so the caller can clean the R2 object — the DB
+// cascade-deletes the row but never the file.
+export async function deleteOwned(prisma: PrismaClient, id: number, schoolId: number | null | undefined, isSuperAdmin: boolean): Promise<{ deleted: boolean; videoKey: string | null }> {
+  const found = await prisma.chunkSet.findFirst({ where: { id, ...ownedWhere(schoolId, isSuperAdmin) }, select: { id: true, shadowVideoKey: true } })
+  if (!found) return { deleted: false, videoKey: null }
   await prisma.chunkSet.delete({ where: { id } })
-  return true
+  return { deleted: true, videoKey: found.shadowVideoKey }
 }
