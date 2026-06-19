@@ -11,6 +11,11 @@ vi.mock('@/lib/ai/providers/whisper', () => ({
     }),
   },
 }))
+// Claude is now a real Anthropic judge (needs a key); mock it so this stays a pure
+// pipeline test.
+vi.mock('@/lib/ai/providers/anthropic', () => ({
+  claudeJudge: { judge: async () => ({ score: 8, breakdown: { 完整度: 4, 准确度: 4 }, feedback: '不错', confidence: 0.9 }) },
+}))
 
 import { gradePractice } from '@/lib/domain/practice'
 import { isUnavailable } from '@/lib/domain/grading'
@@ -34,7 +39,7 @@ describe('gradePractice', () => {
   it('returns a graded outcome from the stub pipeline', async () => {
     const out = await gradePractice({
       perceptionModel: 'whisper-1', // mocked perception (above)
-      judgeModel: 'claude-opus-4-8', // StubJudge
+      judgeModel: 'claude-opus-4-8', // mocked judge (above)
       rubric: '按完整度、准确度评分。',
       referenceSentences: [{ order: 1, text: '床前明月光' }],
       recitedText: '床前明月光',
