@@ -355,7 +355,7 @@ export function AssignmentForm({
                     {t('tmpl.saveAs')}
                   </label>
                   {saveTemplate ? (
-                    <Input name="templateName" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder={t('tmpl.namePh')} maxLength={100} />
+                    <Input name="templateName" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder={t('tmpl.namePh')} aria-label={t('tmpl.namePh')} maxLength={100} />
                   ) : null}
                   <p className="text-xs text-muted-foreground">{t('tmpl.saveHint')}</p>
                 </div>
@@ -453,11 +453,11 @@ function PhaseCard({
       </div>
 
       <div className={open ? 'mt-3 space-y-3' : 'hidden'}>
-      <Input value={phase.title} onChange={(e) => onPatch({ title: e.target.value })} placeholder={t('asg.phaseTitlePh')} />
+      <Input value={phase.title} onChange={(e) => onPatch({ title: e.target.value })} placeholder={t('asg.phaseTitlePh')} aria-label={t('asg.phaseTitlePh')} />
 
       <div className="space-y-1.5">
         <Label>{t('asg.fCategory')}</Label>
-        <Input list="category-presets" value={phase.category} onChange={(e) => onPatch({ category: e.target.value })} placeholder={t('asg.fCategoryPh')} />
+        <Input list="category-presets" value={phase.category} onChange={(e) => onPatch({ category: e.target.value })} placeholder={t('asg.fCategoryPh')} aria-label={t('asg.fCategory')} />
       </div>
 
       {/* Content source */}
@@ -487,7 +487,7 @@ function PhaseCard({
 
       <div className="space-y-1.5">
         <Label>{t('asg.fInstructions')}</Label>
-        <Textarea rows={2} value={phase.instructions} onChange={(e) => onPatch({ instructions: e.target.value })} placeholder={t('asg.fInstructionsPh')} />
+        <Textarea rows={2} value={phase.instructions} onChange={(e) => onPatch({ instructions: e.target.value })} placeholder={t('asg.fInstructionsPh')} aria-label={t('asg.fInstructions')} />
       </div>
 
       {/* Submission requirements */}
@@ -620,7 +620,7 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-semibold">{t('author.cardTitle')}</span>
         </div>
-        <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} placeholder={t('author.topicPh')} />
+        <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} placeholder={t('author.topicPh')} aria-label={t('author.topicPh')} />
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>

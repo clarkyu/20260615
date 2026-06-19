@@ -260,7 +260,7 @@ export function GradingClient(props: {
           {!advanced ? (
             <div className="space-y-1.5">
               <Label>{t('grade.preset')}</Label>
-              <select value={presetId} onChange={(e) => setPresetId(e.target.value)} className={SELECT}>
+              <select value={presetId} onChange={(e) => setPresetId(e.target.value)} className={SELECT} aria-label={t('grade.preset')}>
                 {props.presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
               </select>
             </div>
@@ -268,13 +268,13 @@ export function GradingClient(props: {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>{t('grade.perceptionModel')}</Label>
-                <select value={perceptionModel} onChange={(e) => setPerceptionModel(e.target.value)} className={SELECT}>
+                <select value={perceptionModel} onChange={(e) => setPerceptionModel(e.target.value)} className={SELECT} aria-label={t('grade.perceptionModel')}>
                   {props.perceptionModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
                 <Label>{t('grade.judgeModel')}</Label>
-                <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)} className={SELECT}>
+                <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)} className={SELECT} aria-label={t('grade.judgeModel')}>
                   {props.judgeModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
               </div>
@@ -344,7 +344,7 @@ export function GradingClient(props: {
                   <option key={s} value={s}>{t('st.' + s)}</option>
                 ))}
               </select>
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.searchStudent')} className="h-11" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.searchStudent')} aria-label={t('filter.searchStudent')} className="h-11" />
             </div>
 
             {visibleRows.length > 0 ? (
@@ -362,8 +362,8 @@ export function GradingClient(props: {
               <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
                 <p className="text-xs font-medium">{t('grade.batchTitle', { n: selected.size })}</p>
                 <div className="flex gap-2">
-                  <Input value={batchScore} onChange={(e) => setBatchScore(e.target.value)} type="number" min={0} max={100} placeholder={t('grade.score')} className="h-10 w-24" />
-                  <Input value={batchFeedback} onChange={(e) => setBatchFeedback(e.target.value)} placeholder={t('grade.batchFeedbackPh')} className="h-10 flex-1" />
+                  <Input value={batchScore} onChange={(e) => setBatchScore(e.target.value)} type="number" min={0} max={100} placeholder={t('grade.score')} aria-label={t('grade.score')} className="h-10 w-24" />
+                  <Input value={batchFeedback} onChange={(e) => setBatchFeedback(e.target.value)} placeholder={t('grade.batchFeedbackPh')} aria-label={t('grade.batchFeedbackPh')} className="h-10 flex-1" />
                 </div>
                 <Button size="sm" className="w-full" disabled={pending} onClick={applyBatch}>{t('grade.batchApply', { n: selected.size })}</Button>
               </div>

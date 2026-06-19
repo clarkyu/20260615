@@ -271,12 +271,12 @@ function StudentEdit({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <Input value={no} onChange={(e) => setNo(e.target.value)} placeholder={t('cls.studentNo')} className="h-10" />
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cls.name')} className="h-10" />
+        <Input value={no} onChange={(e) => setNo(e.target.value)} placeholder={t('cls.studentNo')} aria-label={t('cls.studentNo')} className="h-10" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cls.name')} aria-label={t('cls.name')} className="h-10" />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('cls.phone')} inputMode="tel" className="h-10" />
-        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('email')} type="email" className="h-10" />
+        <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('cls.phone')} aria-label={t('cls.phone')} inputMode="tel" className="h-10" />
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('email')} aria-label={t('email')} type="email" className="h-10" />
       </div>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" className="flex-1" onClick={onCancel}>{t('back')}</Button>
