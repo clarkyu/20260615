@@ -12,7 +12,7 @@ import * as userRepo from '@/lib/repo/users'
 import * as dashboardRepo from '@/lib/repo/dashboard'
 import * as schoolRepo from '@/lib/repo/schools'
 import * as submissionRepo from '@/lib/repo/submissions'
-import { gradingCalibration, gradingCalibrationByTeacher } from '@/lib/domain/analytics'
+import { gradingCalibration, gradingCalibrationByTeacher, CALIBRATION_WINDOW_DAYS } from '@/lib/domain/analytics'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
@@ -74,7 +74,8 @@ export default async function DashboardPage() {
   // School-wide AI grading calibration — admin-only, and only once teachers have
   // re-scored some AI grades (otherwise nothing to calibrate against). One query feeds
   // both the school-wide number and the per-teacher outlier breakdown.
-  const scorePairs = isAdmin ? await submissionRepo.listScorePairsForSchool(prisma, schoolId) : []
+  const calSince = new Date(Date.now() - CALIBRATION_WINDOW_DAYS * 86_400_000)
+  const scorePairs = isAdmin ? await submissionRepo.listScorePairsForSchool(prisma, schoolId, calSince) : []
   const calibration = isAdmin ? gradingCalibration(scorePairs) : null
   const byTeacher = gradingCalibrationByTeacher(
     scorePairs.map((p) => ({
@@ -259,7 +260,7 @@ export default async function DashboardPage() {
                   {t(calibration.bias === 'harsh' ? 'insights.calHarsh' : calibration.bias === 'lenient' ? 'insights.calLenient' : 'insights.calFair')}
                 </Badge>
               </div>
-              <p className="text-center text-xs text-muted-foreground">{t('dash.calHint')}</p>
+              <p className="text-center text-xs text-muted-foreground">{t('dash.calHint', { days: CALIBRATION_WINDOW_DAYS })}</p>
               {byTeacher.length >= 2 ? (
                 <div className="space-y-1.5 border-t border-border/60 pt-3">
                   <div className="text-xs font-medium text-muted-foreground">{t('dash.calByTeacher')}</div>

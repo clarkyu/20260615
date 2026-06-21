@@ -360,6 +360,7 @@ export function offeringSummary(
 // has no teacherScore, so it's not a reference point we can measure against.
 export const CALIBRATION_AGREE_TOL = 5 // within ±5 points → the teacher essentially agreed
 export const CALIBRATION_BIAS_TOL = 2 // |mean delta| < 2 → too small to call a bias
+export const CALIBRATION_WINDOW_DAYS = 180 // only recent corrections — bounds the scan + tracks the current model
 
 export interface CalibrationRow {
   aiScore: number | null
