@@ -118,6 +118,16 @@ export async function doThing(prisma, schoolId, input): Promise<Result> {
   fake verification on the not-found path to avoid a timing side-channel; do NOT convert
   it to "parse-then-early-return".
 
+### Logging — structured, through one sink
+- Server-runtime code logs via `logError` / `logWarn` / `logInfo` from `lib/log.ts`
+  (one JSON line: `level`/`scope`/`msg`/`ts` + safe `err` + scalar `fields`). Raw
+  `console.*` in `src/lib/**` and `src/actions/**` is **lint-enforced off** (only
+  `lib/log.ts` and tests are exempt) — a bare `console.error(err)` loses the stack on
+  Workers (`JSON.stringify(error) === '{}'`). Client components under `app/**` may still
+  use `console` (their logs go to devtools, not the Workers tail).
+- **SECURITY: pass `log*` only a message + the error + safe scalar `fields`** (ids,
+  counts, flags) — never a request body, headers, or any secret value.
+
 ## Security invariants (always)
 - Secrets come from env only; never write them to files or commit them; logs record
   presence, never values.
