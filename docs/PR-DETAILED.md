@@ -1,4 +1,4 @@
-# 全部 PR 逐个详评（#1 – #212）
+# 全部 PR 逐个详评（#1 – #227）
 
 > 从 PR #1 到最新,逐个 PR 的详细内容。每条:**#号 · 标题 [合并时间]**,随后是该 PR 的真实改动(取自 PR 描述,经复核归纳)、涉及的数据迁移/关键文件、以及要点/隐患。按演进阶段分节。
 > 生成于 2026-06-19。验证口径:几乎每个 PR 都标了 tsc/lint/test/build 全绿(下文不再逐条重复"全绿",仅在有特别处标注)。
@@ -457,17 +457,57 @@
 
 ---
 
-## 横向「可改善空间」总结（最值得投入）
+## 阶段 14 · 加固与洞察（#213–#227，06-21）
 
-1. **测试深度** —— 此前全是单元测试(mock prisma)、只断言 where 形状;**#211/#212 已补上对真实 SQLite 的集成测试**(IDOR/跨校隔离/真级联/raw SQL/名单导入),但仍**无浏览器 E2E**(登录→提交→批改主流程)。两次数据级 bug(#130 级联删提交、#192 IDOR)都是事后补测——继续扩集成 + 加最小化 E2E 是回报最高的投入。
-2. **授权集中化** —— IDOR 修了两次(#28、#192)。可把「按角色/租户 scope」抽成**统一策略 + 默认拒绝 + 全覆盖回归**,而非逐 finder 加 teacherId。
-3. **运行时可观测性** —— 有 wrangler tail + observability,但无错误聚合(Sentry 类)、无真实用户监控。线上问题靠日志人肉排查。
-4. **CI 门禁** —— 只有 lint+tsc+test+build,无 SAST、依赖漏洞扫描(Dependabot)、bundle 体积预算、a11y 自动检查(axe)。
-5. **AI 层** —— 模型 id 写死(registry)会随厂商更新过期;置信度阈值(0.85)/逐句权重(0.7·0.3)是经验值、缺真实数据闭环校准;provider 失败可观测性较弱。
-6. **时区/日期** —— 反复出 bug(#73/74/75/161/171)后已统一,建议沉淀为「一处时区工具+测试」长期守护。
-7. **内容/i18n** —— UI 三语(zh/en/es)但题库内容仅中/英;2000 句回填用 7 个 PR、数据录入类工作可脚本化。
+> 这一波系统性地把 #210/#212 复盘里点名的「可改善空间」逐项收口：E2E、授权集中化、可观测性、AI 校准，外加一轮测试补强。每条对应一个增量（PR# = 增量# + 106 起，后期略有漂移）。
+
+**#213 · 文档：全部 PR 逐个详评（docs/PR-DETAILED.md，#1–#212）** `[06-21]` 应 clark 要求,从 #1 到 #212 逐个 PR 详述真实改动 + 迁移/关键文件 + 要点隐患,按 14 阶段分节。纯文档。
+
+**#214 · 文档：PR 全景可读版（docs/PR-OVERVIEW.md，14+2 可折叠）** `[06-21]` 把 #213 压成可读版:阶段 0–13 共 14 段 + 总结 + 一句话结论,每段 GitHub 可折叠 `<details>`、只列要点。纯文档。
+
+**#215 · 测试·E2E 第一层：登录→提交→批改主流程（领域级集成）** `[06-21]` 用 #211 的真 SQLite harness 跑通登录→提交→批改主闭环(4 例);mock 仅限存储/AI/key-context/teacher-keys,真仓储打真库。类型收窄修了 `as { requirements: never }` 的 TS2352。
+
+**#216 · 测试·E2E 第二层：server action 端到端** `[06-21]` 用内存 cookie jar(iron-session 真往返)+ shim(next/headers、@/lib/db、next/cache、@/lib/cf、next/navigation 把 redirect 抛带标签错误)在 vitest 里直接驱动 server action(5 例)。SESSION_SECRET ≥32 字符。
+
+**#217 · 测试·E2E 第三层：Playwright 浏览器主流程** `[06-21]` Playwright+Chromium 在 `next dev`(initOpenNextCloudflareForDev 接 miniflare 真 D1/R2)上跑真浏览器:学生→/student、老师→/dashboard、错密码→/login 报错(role=alert)。seed 脚本造校/师/生(复刻 PBKDF2 哈希)。**刻意不进 CI**(环境敏感、慢);vitest include 限定 src/ 把 e2e 排除。
+
+**#218 · 安全·授权集中化：IDOR scope 单一来源 offeringScopeFor（增量109）** `[06-21]` assignments/offerings/submissions 三仓各有一份字节相同的 staff 归属过滤(staffScope/offeringScope/staffSub——正是 #192 的成因)→ 抽到 `lib/repo/scope.ts` 的 `offeringScopeFor` 唯一来源,直接(offering)/嵌 offering(assignment)/嵌 assignment.offering(submission)三处复用;行为字节不变,新增 scope.test 钉规则(TEACHER→自己课头、admin→全校、?? -1 哨兵)。
+
+**#219 · 可观测性·结构化日志 lib/log.ts（增量110）** `[06-21]` Workers 上 `JSON.stringify(error)==="{}"`(Error 字段不可枚举)会丢堆栈→ 引入 `log.ts`,每事件一行 JSON(level/scope/msg/ts + 安全 err.{name,message,stack} + 标量 fields),迁移 ~25 处服务端 console(jobs/grading/shadow/practice/authoring/analytics/rate-limit/cf/config/roster/actions);安全不变量入注释:只记消息+错误结构+显式字段,不吞请求体/头/secret。客户端错误边界与 live-AI 测试刻意不动。log.test 含「裸 Error→{}」回归。
+
+**#220 · 可观测性·护栏：lint 禁服务端裸 console（增量111）** `[06-21]` 仿「actions 不得 import prisma」规则,加 `no-console`(src/lib+src/actions,豁免 log.ts+__tests__),锁死结构化日志不回退;app/** 客户端不在范围(日志进 devtools)。已验证规则确拦、sink 豁免、整树干净。同步更新 architecture skill 安全不变量。
+
+**#221 · 学情·AI 批改校准（教师·单课头）（增量112）** `[06-21]` 把每条提交早已存的 aiScore 与 teacherScore 变信号:在老师改过分的提交上对比 AI 与终评,出纯函数 `gradingCalibration`(sampleSize / meanDelta 正=AI 偏严 / meanAbsDelta / agreeRate / bias harsh|lenient|fair),教师 insights 末尾加一节(仅有样本时);无样本返回 null。6 单测;repo `listScorePairsForOffering` 按 offering 取双分对。
+
+**#222 · 学情·AI 批改校准（管理员·全校）（增量113）** `[06-21]` 把 #221 信号抬到校级:repo `listScorePairsForSchool` 按 assignment.offering.schoolId 取双分对,管理员仪表盘加 admin-only 校准卡,复用同一纯函数;教师面板不显示。
+
+**#223 · 测试·补强三纯模块：i18n 平价 / crypto / upload-error（增量114）** `[06-21]` i18n 平价测试(三语 770 键集必须一致 + 插值标记 {n}/{tol} 逐键对齐 + zh 无空值,把此前手动 grep 自动化);crypto AES-256-GCM 往返 + 篡改/换 IV 拒绝;upload-error「过期 action 提示刷新」vs「网络失败提示检查连接」判别。324 通过(+15)。
+
+**#224 · 学情·校准按老师拆分（增量115）** `[06-21]` `gradingCalibrationByTeacher` 按 teacherId 分组、各自跑 gradingCalibration、按复核样本降序(同分按名字稳定);repo `listScorePairsForSchool` 改为带 offering.teacher 一次查询同喂总数与拆分;仪表盘 ≥2 位有样本老师时显示每老师行(姓名·N 份复核·平均修正·偏严/偏松/一致短徽标)。4 单测。
+
+**#225 · 测试·覆盖模板解析 parseTemplatePayload（增量116）** `[06-21]` 「存为模板→从模板发布」信任边界:8 例钉默认套用/maxAttempts 强转/完整保留/未知键剥离;非法 JSON、空 phases(min 1)、>20 相(max 20)、maxAttempts 越界(1..99)一律 fail-closed 返回 null。336 通过(+8)。
+
+**#226 · 性能·校准查询加时间窗（增量117）** `[06-21]` #222/#224 全校查询无时间边界、随历史无限增长→ `listScorePairsForSchool` 加 `since: Date`(按 gradedAt 过滤),新增 `CALIBRATION_WINDOW_DAYS=180`,既封顶扫描又让信号跟当前模型;提示语改「近 {days} 天」,三语 {days} 由 #223 平价测试自动守。
+
+**#227 · 测试·校准查询租户边界（真 SQL 集成）（增量118）** `[06-21]` 在 scoping.test.ts(双学校真库种子)加集成测试:证明 `listScorePairsForSchool` 真 SQL 下只返本校/双分/窗口内、老师身份穿透到 assignment.offering.teacherId,排除「旧记录/只有 AI 分/另一所学校 s2」,断言恰好 3 条、无跨校泄漏、按老师计数 A=2/B=1。337 通过(+1)。
+
+---
+
+## 横向「可改善空间」总结（#213–#227 后更新）
+
+> #210/#212 复盘点名的六项里，**四项已收口**（下方标 ✅）；剩余开放项多需仓库设置 / 外部服务 / 线上数据，非纯代码。
+
+1. ✅ **测试深度** —— 集成(#211/#212/#227)+ **三层 E2E**(#215 领域级 / #216 server action / #217 Playwright 浏览器)已补;浏览器 E2E 刻意不进 CI(环境敏感、慢)是有意取舍。pure 模块也补齐(#223/#225)。
+2. ✅ **授权集中化** —— #218 抽出 `offeringScopeFor` 单一来源,三仓复用,真 SQL 集成测试守(#227)。
+3. 🟡 **运行时可观测性** —— #219 结构化日志(JSON/level/scope,堆栈不再丢)+ #220 lint 护栏锁死;**外部错误聚合(Sentry 类)仍未接**(需第三方/部署密钥)。
+4. 🟡 **CI 门禁** —— #220 加了 no-console 护栏;**SAST / 依赖扫描(Dependabot)/ bundle 预算 / axe a11y 仍未做**(部分需仓库设置或外部工具),「必需检查」是分支保护开关(归 clark)。
+5. 🟡 **AI 校准** —— #221/#222/#224/#226 把老师对 AI 的修正变成**可观测的校准信号**(教师·管理员·按老师·近窗);**模型 id 写死、阈值(0.85)/权重(0.7·0.3)经验值**仍是固有项,需线上数据闭环。
+6. ✅ **时区/日期** —— 早已统一,本轮复核确认是正确实现(tzo cookie 驱动本地日窗 + 服务端/浏览器一致格式化),非 bug。
+7. 🟡 **内容/i18n** —— UI 三语现有平价测试守(#223);题库内容仍中/英为主。
 8. **刻意取舍**(非缺陷,均已记 tradeoff):原生 Cloudflare Queues/DO 有意不做(可验证性优先)、定时任务走 Actions cron(分钟级漂移)、取消邮箱验证(易用优先)、防作弊仅前端提示。
+
+**仍开放（多非纯代码）：** 外部错误聚合(Sentry)、CI 安全/质量门禁(SAST/Dependabot/axe/bundle 预算)、AI 模型 id 与阈值的线上数据校准、题库内容多语化。**用户行动项：** #191 部署后需重新导入一次 Excel 给现有班级回填「专业」。
 
 ## 一句话结论
 
-4 天 212 个 PR,从 0 到一个**功能完整、架构分层干净(action→domain→repo)、安全/可访问性/运维/性能/测试都收口**的多租户教育应用。最大结构性短板曾是「缺集成/E2E 测试与运行时可观测性」——集成测试已于 #211/#212 补上,**最小化 E2E 与运行时可观测性是下一步回报最高的投入**。
+4 天 + 一轮加固，**227 个 PR**，从 0 到一个**功能完整、架构分层干净(action→domain→repo)、安全/可访问性/运维/性能/可观测性/测试都收口**的多租户教育应用。曾经最大的结构性短板「缺 E2E 测试与运行时可观测性」**已在 #215–#220 补齐**;校准洞察(#221–#227)更把「AI 评分可不可信」变成老师与管理员可见的信号。剩余主要是外部服务接入与 CI 门禁——多为仓库设置层面,而非代码缺口。
