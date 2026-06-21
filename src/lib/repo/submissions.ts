@@ -132,9 +132,17 @@ export function listScorePairsForOffering(prisma: PrismaClient, offeringId: numb
 // offering's teacher so the page can derive BOTH the school-wide number and the per-teacher
 // breakdown from one query. Same "both scores present" filter, scoped to the whole school
 // via assignment.offering.schoolId (admin-only surface — every offering in the school).
-export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+// Bounded to corrections since `since` (by gradedAt): keeps the scan off ever-growing
+// history AND makes the signal reflect the AI's RECENT behavior, not stale corrections
+// from a since-retired model.
+export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number | null | undefined, since: Date) {
   return prisma.submission.findMany({
-    where: { assignment: { offering: { schoolId: schoolId ?? -1 } }, aiScore: { not: null }, teacherScore: { not: null } },
+    where: {
+      assignment: { offering: { schoolId: schoolId ?? -1 } },
+      aiScore: { not: null },
+      teacherScore: { not: null },
+      gradedAt: { gte: since },
+    },
     select: {
       aiScore: true,
       teacherScore: true,
