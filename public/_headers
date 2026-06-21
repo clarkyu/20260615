@@ -1,0 +1,11 @@
+# Cloudflare Workers Assets headers. The Worker does NOT run in front of static assets,
+# so next.config's headers() can't reach them — Workers Assets serves /_next/static/*
+# with its default `max-age=0, must-revalidate`, making the browser revalidate every
+# hashed chunk on every load. These filenames are content-hashed (immutable), so a
+# one-year immutable cache is safe and removes the per-load revalidation round-trips.
+# Copied into .open-next/assets at build; honored by the wrangler `assets` binding.
+#
+# Only /_next/static/* is hashed/immutable — the public icons & manifest keep default
+# caching so a future icon/manifest change isn't pinned stale in browsers.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
