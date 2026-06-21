@@ -5,6 +5,7 @@
 // are funnelled through here: typed getters, feature-presence flags, and a
 // redacted diagnostics report. SECURITY: this module never logs or returns a
 // secret VALUE — only the variable name and whether it is present.
+import { logError, logWarn } from './log'
 
 function env(key: string): string | undefined {
   const v = process.env[key]
@@ -93,10 +94,10 @@ export function validateConfigOnce(): void {
   validated = true
   const report = configReport()
   if (report.missingRequired.length > 0) {
-    console.error('[config] missing required env:', report.missingRequired.join(', '))
+    logError('config', 'missing required env', undefined, { missing: report.missingRequired.join(', ') })
   }
   const disabled = Object.entries(report.features).filter(([, on]) => !on).map(([name]) => name)
   if (disabled.length > 0) {
-    console.warn('[config] optional features disabled (env not set):', disabled.join(', '))
+    logWarn('config', 'optional features disabled (env not set)', undefined, { disabled: disabled.join(', ') })
   }
 }

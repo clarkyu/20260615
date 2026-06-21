@@ -1,4 +1,5 @@
 import { headers } from 'next/headers'
+import { logError } from './log'
 import type { PrismaClient } from '@prisma/client'
 import { getDb } from '@/lib/db'
 
@@ -83,7 +84,7 @@ async function limit(store: RateLimitStore, key: string, max: number, windowMs: 
   try {
     return await checkRateLimitD1(prisma, key, max, windowMs)
   } catch (err) {
-    console.error('[rate-limit] D1 limiter failed — degrading to per-isolate in-memory:', err)
+    logError('rate-limit', 'D1 limiter failed — degrading to per-isolate in-memory', err)
     return checkRateLimit(store, key, max, windowMs)
   }
 }

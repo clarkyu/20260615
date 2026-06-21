@@ -3,6 +3,7 @@
 // degrades gracefully to `unavailable` when no key is set.
 
 import { geminiAuthor, type AuthorDraft } from '@/lib/ai/providers/gemini'
+import { logError } from '../log'
 import { DEFAULT_AUTHOR_MODEL } from '@/lib/ai/registry'
 import { isUnavailable } from './grading'
 
@@ -26,7 +27,7 @@ export async function draftAssignment(input: {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'draft failed'
     if (isUnavailable(message)) return { status: 'unavailable' }
-    console.error('[draftAssignment]', err)
+    logError('draftAssignment', 'failed', err)
     return { status: 'error', message }
   }
 }

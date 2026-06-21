@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { logError } from '@/lib/log'
 import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { hasAntiCheatViolation } from '@/lib/domain/grading'
@@ -34,7 +35,7 @@ export async function getUploadUrl(phaseId: number, kind: MediaKind, contentType
     const url = await presignUpload(key, contentType)
     return { url, key, submissionId: submission.id }
   } catch (err) {
-    console.error('[getUploadUrl] presign failed:', err)
+    logError('getUploadUrl', 'presign failed', err)
     return { error: t('err.uploadUrlFail') }
   }
 }
@@ -115,7 +116,7 @@ export async function getShadowTakeUploadUrl(phaseId: number, order: number, con
   try {
     return { url: await presignUpload(key, contentType), key, order }
   } catch (err) {
-    console.error('[getShadowTakeUploadUrl] presign failed:', err)
+    logError('getShadowTakeUploadUrl', 'presign failed', err)
     return { error: t('err.uploadUrlFail') }
   }
 }

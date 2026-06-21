@@ -3,6 +3,7 @@
 // distribution model. It's integrity-locked in package-lock.json, but `npm audit`
 // won't see it and updates are a manual URL bump. Review releases periodically.
 import * as XLSX from 'xlsx'
+import { logError } from './log'
 
 export interface RosterRow {
   rowNumber: number
@@ -89,7 +90,7 @@ export function parseRoster(buffer: ArrayBuffer | Uint8Array): ParsedRoster {
   try {
     return parseRosterUnsafe(buffer)
   } catch (err) {
-    console.error('[parseRoster] failed:', err)
+    logError('parseRoster', 'failed', err)
     return { rows: [], validCount: 0, errorCount: 0, headerError: 'roster.errParse' }
   }
 }

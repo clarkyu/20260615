@@ -6,6 +6,7 @@
 // uncertain ones. Best-effort + graceful: no model key ⇒ leave it for the teacher.
 
 import type { PrismaClient } from '@prisma/client'
+import { logError } from '../log'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import { presignDownload, storageConfigured } from '@/lib/storage'
@@ -102,7 +103,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
         } else {
           const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
           if (isUnavailable(msg)) { await revert(); return } // model not configured — leave for teacher
-          console.error('[gradeShadowSubmission] take failed:', res.reason)
+          logError('gradeShadowSubmission', 'take failed', res.reason, { submissionId })
         }
       }
       // Heartbeat between batches so a slow-but-alive run isn't reclaimed as orphaned.
@@ -127,7 +128,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
-    if (!isUnavailable(msg)) console.error('[gradeShadowSubmission] failed:', err)
+    if (!isUnavailable(msg)) logError('gradeShadowSubmission', 'failed', err, { submissionId })
     // Never mark FAILED — the teacher can still review the per-sentence takes.
     await revert()
   }

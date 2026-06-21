@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { logError } from '@/lib/log'
 import { revalidatePath } from 'next/cache'
 import type { PrismaClient, User } from '@prisma/client'
 import { getDb } from '@/lib/db'
@@ -139,7 +140,7 @@ export async function resendVerification(prevState: unknown, formData: FormData)
     try {
       await issueVerificationEmail(user.id, email)
     } catch (err) {
-      console.error('[resendVerification] Failed to send verification email:', err)
+      logError('resendVerification', 'failed to send verification email', err)
     }
   }
   return { success: true }
@@ -238,7 +239,7 @@ export async function requestPasswordReset(prevState: unknown, formData: FormDat
     try {
       await sendPasswordResetEmail(user.email, resetUrl)
     } catch (err) {
-      console.error('[requestPasswordReset] Failed to send reset email:', err)
+      logError('requestPasswordReset', 'failed to send reset email', err)
     }
   }
   return { success: true }
