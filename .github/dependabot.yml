@@ -1,8 +1,12 @@
-# Dependabot keeps dependencies and GitHub Actions current, and — together with GitHub's
-# security advisories — opens fix PRs for vulnerable packages (the "依赖漏洞扫描" gate from
-# docs/PR-OVERVIEW.md). Version updates are MONTHLY + grouped to keep PR noise low in a
-# manually-merged repo; SECURITY updates are delivered as soon as an advisory lands,
-# regardless of this schedule.
+# Dependabot keeps dependencies and GitHub Actions current, and — with GitHub's security
+# advisories — opens fix PRs for vulnerable packages (the "依赖漏洞扫描" gate).
+#
+# Policy (learned from #232): MAJOR npm bumps are breaking and must be done deliberately,
+# one at a time and tested — eslint 8→10 silently broke lint (it drops .eslintrc), and a
+# Next 15→16 framework jump rode in on another group. So here we:
+#   • IGNORE all npm major bumps  → majors are never auto-proposed; do them by hand.
+#   • auto-PR only grouped MINOR + PATCH  → one prod PR + one dev PR, monthly, low-noise.
+# SECURITY updates still arrive as soon as an advisory lands, regardless of this schedule.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -11,12 +15,18 @@ updates:
       interval: "monthly"
     open-pull-requests-limit: 5
     groups:
-      # Collapse the monthly bumps into two PRs (prod / dev) instead of a flood of singletons.
-      production-dependencies:
+      production:
         dependency-type: "production"
-      development-dependencies:
+        update-types: ["minor", "patch"]
+      development:
         dependency-type: "development"
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
+  # GitHub Actions majors are low-risk and CI-gated (e.g. checkout v4→v7 in #230), so
+  # they stay enabled — just grouped into one monthly PR.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
