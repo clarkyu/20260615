@@ -10,6 +10,7 @@ import {
   latestPhaseSubmissions,
   collapsePhases,
   gradingCalibration,
+  gradingCalibrationByTeacher,
   CALIBRATION_AGREE_TOL,
   type AnalyticsSubmission,
   type PhaseSubmission,
@@ -287,6 +288,46 @@ describe('gradingCalibration', () => {
     ])!
     expect(cal.sampleSize).toBe(1)
     expect(cal.meanDelta).toBe(5)
+  })
+})
+
+describe('gradingCalibrationByTeacher', () => {
+  it('splits the signal per teacher and keeps each teacher’s identity', () => {
+    const out = gradingCalibrationByTeacher([
+      { teacherId: 1, teacherName: 'Ann', aiScore: 70, teacherScore: 80 }, // +10
+      { teacherId: 1, teacherName: 'Ann', aiScore: 60, teacherScore: 72 }, // +12
+      { teacherId: 2, teacherName: 'Bob', aiScore: 90, teacherScore: 80 }, // -10
+    ])
+    expect(out).toHaveLength(2)
+    const ann = out.find((t) => t.teacherId === 1)!
+    const bob = out.find((t) => t.teacherId === 2)!
+    expect(ann.teacherName).toBe('Ann')
+    expect(ann.sampleSize).toBe(2)
+    expect(ann.bias).toBe('harsh')
+    expect(bob.bias).toBe('lenient')
+  })
+
+  it('sorts most-reviewed first, ties broken by name', () => {
+    const out = gradingCalibrationByTeacher([
+      { teacherId: 1, teacherName: 'Solo', aiScore: 70, teacherScore: 75 },
+      { teacherId: 2, teacherName: 'Zoe', aiScore: 70, teacherScore: 75 },
+      { teacherId: 2, teacherName: 'Zoe', aiScore: 70, teacherScore: 75 },
+      { teacherId: 3, teacherName: 'Amy', aiScore: 70, teacherScore: 75 },
+    ])
+    expect(out.map((t) => t.teacherName)).toEqual(['Zoe', 'Amy', 'Solo']) // Zoe (2) first; Amy<Solo on tie of 1
+  })
+
+  it('omits a teacher whose rows never have both scores', () => {
+    const out = gradingCalibrationByTeacher([
+      { teacherId: 1, teacherName: 'Ann', aiScore: 70, teacherScore: 80 },
+      { teacherId: 2, teacherName: 'NoData', aiScore: null, teacherScore: 80 },
+      { teacherId: 2, teacherName: 'NoData', aiScore: 60, teacherScore: null },
+    ])
+    expect(out.map((t) => t.teacherId)).toEqual([1])
+  })
+
+  it('returns [] for no rows', () => {
+    expect(gradingCalibrationByTeacher([])).toEqual([])
   })
 })
 

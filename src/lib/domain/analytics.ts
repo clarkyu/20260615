@@ -399,6 +399,37 @@ export function gradingCalibration(rows: CalibrationRow[]): Calibration | null {
   }
 }
 
+// Per-teacher calibration breakdown (admin view): the same signal as gradingCalibration,
+// but split by the offering's teacher so an admin can spot OUTLIERS — who corrects the AI
+// the most, and in which direction. A teacher only appears once they have a re-scored
+// grade. Sorted most-reviewed first (the most reliable signal), ties broken by name.
+export interface TeacherCalibrationRow extends CalibrationRow {
+  teacherId: number
+  teacherName: string
+}
+
+export interface TeacherCalibration extends Calibration {
+  teacherId: number
+  teacherName: string
+}
+
+export function gradingCalibrationByTeacher(rows: TeacherCalibrationRow[]): TeacherCalibration[] {
+  const byTeacher = new Map<number, TeacherCalibrationRow[]>()
+  for (const r of rows) {
+    const arr = byTeacher.get(r.teacherId)
+    if (arr) arr.push(r)
+    else byTeacher.set(r.teacherId, [r])
+  }
+  const out: TeacherCalibration[] = []
+  for (const [teacherId, group] of byTeacher) {
+    const cal = gradingCalibration(group)
+    if (!cal) continue // teacher has rows but none with both scores → skip
+    out.push({ ...cal, teacherId, teacherName: group[0].teacherName })
+  }
+  out.sort((a, b) => b.sampleSize - a.sampleSize || a.teacherName.localeCompare(b.teacherName))
+  return out
+}
+
 export function parsePerSentence(aiResult: string | null | undefined): AnalyticsSubmission['perSentence'] {
   if (!aiResult) return []
   try {
