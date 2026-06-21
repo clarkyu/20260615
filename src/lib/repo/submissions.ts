@@ -118,6 +118,16 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
   })
 }
 
+// AI-vs-teacher score pairs for an offering — only submissions a teacher actually
+// re-scored (both an AI score and a teacher score present). Feeds the grading
+// calibration insight; scoped by offering like the other analytics lists.
+export function listScorePairsForOffering(prisma: PrismaClient, offeringId: number) {
+  return prisma.submission.findMany({
+    where: { assignment: { offeringId }, aiScore: { not: null }, teacherScore: { not: null } },
+    select: { aiScore: true, teacherScore: true },
+  })
+}
+
 // Lighter variant for the gradebook export: it collapses phases and never needs the
 // per-sentence detail, so the (potentially large) aiResult JSON is omitted — keeping the
 // whole-offering scan cheap in memory even for a big class. Same ordering/dedup contract.

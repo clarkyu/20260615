@@ -352,7 +352,53 @@ export function offeringSummary(
   }
 }
 
-// Parses the per-sentence accuracy/completeness out of a stored GradeResult JSON.
+// AI grading calibration — over the submissions a teacher actually re-scored (both an AI
+// score and a teacher score present), how do the teacher's marks compare to the AI's?
+// Surfaces systematic bias (are teachers consistently RAISING the AI's marks — AI too
+// harsh — or LOWERING them — too lenient) plus how often the AI was close enough to leave
+// alone. Only re-scored submissions count: a grade the teacher accepted without changing
+// has no teacherScore, so it's not a reference point we can measure against.
+export const CALIBRATION_AGREE_TOL = 5 // within ±5 points → the teacher essentially agreed
+export const CALIBRATION_BIAS_TOL = 2 // |mean delta| < 2 → too small to call a bias
+
+export interface CalibrationRow {
+  aiScore: number | null
+  teacherScore: number | null
+}
+
+export interface Calibration {
+  sampleSize: number // submissions with BOTH an AI and a teacher score
+  meanDelta: number // mean(teacher − ai): + = AI too harsh, − = AI too lenient
+  meanAbsDelta: number // average size of a correction, ignoring direction
+  agreeRate: number // share within ±CALIBRATION_AGREE_TOL of the AI score (0..1)
+  bias: 'harsh' | 'lenient' | 'fair'
+}
+
+export function gradingCalibration(rows: CalibrationRow[]): Calibration | null {
+  const pairs = rows.filter(
+    (r): r is { aiScore: number; teacherScore: number } => r.aiScore != null && r.teacherScore != null,
+  )
+  if (pairs.length === 0) return null // no re-scored grades yet → nothing to say
+  let sumDelta = 0
+  let sumAbs = 0
+  let agree = 0
+  for (const p of pairs) {
+    const delta = p.teacherScore - p.aiScore
+    sumDelta += delta
+    sumAbs += Math.abs(delta)
+    if (Math.abs(delta) <= CALIBRATION_AGREE_TOL) agree++
+  }
+  const n = pairs.length
+  const meanDelta = round1(sumDelta / n)
+  return {
+    sampleSize: n,
+    meanDelta,
+    meanAbsDelta: round1(sumAbs / n),
+    agreeRate: agree / n,
+    bias: meanDelta >= CALIBRATION_BIAS_TOL ? 'harsh' : meanDelta <= -CALIBRATION_BIAS_TOL ? 'lenient' : 'fair',
+  }
+}
+
 export function parsePerSentence(aiResult: string | null | undefined): AnalyticsSubmission['perSentence'] {
   if (!aiResult) return []
   try {

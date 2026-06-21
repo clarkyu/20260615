@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, RefreshCw, FileSpreadsheet } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, RefreshCw, FileSpreadsheet, Gauge } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -20,6 +20,8 @@ import {
   offeringSummary,
   latestPhaseSubmissions,
   collapsePhases,
+  gradingCalibration,
+  CALIBRATION_AGREE_TOL,
   RISK_SCORE,
   RISK_SUBMIT_RATE,
 } from '@/lib/domain/analytics'
@@ -37,11 +39,12 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) notFound()
 
-  const [students, assignments, rawSubs, rawPractice] = await Promise.all([
+  const [students, assignments, rawSubs, rawPractice, scorePairs] = await Promise.all([
     userRepo.listClassRoster(prisma, user.schoolId, offering.classId),
     assignmentRepo.listForOfferingTitled(prisma, offeringId),
     submissionRepo.listForOfferingLatestFirst(prisma, offeringId),
     practiceRepo.listScoredForOffering(prisma, offeringId),
+    submissionRepo.listScorePairsForOffering(prisma, offeringId),
   ])
 
   // Per-phase latest submissions → collapsed to one score per (student, assignment) =
@@ -55,6 +58,7 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   const profiles = studentProfiles(roster, assignments, submissions, practice)
   const summary = offeringSummary(stats, profiles, students.length)
   const weak = weakSentences(phaseRows)
+  const calibration = gradingCalibration(scorePairs)
   const titleById = new Map(assignments.map((a) => [a.id, a.title]))
   const sentenceText = new Map<string, string>()
   for (const a of assignments) for (const s of a.sentences) sentenceText.set(`${a.id}:${s.phaseId ?? 0}:${s.order}`, s.text)
@@ -219,6 +223,39 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
               ))
             )}
           </section>
+
+          {/* AI grading calibration — only once a teacher has re-scored some AI grades */}
+          {calibration ? (
+            <section className="space-y-2">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+                <Gauge className="h-4 w-4 text-primary" />{t('insights.calTitle')}
+              </h2>
+              <Card>
+                <CardContent className="space-y-3 p-4">
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="text-xl font-bold tabular-nums">{calibration.sampleSize}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{t('insights.calSample')}</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-bold tabular-nums">{calibration.meanDelta > 0 ? '+' : ''}{calibration.meanDelta}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{t('insights.calDelta')}</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-bold tabular-nums">{Math.round(calibration.agreeRate * 100)}%</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{t('insights.calAgree')}</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-center">
+                    <Badge tone={calibration.bias === 'fair' ? 'success' : 'warning'}>
+                      {t(calibration.bias === 'harsh' ? 'insights.calHarsh' : calibration.bias === 'lenient' ? 'insights.calLenient' : 'insights.calFair')}
+                    </Badge>
+                  </div>
+                  <p className="text-center text-xs text-muted-foreground">{t('insights.calHint', { tol: CALIBRATION_AGREE_TOL })}</p>
+                </CardContent>
+              </Card>
+            </section>
+          ) : null}
         </>
       )}
     </div>
