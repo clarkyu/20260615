@@ -64,4 +64,47 @@ describe('within-school IDOR boundary (real SQL)', () => {
     expect(await submissionRepo.findForStaff(db.prisma, d.subA.id, d.s1.id, d.teacherB.id, 'TEACHER')).toBeNull()
     expect(await submissionRepo.findForStaff(db.prisma, d.subA.id, d.s1.id, d.admin.id, 'SCHOOL_ADMIN')).not.toBeNull()
   })
+
+  // The admin calibration query (#222/#224/#226) is also a tenant boundary: it must return
+  // only THIS school's re-scored grades, only ones with BOTH scores, only within the
+  // window — and carry each row's teacher. Proven here against real SQL, not a mock.
+  it('listScorePairsForSchool: this school only, both-scored only, within the window, with teacher', async () => {
+    const d = await seed(db.prisma)
+    const p = db.prisma
+    const now = Date.now()
+    const recent = new Date(now - 10 * 86_400_000) // inside a 180-day window
+    const old = new Date(now - 365 * 86_400_000) // outside it
+    const since = new Date(now - 180 * 86_400_000)
+    const student = d.subA.studentId
+
+    // teacherA (offerA): two recent, both-scored grades
+    await p.submission.create({ data: { assignmentId: d.asgA.id, studentId: student, attempt: 2, status: 'GRADED', aiScore: 70, teacherScore: 80, gradedAt: recent } })
+    await p.submission.create({ data: { assignmentId: d.asgA.id, studentId: student, attempt: 3, status: 'GRADED', aiScore: 60, teacherScore: 65, gradedAt: recent } })
+    // teacherB (offerB): one recent, both-scored
+    const asgB = await p.assignment.create({ data: { offeringId: d.offerB.id, title: 'Asg B' } })
+    await p.submission.create({ data: { assignmentId: asgB.id, studentId: student, attempt: 1, status: 'GRADED', aiScore: 90, teacherScore: 85, gradedAt: recent } })
+    // EXCLUDED — graded before the window
+    await p.submission.create({ data: { assignmentId: d.asgA.id, studentId: student, attempt: 4, status: 'GRADED', aiScore: 50, teacherScore: 55, gradedAt: old } })
+    // EXCLUDED — AI score only, the teacher never re-scored
+    await p.submission.create({ data: { assignmentId: d.asgA.id, studentId: student, attempt: 5, status: 'GRADED', aiScore: 77, gradedAt: recent } })
+    // EXCLUDED — a different school (s2)
+    const courseS2 = await p.course.create({ data: { schoolId: d.s2.id, name: 'Eng2', code: 'E2' } })
+    const clsS2 = await p.classGroup.create({ data: { schoolId: d.s2.id, name: 'C-S2' } })
+    const offerS2 = await p.courseOffering.create({ data: { schoolId: d.s2.id, courseId: courseS2.id, teacherId: d.teacherC.id, classId: clsS2.id, year: '2025-2026', semester: '1' } })
+    const asgS2 = await p.assignment.create({ data: { offeringId: offerS2.id, title: 'Asg S2' } })
+    const studentS2 = await p.user.create({ data: { role: 'STUDENT', schoolId: d.s2.id, studentNo: 'stuS2', passwordHash: 'x' } })
+    await p.submission.create({ data: { assignmentId: asgS2.id, studentId: studentS2.id, attempt: 1, status: 'GRADED', aiScore: 40, teacherScore: 95, gradedAt: recent } })
+
+    const rows = await submissionRepo.listScorePairsForSchool(p, d.s1.id, since)
+    expect(rows).toHaveLength(3) // the 3 s1 recent both-scored pairs; old / ai-only / s2 all excluded
+    expect(rows.some((r) => r.aiScore === 40 && r.teacherScore === 95)).toBe(false) // no cross-school leak
+
+    const byTeacher = new Map<number, number>()
+    for (const r of rows) {
+      const tid = r.assignment.offering.teacherId
+      byTeacher.set(tid, (byTeacher.get(tid) ?? 0) + 1)
+    }
+    expect(byTeacher.get(d.teacherA.id)).toBe(2)
+    expect(byTeacher.get(d.teacherB.id)).toBe(1)
+  })
 })
