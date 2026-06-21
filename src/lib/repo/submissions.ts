@@ -128,13 +128,18 @@ export function listScorePairsForOffering(prisma: PrismaClient, offeringId: numb
   })
 }
 
-// School-wide AI-vs-teacher score pairs for the admin calibration card. Same "both
-// scores present" filter as the per-offering version, scoped to the whole school via
-// assignment.offering.schoolId (admin-only surface — every offering in the school).
+// School-wide AI-vs-teacher score pairs for the admin calibration card, each carrying its
+// offering's teacher so the page can derive BOTH the school-wide number and the per-teacher
+// breakdown from one query. Same "both scores present" filter, scoped to the whole school
+// via assignment.offering.schoolId (admin-only surface — every offering in the school).
 export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
   return prisma.submission.findMany({
     where: { assignment: { offering: { schoolId: schoolId ?? -1 } }, aiScore: { not: null }, teacherScore: { not: null } },
-    select: { aiScore: true, teacherScore: true },
+    select: {
+      aiScore: true,
+      teacherScore: true,
+      assignment: { select: { offering: { select: { teacherId: true, teacher: { select: { name: true } } } } } },
+    },
   })
 }
 

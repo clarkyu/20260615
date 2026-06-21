@@ -12,7 +12,7 @@ import * as userRepo from '@/lib/repo/users'
 import * as dashboardRepo from '@/lib/repo/dashboard'
 import * as schoolRepo from '@/lib/repo/schools'
 import * as submissionRepo from '@/lib/repo/submissions'
-import { gradingCalibration } from '@/lib/domain/analytics'
+import { gradingCalibration, gradingCalibrationByTeacher } from '@/lib/domain/analytics'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
@@ -72,8 +72,18 @@ export default async function DashboardPage() {
     await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.panelRole, tzo)
   const isAdmin = user.panelRole === 'SCHOOL_ADMIN'
   // School-wide AI grading calibration — admin-only, and only once teachers have
-  // re-scored some AI grades (otherwise nothing to calibrate against).
-  const calibration = isAdmin ? gradingCalibration(await submissionRepo.listScorePairsForSchool(prisma, schoolId)) : null
+  // re-scored some AI grades (otherwise nothing to calibrate against). One query feeds
+  // both the school-wide number and the per-teacher outlier breakdown.
+  const scorePairs = isAdmin ? await submissionRepo.listScorePairsForSchool(prisma, schoolId) : []
+  const calibration = isAdmin ? gradingCalibration(scorePairs) : null
+  const byTeacher = gradingCalibrationByTeacher(
+    scorePairs.map((p) => ({
+      aiScore: p.aiScore,
+      teacherScore: p.teacherScore,
+      teacherId: p.assignment.offering.teacherId,
+      teacherName: p.assignment.offering.teacher?.name ?? '',
+    })),
+  )
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows
     .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, teacher: a.offering.teacher?.name ?? null, pending: countById.get(a.id) ?? 0 }))
@@ -250,6 +260,21 @@ export default async function DashboardPage() {
                 </Badge>
               </div>
               <p className="text-center text-xs text-muted-foreground">{t('dash.calHint')}</p>
+              {byTeacher.length >= 2 ? (
+                <div className="space-y-1.5 border-t border-border/60 pt-3">
+                  <div className="text-xs font-medium text-muted-foreground">{t('dash.calByTeacher')}</div>
+                  {byTeacher.map((tc) => (
+                    <div key={tc.teacherId} className="flex items-center gap-2 text-sm">
+                      <span className="min-w-0 flex-1 truncate">{tc.teacherName || '—'}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{t('dash.calReviewedN', { n: tc.sampleSize })}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{tc.meanDelta > 0 ? '+' : ''}{tc.meanDelta}</span>
+                      <Badge tone={tc.bias === 'fair' ? 'success' : 'warning'}>
+                        {t(tc.bias === 'harsh' ? 'dash.biasHarshShort' : tc.bias === 'lenient' ? 'dash.biasLenientShort' : 'dash.biasFairShort')}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>
