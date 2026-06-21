@@ -1,0 +1,27 @@
+# Dependabot keeps dependencies and GitHub Actions current, and — together with GitHub's
+# security advisories — opens fix PRs for vulnerable packages (the "依赖漏洞扫描" gate from
+# docs/PR-OVERVIEW.md). Version updates are MONTHLY + grouped to keep PR noise low in a
+# manually-merged repo; SECURITY updates are delivered as soon as an advisory lands,
+# regardless of this schedule.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      # Collapse the monthly bumps into two PRs (prod / dev) instead of a flood of singletons.
+      production-dependencies:
+        dependency-type: "production"
+      development-dependencies:
+        dependency-type: "development"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
