@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library } from 'lucide-react'
+import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library, Gauge } from 'lucide-react'
 import { requireStaff, availablePanels } from '@/lib/auth'
 import { parseTzOffset } from '@/lib/time'
 import { getDb } from '@/lib/db'
@@ -11,6 +11,8 @@ import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as dashboardRepo from '@/lib/repo/dashboard'
 import * as schoolRepo from '@/lib/repo/schools'
+import * as submissionRepo from '@/lib/repo/submissions'
+import { gradingCalibration } from '@/lib/domain/analytics'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
@@ -69,6 +71,9 @@ export default async function DashboardPage() {
   const { students, classes, assignments, offeringsCount, pendingCount, dueToday, pendingGroups, needRows } =
     await dashboardRepo.loadStaffDashboard(prisma, schoolId, user.userId, user.panelRole, tzo)
   const isAdmin = user.panelRole === 'SCHOOL_ADMIN'
+  // School-wide AI grading calibration — admin-only, and only once teachers have
+  // re-scored some AI grades (otherwise nothing to calibrate against).
+  const calibration = isAdmin ? gradingCalibration(await submissionRepo.listScorePairsForSchool(prisma, schoolId)) : null
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
   const needGrading = needRows
     .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, teacher: a.offering.teacher?.name ?? null, pending: countById.get(a.id) ?? 0 }))
@@ -216,6 +221,39 @@ export default async function DashboardPage() {
           ))
         )}
       </div>
+
+      {/* School-wide AI grading calibration (admin) */}
+      {calibration ? (
+        <div className="space-y-2">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+            <Gauge className="h-4 w-4 text-primary" />{t('dash.calTitle')}
+          </h2>
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <div className="text-2xl font-extrabold tabular-nums">{calibration.sampleSize}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{t('insights.calSample')}</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-extrabold tabular-nums">{calibration.meanDelta > 0 ? '+' : ''}{calibration.meanDelta}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{t('insights.calDelta')}</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-extrabold tabular-nums">{Math.round(calibration.agreeRate * 100)}%</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{t('insights.calAgree')}</div>
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <Badge tone={calibration.bias === 'fair' ? 'success' : 'warning'}>
+                  {t(calibration.bias === 'harsh' ? 'insights.calHarsh' : calibration.bias === 'lenient' ? 'insights.calLenient' : 'insights.calFair')}
+                </Badge>
+              </div>
+              <p className="text-center text-xs text-muted-foreground">{t('dash.calHint')}</p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-3 gap-3">
         {stats.map((s) => (
