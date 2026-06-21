@@ -128,6 +128,16 @@ export function listScorePairsForOffering(prisma: PrismaClient, offeringId: numb
   })
 }
 
+// School-wide AI-vs-teacher score pairs for the admin calibration card. Same "both
+// scores present" filter as the per-offering version, scoped to the whole school via
+// assignment.offering.schoolId (admin-only surface — every offering in the school).
+export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
+  return prisma.submission.findMany({
+    where: { assignment: { offering: { schoolId: schoolId ?? -1 } }, aiScore: { not: null }, teacherScore: { not: null } },
+    select: { aiScore: true, teacherScore: true },
+  })
+}
+
 // Lighter variant for the gradebook export: it collapses phases and never needs the
 // per-sentence detail, so the (potentially large) aiResult JSON is omitted — keeping the
 // whole-offering scan cheap in memory even for a big class. Same ordering/dedup contract.
