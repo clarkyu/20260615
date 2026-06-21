@@ -1,6 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { logError } from '@/lib/log'
 import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import type { CurrentUser } from '@/lib/auth'
@@ -134,7 +135,7 @@ export async function getChunkSetVideoUrl(chunkSetId: number, contentType: strin
     await bankRepo.setVideoKey(prisma, chunkSetId, key)
     return { url, key }
   } catch (err) {
-    console.error('[getChunkSetVideoUrl] presign failed:', err)
+    logError('getChunkSetVideoUrl', 'presign failed', err)
     return { error: t('err.uploadUrlFail') }
   }
 }
@@ -164,7 +165,7 @@ export async function deleteChunkSet(formData: FormData): Promise<void> {
   const res = await bankRepo.deleteOwned(prisma, id, user.schoolId, isSuper(user))
   // The DB cascade-deletes the set's rows but not its R2 video — clean it up (best-effort).
   if (res.videoKey && storageConfigured()) {
-    try { await deleteObject(res.videoKey) } catch (err) { console.error('[deleteChunkSet] R2 cleanup failed:', err) }
+    try { await deleteObject(res.videoKey) } catch (err) { logError('deleteChunkSet', 'R2 cleanup failed', err) }
   }
   revalidatePath('/dashboard/bank')
   redirect('/dashboard/bank')

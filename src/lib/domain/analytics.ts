@@ -2,6 +2,7 @@
 // already collects. No precomputed mastery table, so nothing can go stale; at a
 // school's scale the aggregation is cheap. All functions here are pure and
 // unit-tested; the page layer only loads rows and renders.
+import { logError } from '../log'
 
 export interface AnalyticsStudent {
   id: number
@@ -365,7 +366,7 @@ export function parsePerSentence(aiResult: string | null | undefined): Analytics
     // Corrupted/truncated GradeResult JSON: log it so a "0 accuracy" on the analytics
     // page is diagnosable rather than silently empty. Still degrade to [] so one bad
     // row never breaks the whole aggregation.
-    console.error('[analytics] failed to parse stored aiResult JSON:', err)
+    logError('analytics', 'failed to parse stored aiResult JSON', err)
     return []
   }
 }

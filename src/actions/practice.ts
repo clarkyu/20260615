@@ -1,6 +1,7 @@
 'use server'
 
 import { studentContext } from '@/lib/action-context'
+import { logError } from '@/lib/log'
 import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } from '@/lib/storage'
 import { gradePractice } from '@/lib/domain/practice'
 import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
@@ -25,7 +26,7 @@ export async function getPracticeUploadUrl(phaseId: number, contentType: string,
     const url = await presignUpload(key, contentType)
     return { url, key }
   } catch (err) {
-    console.error('[getPracticeUploadUrl] presign failed:', err)
+    logError('getPracticeUploadUrl', 'presign failed', err)
     return { error: t('err.uploadUrlFail') }
   }
 }
@@ -74,7 +75,7 @@ export async function gradePracticeAttempt(
     try {
       audioUrl = await presignDownload(payload.mediaKey)
     } catch (err) {
-      console.error('[gradePracticeAttempt] presign download failed:', err)
+      logError('gradePracticeAttempt', 'presign download failed', err)
     }
   }
 

@@ -14,6 +14,7 @@
 // (only the isolate whose update matched actually runs the job).
 
 import type { PrismaClient } from '@prisma/client'
+import { logError } from '../log'
 import { autoGradeById } from './grading'
 import { gradeShadowSubmission } from './shadow'
 import { runAfterResponse } from '@/lib/cf'
@@ -64,7 +65,7 @@ async function defaultRunner(prisma: PrismaClient, job: JobRow): Promise<RunOutc
       if (!r.ok) error = r.error
     }
   } catch (err) {
-    console.error('[jobs] runner threw:', err)
+    logError('jobs', 'runner threw', err, { submissionId: job.submissionId })
     return { done: false, error: err instanceof Error ? err.message : String(err) }
   }
   const sub = await prisma.submission.findUnique({ where: { id: job.submissionId }, select: { status: true } })
@@ -171,7 +172,7 @@ export async function drainGradingJobs(prisma: PrismaClient, limit = 5): Promise
   try {
     await claimAndRunDue(prisma, limit)
   } catch (err) {
-    console.error('[jobs] drain failed:', err)
+    logError('jobs', 'drain failed', err)
   }
 }
 

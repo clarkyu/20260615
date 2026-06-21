@@ -6,6 +6,7 @@
 // real submission. Degrades gracefully when no model key is configured.
 
 import { gradeSubmission, type GradeResult } from '@/lib/ai/grade'
+import { logError } from '../log'
 import { DEFAULT_MAX_SCORE, isUnavailable } from './grading'
 
 export interface PracticeGradeInput {
@@ -40,7 +41,7 @@ export async function gradePractice(input: PracticeGradeInput): Promise<Practice
   } catch (err) {
     const message = err instanceof Error ? err.message : 'practice grade failed'
     if (isUnavailable(message)) return { status: 'unavailable' }
-    console.error('[gradePractice] failed:', err)
+    logError('gradePractice', 'failed', err)
     return { status: 'error', message }
   }
 }

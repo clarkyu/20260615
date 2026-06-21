@@ -7,6 +7,7 @@
 // isolation.
 
 import type { PrismaClient } from '@prisma/client'
+import { logError } from '../log'
 import { gradeSubmission } from '@/lib/ai/grade'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
@@ -119,7 +120,7 @@ export async function autoGradeSubmission(
       try {
         videoUrl = await presignDownload(submission.videoKey)
       } catch (err) {
-        console.error('[autoGradeSubmission] video presign failed:', err)
+        logError('autoGradeSubmission', 'video presign failed', err, { submissionId: submission.id })
         mediaUnavailable = true
       }
     }
@@ -127,7 +128,7 @@ export async function autoGradeSubmission(
       try {
         audioUrl = await presignDownload(submission.audioKey)
       } catch (err) {
-        console.error('[autoGradeSubmission] audio presign failed:', err)
+        logError('autoGradeSubmission', 'audio presign failed', err, { submissionId: submission.id })
         mediaUnavailable = true
       }
     }
@@ -191,7 +192,7 @@ export async function autoGradeSubmission(
       await submissionRepo.revertToQueue(prisma, submission.id, submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED')
       return { ok: false, error: message }
     }
-    console.error('[autoGradeSubmission] grading failed:', err)
+    logError('autoGradeSubmission', 'grading failed', err, { submissionId: submission.id })
     await submissionRepo.markFailed(prisma, submission.id)
     return { ok: false, error: message }
   }
