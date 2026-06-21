@@ -32,7 +32,10 @@ describe('encryptSecret / decryptSecret', () => {
 
   it('rejects a tampered ciphertext (GCM auth tag failure)', async () => {
     const { ciphertext, iv } = await encryptSecret('do-not-tamper')
-    const flipped = ciphertext.slice(0, -2) + (ciphertext.endsWith('A') ? 'B' : 'A') + ciphertext.slice(-1)
+    // Flip the FIRST base64 char: it encodes the top bits of byte 0 — always real data,
+    // never base64 padding. (Flipping a trailing char can land on don't-care padding bits
+    // and decode unchanged, which made an earlier version of this test flaky ~1/16.)
+    const flipped = (ciphertext[0] === 'A' ? 'B' : 'A') + ciphertext.slice(1)
     await expect(decryptSecret(flipped, iv)).rejects.toThrow()
   })
 
