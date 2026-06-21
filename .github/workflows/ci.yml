@@ -18,8 +18,8 @@ jobs:
       DATABASE_URL: 'file:/tmp/ci.db'
       SESSION_SECRET: 'ci-placeholder-secret-at-least-32-characters'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
