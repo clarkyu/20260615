@@ -1,10 +1,12 @@
 import type { PrismaClient, SubmissionStatus, Prisma, Role } from '@prisma/client'
+import { offeringScopeFor } from './scope'
 
-// Submission data access. A submission belongs to a school through
-// assignment.offering; staff reads/writes are scoped by offering — a TEACHER only
-// reaches their OWN offerings' submissions, an admin the whole school.
+// Submission data access. A submission belongs to a school through assignment.offering;
+// staff reads/writes are scoped by the shared staff-ownership filter (lib/repo/scope)
+// nested under assignment.offering — a TEACHER only reaches their OWN offerings'
+// submissions, an admin the whole school.
 const staffSub = (schoolId: number | null | undefined, userId: number, role: Role) =>
-  ({ assignment: { offering: { schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) } } })
+  ({ assignment: { offering: offeringScopeFor(schoolId, userId, role) } })
 
 // One submission the staff member may grade, with its assignment + ordered
 // reference sentences (everything autoGradeSubmission needs).
