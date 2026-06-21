@@ -9,6 +9,8 @@ import {
   parsePerSentence,
   latestPhaseSubmissions,
   collapsePhases,
+  gradingCalibration,
+  CALIBRATION_AGREE_TOL,
   type AnalyticsSubmission,
   type PhaseSubmission,
   type RawPhaseRow,
@@ -236,6 +238,55 @@ describe('offeringSummary', () => {
     const summary = offeringSummary(stats, profiles, 2)
     expect(summary.submissionRate).toBeCloseTo(2 / 4) // 2 submitted of 2 students × 2 assignments
     expect(summary.atRisk).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('gradingCalibration', () => {
+  it('returns null when no submission has both an AI and a teacher score', () => {
+    expect(gradingCalibration([])).toBeNull()
+    expect(gradingCalibration([{ aiScore: 80, teacherScore: null }, { aiScore: null, teacherScore: 90 }])).toBeNull()
+  })
+
+  it('flags AI-too-harsh when teachers consistently raise scores (positive delta)', () => {
+    const cal = gradingCalibration([
+      { aiScore: 70, teacherScore: 80 },
+      { aiScore: 60, teacherScore: 70 },
+    ])!
+    expect(cal.sampleSize).toBe(2)
+    expect(cal.meanDelta).toBe(10) // teacher − ai
+    expect(cal.meanAbsDelta).toBe(10)
+    expect(cal.bias).toBe('harsh')
+  })
+
+  it('flags AI-too-lenient when teachers lower scores (negative delta)', () => {
+    const cal = gradingCalibration([{ aiScore: 90, teacherScore: 80 }, { aiScore: 85, teacherScore: 80 }])!
+    expect(cal.meanDelta).toBeLessThan(0)
+    expect(cal.bias).toBe('lenient')
+  })
+
+  it('calls it fair when corrections net out within the bias tolerance', () => {
+    const cal = gradingCalibration([{ aiScore: 80, teacherScore: 81 }, { aiScore: 80, teacherScore: 79 }])!
+    expect(cal.meanDelta).toBe(0)
+    expect(cal.bias).toBe('fair')
+  })
+
+  it('agreeRate counts only corrections within ±CALIBRATION_AGREE_TOL of the AI score', () => {
+    const cal = gradingCalibration([
+      { aiScore: 80, teacherScore: 80 + CALIBRATION_AGREE_TOL }, // exactly on the boundary → agrees
+      { aiScore: 80, teacherScore: 80 + CALIBRATION_AGREE_TOL + 1 }, // just past → disagrees
+    ])!
+    expect(cal.agreeRate).toBeCloseTo(0.5)
+    expect(cal.meanAbsDelta).toBeCloseTo((CALIBRATION_AGREE_TOL + (CALIBRATION_AGREE_TOL + 1)) / 2)
+  })
+
+  it('ignores rows missing either score when computing the sample', () => {
+    const cal = gradingCalibration([
+      { aiScore: 70, teacherScore: 75 },
+      { aiScore: null, teacherScore: 80 },
+      { aiScore: 60, teacherScore: null },
+    ])!
+    expect(cal.sampleSize).toBe(1)
+    expect(cal.meanDelta).toBe(5)
   })
 })
 
