@@ -5,6 +5,12 @@ on:
     branches: ['**']
   pull_request:
 
+# Cancel an in-progress run when a newer commit lands on the same ref — only the latest
+# commit's result matters for a branch/PR, so superseded runs just waste CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
