@@ -2,6 +2,13 @@
   "extends": ["next/core-web-vitals", "next/typescript"],
   "overrides": [
     {
+      "files": ["src/lib/**/*.ts", "src/actions/**/*.ts"],
+      "excludedFiles": ["src/lib/log.ts", "**/__tests__/**"],
+      "rules": {
+        "no-console": "error"
+      }
+    },
+    {
       "files": ["src/actions/**/*.ts"],
       "excludedFiles": ["src/actions/auth.ts"],
       "rules": {
