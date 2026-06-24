@@ -38,6 +38,9 @@ export interface PhaseInput {
   requireAudio: boolean
   requireVideo: boolean
   requireHandwriting: boolean
+  requireChoice?: boolean
+  choicesJson?: string | null
+  requireFreeText?: boolean
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -130,6 +133,9 @@ function phaseData(p: PhaseInput) {
     requireAudio: p.requireAudio,
     requireVideo: p.requireVideo,
     requireHandwriting: p.requireHandwriting,
+    requireChoice: p.requireChoice ?? false,
+    choicesJson: p.choicesJson ?? null,
+    requireFreeText: p.requireFreeText ?? false,
     graded: p.graded,
     maxAttempts: p.maxAttempts,
     isFormalTest: p.isFormalTest,
