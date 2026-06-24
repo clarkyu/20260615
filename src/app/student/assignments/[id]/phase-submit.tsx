@@ -110,6 +110,7 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       requireHandwriting={phase.requireHandwriting}
       requireChoice={phase.requireChoice}
       choices={parseChoices(phase.choicesJson)}
+      correctChoice={phase.correctChoice}
       requireFreeText={phase.requireFreeText}
       attemptsLeft={attemptsLeft}
       windowState={windowState}

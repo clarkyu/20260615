@@ -29,6 +29,8 @@ export interface PhaseInitial {
   requireHandwriting: boolean
   requireChoice: boolean
   choices: string[]
+  // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
+  correctIndex: number
   requireFreeText: boolean
   graded: boolean
   maxAttempts: number
@@ -82,6 +84,8 @@ interface PhaseState {
   requireHandwriting: boolean
   requireChoice: boolean
   choices: string[]
+  // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
+  correctIndex: number
   requireFreeText: boolean
   graded: boolean
   maxAttempts: number
@@ -107,6 +111,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     requireHandwriting: false,
     requireChoice: false,
     choices: [],
+    correctIndex: -1,
     requireFreeText: false,
     graded: true,
     maxAttempts: 3,
@@ -208,6 +213,8 @@ export function AssignmentForm({
       requireHandwriting: p.requireHandwriting,
       requireChoice: p.requireChoice,
       choicesJson: p.requireChoice ? JSON.stringify(p.choices.map((c) => c.trim()).filter(Boolean)) : null,
+      // 正确答案存「选项文本」（与学生作答 recitedText 同形，便于判分）；-1 或空选项 → 仅投票。
+      correctChoice: p.requireChoice && p.correctIndex >= 0 ? (p.choices[p.correctIndex]?.trim() || null) : null,
       requireFreeText: p.requireFreeText,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
@@ -548,23 +555,42 @@ function PhaseCard({
         </div>
       </div>
 
-      {/* 单选投票的选项编辑器（老师任意增减；无正确答案，纯投票统计） */}
+      {/* 单选选项编辑器（老师任意增减）。左侧单选钮把某项设为正确答案 → 当作单选题、提交即
+          客观判分；都不选（仅投票）→ 只统计票数分布、不判分。 */}
       {phase.requireChoice ? (
         <div className="space-y-2">
           <Label>{t('asg.choiceOptions')}</Label>
           <div className="space-y-2 rounded-xl border border-input p-3">
             {phase.choices.map((opt, oi) => (
               <div key={oi} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={`correct-${index}`}
+                  checked={phase.correctIndex === oi}
+                  onChange={() => onPatch({ correctIndex: oi })}
+                  className="h-4 w-4 shrink-0 accent-[hsl(var(--success))]"
+                  title={t('asg.markCorrect')}
+                  aria-label={t('asg.markCorrect')}
+                />
                 <Input value={opt} onChange={(e) => onPatch({ choices: phase.choices.map((c, j) => (j === oi ? e.target.value : c)) })} placeholder={t('asg.choiceOptionPh', { n: oi + 1 })} aria-label={t('asg.choiceOptionPh', { n: oi + 1 })} />
-                <button type="button" onClick={() => onPatch({ choices: phase.choices.filter((_, j) => j !== oi) })} disabled={phase.choices.length <= 2} className="tap shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label={t('asg.removeOption')}>
+                <button type="button" onClick={() => onPatch({ choices: phase.choices.filter((_, j) => j !== oi), correctIndex: phase.correctIndex === oi ? -1 : phase.correctIndex > oi ? phase.correctIndex - 1 : phase.correctIndex })} disabled={phase.choices.length <= 2} className="tap shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label={t('asg.removeOption')}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ))}
-            <Button type="button" variant="outline" size="sm" onClick={() => onPatch({ choices: [...phase.choices, ''] })}>
-              <Plus className="h-4 w-4" />{t('asg.addOption')}
-            </Button>
-            <p className="text-xs text-muted-foreground">{t('asg.choiceHint')}</p>
+            <div className="flex items-center justify-between gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => onPatch({ choices: [...phase.choices, ''] })}>
+                <Plus className="h-4 w-4" />{t('asg.addOption')}
+              </Button>
+              {phase.correctIndex >= 0 ? (
+                <button type="button" onClick={() => onPatch({ correctIndex: -1 })} className="tap text-xs text-muted-foreground hover:text-foreground">
+                  {t('asg.clearCorrect')}
+                </button>
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {phase.correctIndex >= 0 ? t('asg.choiceGradedHint') : t('asg.choicePollHint')}
+            </p>
           </div>
         </div>
       ) : null}

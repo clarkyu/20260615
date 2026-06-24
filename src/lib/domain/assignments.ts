@@ -32,6 +32,7 @@ export interface PhaseDraft {
   // 新提交类型（可选，旧 draft 省略即 false/null）：单选投票 / 自由文本。
   requireChoice?: boolean
   choicesJson?: string | null
+  correctChoice?: string | null
   requireFreeText?: boolean
   graded: boolean
   maxAttempts: number
@@ -90,6 +91,7 @@ async function resolvePhases(
       requireHandwriting: d.requireHandwriting,
       requireChoice: d.requireChoice ?? false,
       choicesJson: d.choicesJson ?? null,
+      correctChoice: d.correctChoice ?? null,
       requireFreeText: d.requireFreeText ?? false,
       graded: d.graded,
       maxAttempts: d.maxAttempts,

@@ -381,6 +381,15 @@ export function flipDraft(prisma: PrismaClient, id: number, status: SubmissionSt
   return prisma.submission.updateMany({ where: { id, status: 'DRAFT' }, data: { status, needsReview } })
 }
 
+// 单选题（设了正确答案）客观判分：DRAFT→GRADED，写 finalScore、无需复核。
+// Fenced to DRAFT，与 flipDraft 一样幂等：并发/重复 finish 不会重复判分或覆盖已定稿的行。
+export function flipDraftGraded(prisma: PrismaClient, id: number, score: number) {
+  return prisma.submission.updateMany({
+    where: { id, status: 'DRAFT' },
+    data: { status: 'GRADED', finalScore: score, needsReview: false, gradedAt: new Date() },
+  })
+}
+
 export function upsertShadowTake(prisma: PrismaClient, submissionId: number, order: number, audioKey: string) {
   return prisma.shadowTake.upsert({
     where: { submissionId_order: { submissionId, order } },

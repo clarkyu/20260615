@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3 } from 'lucide-react'
+import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
 import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -35,7 +35,7 @@ interface Row {
 }
 interface ModelOpt { id: string; label: string }
 interface Preset { id: string; label: string; perceptionModel: string; judgeModel: string }
-interface PollResult { phaseLabel?: string; total: number; options: { label: string; count: number }[] }
+interface PollResult { phaseLabel?: string; total: number; correctChoice: string | null; correctCount: number | null; options: { label: string; count: number; correct: boolean }[] }
 
 const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
@@ -235,7 +235,12 @@ export function GradingClient(props: {
               <BarChart3 className="h-4 w-4 text-primary" />
               {t('grade.pollResults')}{poll.phaseLabel ? ` · ${poll.phaseLabel}` : ''}
             </CardTitle>
-            <CardDescription>{t('grade.pollTotal', { n: poll.total })}</CardDescription>
+            <CardDescription>
+              {t('grade.pollTotal', { n: poll.total })}
+              {poll.correctChoice != null
+                ? ` · ${t('grade.correctRate', { pct: poll.total > 0 ? Math.round(((poll.correctCount ?? 0) / poll.total) * 100) : 0 })}`
+                : ''}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2.5">
             {poll.options.length === 0 ? (
@@ -246,11 +251,13 @@ export function GradingClient(props: {
                 return (
                   <div key={j} className="space-y-1">
                     <div className="flex items-center justify-between gap-2 text-sm">
-                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{o.label}</span>
+                      <span className={'flex min-w-0 flex-1 items-center gap-1.5 whitespace-pre-wrap break-words ' + (o.correct ? 'font-medium text-success' : '')}>
+                        {o.correct ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : null}{o.label}
+                      </span>
                       <span className="shrink-0 tabular-nums text-muted-foreground">{o.count} · {pct}%</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-secondary">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                      <div className={'h-full rounded-full ' + (o.correct ? 'bg-success' : 'bg-primary')} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 )
