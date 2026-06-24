@@ -6,7 +6,8 @@ import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { hasAntiCheatViolation } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
-import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart, isPollOnly } from '@/lib/domain/submit'
+import { parseChoices } from '@/lib/choices'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -68,8 +69,10 @@ export async function finishSubmission(phaseId: number) {
   const missing = missingRequiredPart(resolved.requirements, submission)
   if (missing) return { error: t(missing) }
 
+  // 纯单选投票：无对错、无需复核，定稿即结束，不进老师待批队列。
+  const needsReview = !isPollOnly(resolved.requirements)
   const status = hasAntiCheatViolation(submission.violations) ? 'FLAGGED' : 'UPLOADED'
-  const flipped = await submissionRepo.flipDraft(prisma, submission.id, status)
+  const flipped = await submissionRepo.flipDraft(prisma, submission.id, status, needsReview)
   if (flipped.count === 0) {
     revalidatePath('/student')
     return { success: true }
@@ -136,6 +139,42 @@ export async function finishShadowing(phaseId: number) {
   if (flipped.count > 0) {
     await scheduleGrading(prisma, submission.id, 'shadow')
   }
+  revalidatePath('/student')
+  return { success: true }
+}
+
+// 单选投票：记录学生选择的选项（必须是该环节配置的某个选项），存进 recitedText。
+// 投票没有对错，这里只校验选项合法，避免脏数据污染票数分布。
+export async function submitChoice(phaseId: number, choice: string) {
+  const { user, prisma, t } = await studentContext()
+  const picked = (choice ?? '').trim()
+  if (!picked) return { error: t('err.needChoice') }
+
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+
+  const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
+  const options = parseChoices(phase?.choicesJson)
+  if (!options.includes(picked)) return { error: t('err.badChoice') }
+
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, picked)
+  revalidatePath('/student')
+  return { success: true }
+}
+
+// 自由文本：学生提交任意文本（事后由老师人工评分），存进 recitedText。
+export async function submitFreeText(phaseId: number, text: string) {
+  const { user, prisma, t } = await studentContext()
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return { error: t('err.needFreeText') }
+  if (trimmed.length > 20000) return { error: t('err.textTooLong') }
+
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, trimmed)
   revalidatePath('/student')
   return { success: true }
 }

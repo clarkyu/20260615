@@ -38,6 +38,9 @@ export interface PhaseInput {
   requireAudio: boolean
   requireVideo: boolean
   requireHandwriting: boolean
+  requireChoice?: boolean
+  choicesJson?: string | null
+  requireFreeText?: boolean
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -88,7 +91,7 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
     include: {
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
-      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireChoice: true, choicesJson: true, requireFreeText: true } },
       submissions: {
         include: { student: { select: { name: true, studentNo: true } }, phase: { select: { order: true, title: true } } },
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
@@ -130,6 +133,9 @@ function phaseData(p: PhaseInput) {
     requireAudio: p.requireAudio,
     requireVideo: p.requireVideo,
     requireHandwriting: p.requireHandwriting,
+    requireChoice: p.requireChoice ?? false,
+    choicesJson: p.choicesJson ?? null,
+    requireFreeText: p.requireFreeText ?? false,
     graded: p.graded,
     maxAttempts: p.maxAttempts,
     isFormalTest: p.isFormalTest,
@@ -343,6 +349,7 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
     select: {
       id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true, freePractice: true,
       requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
+      requireChoice: true, choicesJson: true, requireFreeText: true,
     },
   })
 }

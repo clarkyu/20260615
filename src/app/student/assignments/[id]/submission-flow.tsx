@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert } from 'lucide-react'
-import { submitRecitedText, finishSubmission } from '@/actions/submissions'
+import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, ListChecks, MessageSquare } from 'lucide-react'
+import { submitRecitedText, submitChoice, submitFreeText, finishSubmission } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ interface Sentence {
   order: number
   text: string
 }
-type Kind = 'text' | 'video' | 'audio' | 'handwriting'
+type Kind = 'text' | 'video' | 'audio' | 'handwriting' | 'choice' | 'freetext'
 
 const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
 const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
@@ -27,6 +27,8 @@ const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
   video: { key: 'sub.step2', icon: Video },
   audio: { key: 'sub.stepAudio', icon: Mic },
   handwriting: { key: 'sub.stepImage', icon: Camera },
+  choice: { key: 'sub.stepChoice', icon: ListChecks },
+  freetext: { key: 'sub.stepFreeText', icon: MessageSquare },
 }
 
 // 正式测试横幅：告诉学生这是受监督的正式测试，行为更端正 = 成绩更真实。
@@ -67,7 +69,22 @@ function Steps({ steps, idx }: { steps: Kind[]; idx: number }) {
   )
 }
 
-function TextStep({ phaseId, initial, onDone }: { phaseId: number; initial: string; onDone: () => void }) {
+// 文本输入步骤。默写背诵（submitRecitedText）和自由文本（submitFreeText）共用这一块，
+// 只是文案与提交动作不同。
+function TextStep({
+  phaseId, initial, onDone,
+  action = submitRecitedText,
+  titleKey = 'sub.step1Title', descKey = 'sub.step1Desc', phKey = 'sub.step1Ph', submitKey = 'sub.next',
+}: {
+  phaseId: number
+  initial: string
+  onDone: () => void
+  action?: (phaseId: number, text: string) => Promise<{ error?: string }>
+  titleKey?: string
+  descKey?: string
+  phKey?: string
+  submitKey?: string
+}) {
   const t = useT()
   const [text, setText] = useState(initial)
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +93,7 @@ function TextStep({ phaseId, initial, onDone }: { phaseId: number; initial: stri
   function submit() {
     setError(null)
     start(async () => {
-      const res = await submitRecitedText(phaseId, text)
+      const res = await action(phaseId, text)
       if (res.error) setError(res.error)
       else onDone()
     })
@@ -85,14 +102,64 @@ function TextStep({ phaseId, initial, onDone }: { phaseId: number; initial: stri
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t('sub.step1Title')}</CardTitle>
+        <CardTitle>{t(titleKey)}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">{t('sub.step1Desc')}</p>
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={9} placeholder={t('sub.step1Ph')} aria-label={t('sub.step1Ph')} />
+        <p className="text-sm text-muted-foreground">{t(descKey)}</p>
+        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={9} placeholder={t(phKey)} aria-label={t(phKey)} />
         {error ? <FormMessage>{error}</FormMessage> : null}
         <Button onClick={submit} disabled={pending || !text.trim()} size="lg" className="w-full">
-          {pending ? t('sub.submitting') : t('sub.next')}
+          {pending ? t('sub.submitting') : t(submitKey)}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+// 单选投票步骤：从老师配置的选项里选一个提交。无对错，纯记票。
+function ChoiceStep({ phaseId, choices, initial, onDone }: { phaseId: number; choices: string[]; initial: string; onDone: () => void }) {
+  const t = useT()
+  const [picked, setPicked] = useState(initial)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, start] = useTransition()
+
+  function submit() {
+    setError(null)
+    start(async () => {
+      const res = await submitChoice(phaseId, picked)
+      if (res.error) setError(res.error)
+      else onDone()
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('sub.choiceTitle')}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">{t('sub.choiceDesc')}</p>
+        <div className="space-y-2">
+          {choices.map((opt, i) => (
+            <label
+              key={i}
+              className={'flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm ' + (picked === opt ? 'border-primary bg-primary/5 font-medium' : 'border-input')}
+            >
+              <input
+                type="radio"
+                name={`choice-${phaseId}`}
+                value={opt}
+                checked={picked === opt}
+                onChange={() => setPicked(opt)}
+                className="h-4 w-4 accent-[hsl(var(--primary))]"
+              />
+              <span className="whitespace-pre-wrap">{opt}</span>
+            </label>
+          ))}
+        </div>
+        {error ? <FormMessage>{error}</FormMessage> : null}
+        <Button onClick={submit} disabled={pending || !picked} size="lg" className="w-full">
+          {pending ? t('sub.submitting') : t('submit')}
         </Button>
       </CardContent>
     </Card>
@@ -112,6 +179,9 @@ export function SubmissionFlow(props: {
   requireVideo: boolean
   requireAudio: boolean
   requireHandwriting: boolean
+  requireChoice: boolean
+  choices: string[]
+  requireFreeText: boolean
   attemptsLeft: number
   windowState: 'open' | 'not-open' | 'closed'
   initialHasText: boolean
@@ -131,11 +201,13 @@ export function SubmissionFlow(props: {
   const steps = useMemo(() => {
     const s: Kind[] = []
     if (props.requireText) s.push('text')
+    if (props.requireChoice) s.push('choice')
+    if (props.requireFreeText) s.push('freetext')
     if (props.requireVideo) s.push('video')
     if (props.requireAudio) s.push('audio')
     if (props.requireHandwriting) s.push('handwriting')
     return s
-  }, [props.requireText, props.requireVideo, props.requireAudio, props.requireHandwriting])
+  }, [props.requireText, props.requireChoice, props.requireFreeText, props.requireVideo, props.requireAudio, props.requireHandwriting])
 
   // Skip the text step when it's already submitted — but clamp so a text-only
   // assignment (steps === ['text']) can't start out of range and render a wrong
@@ -215,7 +287,20 @@ export function SubmissionFlow(props: {
       <Card>
         <CardHeader><CardTitle>{props.title}</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <FormMessage tone="success">{t('sub.bothDone')}</FormMessage>
+          <FormMessage tone="success">
+            {props.sentences.length === 0 && props.requireChoice
+              ? t('sub.pollDone')
+              : props.sentences.length === 0 && props.requireFreeText
+                ? t('sub.reviewPending')
+                : t('sub.bothDone')}
+          </FormMessage>
+          {/* 单选投票 / 自由文本：把学生提交的答案回显出来。 */}
+          {props.sentences.length === 0 && props.initialRecitedText ? (
+            <div className="rounded-xl bg-secondary p-3">
+              <div className="text-xs font-medium text-muted-foreground">{t('sub.yourAnswer')}</div>
+              <p className="mt-1 whitespace-pre-wrap">{props.initialRecitedText}</p>
+            </div>
+          ) : null}
           {props.latestScore != null ? (
             <div className="rounded-xl bg-secondary p-3">
               <span className="text-muted-foreground">{t('sub.score')}: </span>
@@ -300,6 +385,19 @@ export function SubmissionFlow(props: {
         </Card>
       ) : current === 'text' ? (
         <TextStep phaseId={props.phaseId} initial={props.initialRecitedText} onDone={advance} />
+      ) : current === 'choice' ? (
+        <ChoiceStep phaseId={props.phaseId} choices={props.choices} initial={props.initialRecitedText} onDone={advance} />
+      ) : current === 'freetext' ? (
+        <TextStep
+          phaseId={props.phaseId}
+          initial={props.initialRecitedText}
+          onDone={advance}
+          action={submitFreeText}
+          titleKey="sub.freeTextTitle"
+          descKey="sub.freeTextDesc"
+          phKey="sub.freeTextPh"
+          submitKey="submit"
+        />
       ) : current === 'handwriting' ? (
         <PhotoStep phaseId={props.phaseId} onDone={advance} />
       ) : (

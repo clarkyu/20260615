@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { config, validateConfigOnce } from '@/lib/config'
+import { config, validateConfigOnce, APP_VERSION } from '@/lib/config'
 import { getLocale } from '@/lib/i18n-server'
 import { parseTzOffset } from '@/lib/time'
 import * as userRepo from '@/lib/repo/users'
@@ -14,6 +14,7 @@ import { TzOffsetProvider } from '@/components/tz-provider'
 import { AppHeader } from '@/components/app-header'
 import { BottomNav } from '@/components/bottom-nav'
 import { AuroraBg } from '@/components/aurora-bg'
+import { VersionGate } from '@/components/version-gate'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
@@ -61,6 +62,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale === 'zh' ? 'zh-CN' : locale} className={inter.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        {/* 自动更新闸：发现线上已发新版就整页刷新，避免长期挂着的安装版一直跑旧程序。 */}
+        <VersionGate currentVersion={APP_VERSION} />
         {/* Ambient backdrop only on the logged-out / auth surfaces (login, register,
             forgot/reset, join) — exactly the pages an unauthenticated visitor sees. */}
         {!user ? <AuroraBg /> : null}

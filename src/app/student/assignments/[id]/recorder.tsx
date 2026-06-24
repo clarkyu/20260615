@@ -132,11 +132,18 @@ export function Recorder(props: {
     setViolations([])
     timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
     setPhase('recording')
-    // 全屏沉浸（防作弊）后锁定竖屏，杜绝移动端「全屏视频→自动转横屏」。Android 生效；
-    // iOS 不支持 orientation.lock 会被忽略，但竖屏采集本身已避免大多数旋转。
+    // 全屏沉浸（防作弊）后锁定竖屏。关键：Chrome 必须先进全屏才能锁方向，但 VIVO/小米等
+    // 部分安卓浏览器不支持 orientation.lock——此时全屏会被系统自动转成横屏。所以一旦锁不上
+    // （不支持或被拒绝），立即退出全屏、退回正常竖屏页面：宁可不沉浸，也不要横屏。防作弊的
+    // 可见性/失焦监听不依赖全屏，照常生效。
     if (!isAudio) {
+      const orientation = screen.orientation as unknown as { lock?: (o: string) => Promise<unknown> }
+      const bailFullscreen = () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}) }
       void document.documentElement.requestFullscreen?.()
-        .then(() => (screen.orientation as unknown as { lock?: (o: string) => Promise<unknown> }).lock?.('portrait'))
+        .then(() => {
+          if (!orientation.lock) { bailFullscreen(); return }
+          return orientation.lock('portrait').catch(bailFullscreen)
+        })
         .catch(() => {})
     }
   }, [props.mode, isAudio, cleanupStream])

@@ -375,8 +375,10 @@ export function updateMediaMeta(prisma: PrismaClient, id: number, data: { sizeBy
 
 // Idempotent submit: only the call that moves DRAFT→submitted matches, so
 // concurrent/duplicate finishes can't double-grade or reset a finalized row.
-export function flipDraft(prisma: PrismaClient, id: number, status: SubmissionStatus) {
-  return prisma.submission.updateMany({ where: { id, status: 'DRAFT' }, data: { status, needsReview: true } })
+// needsReview defaults true (media/text → AI or teacher looks); a 单选投票 passes
+// false so a no-score poll vote never clogs the teacher's 待批 queue.
+export function flipDraft(prisma: PrismaClient, id: number, status: SubmissionStatus, needsReview = true) {
+  return prisma.submission.updateMany({ where: { id, status: 'DRAFT' }, data: { status, needsReview } })
 }
 
 export function upsertShadowTake(prisma: PrismaClient, submissionId: number, order: number, audioKey: string) {

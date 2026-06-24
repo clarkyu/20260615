@@ -41,6 +41,13 @@ export const config = {
   env: (name: string): string | undefined => env(name),
 }
 
+// Build stamp, baked in at `next build`. Deploy sets NEXT_PUBLIC_APP_VERSION to the
+// git SHA; 'dev' when unset (local). MUST be a STATIC `process.env.NEXT_PUBLIC_*`
+// access so Next inlines the literal into BOTH the client and server bundles — the
+// auto-update gate and /api/version then compare the very same build's value. (The
+// dynamic `env()` helper above is NOT inlined client-side, so it can't be used here.)
+export const APP_VERSION: string = process.env.NEXT_PUBLIC_APP_VERSION || 'dev'
+
 // ── feature-presence flags (do we have what a feature needs?) ─────────────────
 
 export function storageConfigured(): boolean {

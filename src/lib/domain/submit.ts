@@ -11,6 +11,8 @@ export interface Requirements {
   requireVideo: boolean
   requireAudio: boolean
   requireHandwriting: boolean
+  requireChoice: boolean
+  requireFreeText: boolean
 }
 
 export type AttemptResult =
@@ -48,6 +50,8 @@ export async function resolveAttempt(
       requireVideo: phase.requireVideo,
       requireAudio: phase.requireAudio,
       requireHandwriting: phase.requireHandwriting,
+      requireChoice: phase.requireChoice,
+      requireFreeText: phase.requireFreeText,
     },
   }
 }
@@ -60,11 +64,19 @@ interface Parts {
 }
 
 // The first required part the student hasn't provided yet, as an i18n key — or null
-// when the submission is complete.
+// when the submission is complete. 单选投票 / 自由文本 都把答案存在 recitedText 里。
 export function missingRequiredPart(assignment: Requirements, submission: Parts): string | null {
   if (assignment.requireText && !submission.recitedText) return 'err.needRecite'
   if (assignment.requireVideo && !submission.videoKey) return 'err.noVideoYet'
   if (assignment.requireAudio && !submission.audioKey) return 'err.noAudioYet'
   if (assignment.requireHandwriting && !submission.imageKey) return 'err.noImageYet'
+  if (assignment.requireChoice && !submission.recitedText) return 'err.needChoice'
+  if (assignment.requireFreeText && !submission.recitedText) return 'err.needFreeText'
   return null
+}
+
+// A pure 单选投票 环节（只有 requireChoice、没有任何需要评分/复核的部分）。投票没有对错、
+// 无需老师批阅，所以完成时直接定稿、不进待批队列。其余（含自由文本）仍按需复核。
+export function isPollOnly(r: Requirements): boolean {
+  return r.requireChoice && !r.requireFreeText && !r.requireText && !r.requireVideo && !r.requireAudio && !r.requireHandwriting
 }

@@ -32,3 +32,8 @@ jobs:
         run: npm run d1:migrate
       - name: Build & deploy (OpenNext → Workers)
         run: npm run cf:deploy
+        env:
+          # Build stamp baked into the bundle (client + server). The in-app auto-update
+          # gate compares this against /api/version and reloads when a new build is live,
+          # so a long-lived installed PWA picks up new versions without a manual refresh.
+          NEXT_PUBLIC_APP_VERSION: ${{ github.sha }}
