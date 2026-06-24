@@ -10,8 +10,8 @@ import { presignDownload, storageConfigured } from '@/lib/storage'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { BilingualChunkList } from '@/components/bilingual'
-
-const fmt = (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ')
+import { cookies } from 'next/headers'
+import { formatLocalDateTime, parseTzOffset } from '@/lib/time'
 
 type PhasePreview = Prisma.PhaseGetPayload<{
   include: { sentences: { orderBy: { order: 'asc' } }; chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } } }
@@ -21,6 +21,8 @@ type PhasePreview = Prisma.PhaseGetPayload<{
 async function PhaseSection({ phase, single, index }: { phase: PhasePreview; single: boolean; index: number }) {
   const { t } = await getT()
   const now = new Date()
+  // 开放/截止时刻跟随查看者的当地时区（绝不直接显示服务器 UTC）。
+  const tzo = parseTzOffset((await cookies()).get('tzo')?.value)
   const notOpen = phase.openAt ? now < phase.openAt : false
   const closed = phase.dueAt ? now > phase.dueAt : false
   const windowLabel = notOpen ? t('sub.notOpen') : closed ? t('sub.closed') : t('preview.open')
@@ -47,8 +49,8 @@ async function PhaseSection({ phase, single, index }: { phase: PhasePreview; sin
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
         <Badge tone={notOpen || closed ? undefined : 'success'}>{windowLabel}</Badge>
-        {phase.openAt ? <span>{t('preview.opensAt')} {fmt(phase.openAt)}</span> : null}
-        {phase.dueAt ? <span>{t('asg.due')} {fmt(phase.dueAt)}</span> : null}
+        {phase.openAt ? <span>{t('preview.opensAt')} {formatLocalDateTime(phase.openAt.toISOString(), tzo)}</span> : null}
+        {phase.dueAt ? <span>{t('asg.due')} {formatLocalDateTime(phase.dueAt.toISOString(), tzo)}</span> : null}
         <span>{t('asg.fAttempts')}: {phase.maxAttempts}</span>
       </div>
 

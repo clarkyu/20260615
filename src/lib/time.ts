@@ -26,3 +26,13 @@ export function formatLocalDay(iso: string, tzo: number): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
 }
+
+// Like formatLocalDay but includes the wall-clock time: YYYY-MM-DD HH:mm in the timezone
+// given by `tzo`. Deterministic from (iso, tzo). 原则：凡显示「时刻」（含时分）一律走这个，
+// 跟随用户当地时间，绝不直接显示服务器 UTC。
+export function formatLocalDateTime(iso: string, tzo: number): string {
+  const d = new Date(new Date(iso).getTime() - tzo * 60000)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
+}

@@ -296,6 +296,11 @@ model Phase {
   requireAudio Boolean @default(false)
   requireVideo Boolean @default(true)
   requireHandwriting Boolean @default(false)
+  // 单选投票：选项见 choicesJson；纯投票、无正确答案，只统计分布、不判分。
+  requireChoice Boolean @default(false)
+  choicesJson  String?
+  // 自由文本：开放式提交，老师评阅时按自己的标准人工打分（不走背诵 AI 评分）。
+  requireFreeText Boolean @default(false)
   graded       Boolean @default(true)  // false → 仅练习、不计分
   maxAttempts  Int      @default(1)
   // 自由练习（仅当 graded=false 时有意义）：true → 不限提交次数、AI 评完即定稿不进

@@ -132,7 +132,13 @@ export function Recorder(props: {
     setViolations([])
     timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
     setPhase('recording')
-    if (!isAudio) document.documentElement.requestFullscreen?.().catch(() => {})
+    // 全屏沉浸（防作弊）后锁定竖屏，杜绝移动端「全屏视频→自动转横屏」。Android 生效；
+    // iOS 不支持 orientation.lock 会被忽略，但竖屏采集本身已避免大多数旋转。
+    if (!isAudio) {
+      void document.documentElement.requestFullscreen?.()
+        .then(() => (screen.orientation as unknown as { lock?: (o: string) => Promise<unknown> }).lock?.('portrait'))
+        .catch(() => {})
+    }
   }, [props.mode, isAudio, cleanupStream])
 
   useEffect(() => {
@@ -154,7 +160,8 @@ export function Recorder(props: {
       const stream = await navigator.mediaDevices.getUserMedia(
         isAudio
           ? { audio: true }
-          : { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
+          // 竖屏采集（宽<高）：手机录制保持竖向，避免录出横屏视频、也避免全屏时自动转横屏。
+          : { video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 1280 } }, audio: true },
       )
       // The component may have unmounted during the permission await — don't leak
       // the just-granted camera/mic.
