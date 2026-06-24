@@ -3,6 +3,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { AssignmentForm, type AssignmentInitial } from '@/components/assignment-form'
+import { parseChoices } from '@/lib/choices'
 
 export default async function EditAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -42,6 +43,9 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       requireAudio: p.requireAudio,
       requireVideo: p.requireVideo,
       requireHandwriting: p.requireHandwriting,
+      requireChoice: p.requireChoice,
+      choices: parseChoices(p.choicesJson),
+      requireFreeText: p.requireFreeText,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,

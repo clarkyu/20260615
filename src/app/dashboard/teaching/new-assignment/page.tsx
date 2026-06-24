@@ -8,6 +8,7 @@ import * as offeringRepo from '@/lib/repo/offerings'
 import * as templateRepo from '@/lib/repo/templates'
 import * as bankRepo from '@/lib/repo/bank'
 import { parseTemplatePayload } from '@/lib/assignment-template'
+import { parseChoices } from '@/lib/choices'
 import { deleteAssignmentTemplate } from '@/actions/assignments'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -76,6 +77,9 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
           requireAudio: p.requireAudio,
           requireVideo: p.requireVideo,
           requireHandwriting: p.requireHandwriting,
+          requireChoice: p.requireChoice,
+          choices: parseChoices(p.choicesJson),
+          requireFreeText: p.requireFreeText,
           graded: p.graded,
           maxAttempts: p.maxAttempts,
           isFormalTest: p.isFormalTest,

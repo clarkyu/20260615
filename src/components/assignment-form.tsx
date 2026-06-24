@@ -27,6 +27,9 @@ export interface PhaseInitial {
   requireAudio: boolean
   requireVideo: boolean
   requireHandwriting: boolean
+  requireChoice: boolean
+  choices: string[]
+  requireFreeText: boolean
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -77,6 +80,9 @@ interface PhaseState {
   requireAudio: boolean
   requireVideo: boolean
   requireHandwriting: boolean
+  requireChoice: boolean
+  choices: string[]
+  requireFreeText: boolean
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -99,6 +105,9 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     requireAudio: bank && !recite,
     requireVideo: bank ? recite : true,
     requireHandwriting: false,
+    requireChoice: false,
+    choices: [],
+    requireFreeText: false,
     graded: true,
     maxAttempts: 3,
     isFormalTest: false,
@@ -197,6 +206,9 @@ export function AssignmentForm({
       requireAudio: p.requireAudio,
       requireVideo: p.requireVideo,
       requireHandwriting: p.requireHandwriting,
+      requireChoice: p.requireChoice,
+      choicesJson: p.requireChoice ? JSON.stringify(p.choices.map((c) => c.trim()).filter(Boolean)) : null,
+      requireFreeText: p.requireFreeText,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,
@@ -422,6 +434,8 @@ function PhaseCard({
     phase.requireAudio && t('asg.kindAudio'),
     phase.requireText && t('asg.kindText'),
     phase.requireHandwriting && t('asg.kindHandwriting'),
+    phase.requireChoice && t('asg.kindChoice'),
+    phase.requireFreeText && t('asg.kindFreeText'),
   ].filter(Boolean).join(' / ')
   const summary = [phase.title.trim() || phase.category.trim(), kinds].filter(Boolean).join(' · ')
   // Live preview of what the student will hand in (video carries its eyes-closed note).
@@ -430,6 +444,8 @@ function PhaseCard({
     phase.requireAudio && t('asg.kindAudio'),
     phase.requireText && t('asg.kindText'),
     phase.requireHandwriting && t('asg.kindHandwriting'),
+    phase.requireChoice && t('asg.kindChoice'),
+    phase.requireFreeText && t('asg.kindFreeText'),
   ].filter(Boolean)
   return (
     <div className="rounded-xl border border-input p-3">
@@ -516,6 +532,14 @@ function PhaseCard({
             <input type="checkbox" checked={phase.requireHandwriting} onChange={(e) => onPatch({ requireHandwriting: e.target.checked })} className="h-4 w-4 accent-primary" />
             <Camera className="h-4 w-4 text-muted-foreground" />{t('asg.kindHandwriting')}
           </label>
+          <label className="flex items-center gap-2.5">
+            <input type="checkbox" checked={phase.requireChoice} onChange={(e) => onPatch({ requireChoice: e.target.checked, ...(e.target.checked && phase.choices.length < 2 ? { choices: ['', ''] } : {}) })} className="h-4 w-4 accent-primary" />
+            <Check className="h-4 w-4 text-muted-foreground" />{t('asg.kindChoice')}
+          </label>
+          <label className="flex items-center gap-2.5">
+            <input type="checkbox" checked={phase.requireFreeText} onChange={(e) => onPatch({ requireFreeText: e.target.checked })} className="h-4 w-4 accent-primary" />
+            <PenLine className="h-4 w-4 text-muted-foreground" />{t('asg.kindFreeText')}
+          </label>
           {submitParts.length > 0 ? (
             <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">{t('asg.willSubmit')}{submitParts.join(' + ')}</p>
           ) : (
@@ -523,6 +547,27 @@ function PhaseCard({
           )}
         </div>
       </div>
+
+      {/* 单选投票的选项编辑器（老师任意增减；无正确答案，纯投票统计） */}
+      {phase.requireChoice ? (
+        <div className="space-y-2">
+          <Label>{t('asg.choiceOptions')}</Label>
+          <div className="space-y-2 rounded-xl border border-input p-3">
+            {phase.choices.map((opt, oi) => (
+              <div key={oi} className="flex items-center gap-2">
+                <Input value={opt} onChange={(e) => onPatch({ choices: phase.choices.map((c, j) => (j === oi ? e.target.value : c)) })} placeholder={t('asg.choiceOptionPh', { n: oi + 1 })} aria-label={t('asg.choiceOptionPh', { n: oi + 1 })} />
+                <button type="button" onClick={() => onPatch({ choices: phase.choices.filter((_, j) => j !== oi) })} disabled={phase.choices.length <= 2} className="tap shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label={t('asg.removeOption')}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={() => onPatch({ choices: [...phase.choices, ''] })}>
+              <Plus className="h-4 w-4" />{t('asg.addOption')}
+            </Button>
+            <p className="text-xs text-muted-foreground">{t('asg.choiceHint')}</p>
+          </div>
+        </div>
+      ) : null}
 
       {/* Time window + attempts */}
       <div className="grid grid-cols-2 gap-3">
