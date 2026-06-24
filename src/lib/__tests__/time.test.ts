@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localDayWindowUtc, parseTzOffset, formatLocalDay } from '@/lib/time'
+import { localDayWindowUtc, parseTzOffset, formatLocalDay, formatLocalDateTime } from '@/lib/time'
 
 describe('localDayWindowUtc', () => {
   it('UTC+8 (tzo=-480): a UTC instant near local midnight maps to the right local day', () => {
@@ -43,5 +43,19 @@ describe('formatLocalDay', () => {
   })
   it('returns empty string for an unparseable instant', () => {
     expect(formatLocalDay('not-a-date', -480)).toBe('')
+  })
+})
+
+describe('formatLocalDateTime', () => {
+  it('renders the wall-clock date+time in the user timezone (never server UTC)', () => {
+    // UTC+8 (tzo=-480): 10:00Z → 18:00 local, same day.
+    expect(formatLocalDateTime('2026-06-19T10:00:00Z', -480)).toBe('2026-06-19 18:00')
+    // crosses local midnight: 16:30Z → 00:30 local next day.
+    expect(formatLocalDateTime('2026-06-19T16:30:00Z', -480)).toBe('2026-06-20 00:30')
+    // tzo=0 is the plain UTC wall-clock.
+    expect(formatLocalDateTime('2026-06-19T10:00:00Z', 0)).toBe('2026-06-19 10:00')
+  })
+  it('returns empty string for an unparseable instant', () => {
+    expect(formatLocalDateTime('not-a-date', -480)).toBe('')
   })
 })
