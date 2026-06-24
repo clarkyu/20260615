@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX } from 'lucide-react'
+import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3 } from 'lucide-react'
 import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride } from '@/actions/grading'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -35,6 +35,7 @@ interface Row {
 }
 interface ModelOpt { id: string; label: string }
 interface Preset { id: string; label: string; perceptionModel: string; judgeModel: string }
+interface PollResult { phaseLabel?: string; total: number; options: { label: string; count: number }[] }
 
 const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
@@ -46,6 +47,7 @@ export function GradingClient(props: {
   studentCount: number
   classes: { id: number; name: string }[]
   rows: Row[]
+  pollResults: PollResult[]
   notSubmitted: { name: string; studentNo: string }[]
   presets: Preset[]
   perceptionModels: ModelOpt[]
@@ -225,6 +227,38 @@ export function GradingClient(props: {
           </CardContent>
         </Card>
       ) : null}
+
+      {props.pollResults.map((poll, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              {t('grade.pollResults')}{poll.phaseLabel ? ` · ${poll.phaseLabel}` : ''}
+            </CardTitle>
+            <CardDescription>{t('grade.pollTotal', { n: poll.total })}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {poll.options.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('grade.pollNoOptions')}</p>
+            ) : (
+              poll.options.map((o, j) => {
+                const pct = poll.total > 0 ? Math.round((o.count / poll.total) * 100) : 0
+                return (
+                  <div key={j} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{o.label}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{o.count} · {pct}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </CardContent>
+        </Card>
+      ))}
 
       {props.notSubmitted.length > 0 ? (
         <Card className="border-[hsl(var(--warning))]/30 bg-warning/5">

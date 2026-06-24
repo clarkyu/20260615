@@ -7,6 +7,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
+import { parseChoices } from '@/lib/choices'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 import { GradingClient } from './grading-client'
@@ -48,7 +49,11 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
     if (!latestByStudentPhase.has(key)) latestByStudentPhase.set(key, s)
   }
 
+  // 单选投票环节按「票数分布」整体呈现（见下方 pollResults），不逐个学生进评分列表。
+  const pollPhaseIds = new Set(assignment.phases.filter((p) => p.requireChoice).map((p) => p.id))
+
   const rows = [...latestByStudentPhase.values()]
+    .filter((s) => !pollPhaseIds.has(s.phaseId ?? -1))
     .map((s) => ({
       id: s.id,
       studentName: s.student.name ?? '',
@@ -68,6 +73,22 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       violations: countViolations(s.violations),
     }))
     .sort((a, b) => a.studentNo.localeCompare(b.studentNo) || a.phaseOrder - b.phaseOrder)
+
+  // 单选投票的票数分布：每个投票环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
+  const pollSubs = [...latestByStudentPhase.values()].filter((s) => s.status !== 'DRAFT')
+  const pollResults = assignment.phases
+    .filter((p) => p.requireChoice)
+    .map((p) => {
+      const subs = pollSubs.filter((s) => s.phaseId === p.id)
+      return {
+        phaseLabel: multiPhase ? (p.title?.trim() || t('phase.nth', { n: p.order })) : undefined,
+        total: subs.length,
+        options: parseChoices(p.choicesJson).map((label) => ({
+          label,
+          count: subs.filter((s) => (s.recitedText ?? '') === label).length,
+        })),
+      }
+    })
 
   // Who hasn't handed anything in yet: the class roster minus everyone with a
   // non-DRAFT submission (any phase). Lets the teacher chase up missing students —
@@ -99,6 +120,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
         studentCount={new Set([...latestByStudentPhase.values()].map((s) => s.studentId)).size}
         classes={[{ id: assignment.offering.class.id, name: assignment.offering.class.name }]}
         rows={rows}
+        pollResults={pollResults}
         notSubmitted={notSubmitted}
         presets={PRESETS}
         perceptionModels={modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))}

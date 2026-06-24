@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { parseChoices } from '@/lib/choices'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
 import { ShadowSubmit } from './shadow-submit'
@@ -107,6 +108,9 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       requireVideo={phase.requireVideo}
       requireAudio={phase.requireAudio}
       requireHandwriting={phase.requireHandwriting}
+      requireChoice={phase.requireChoice}
+      choices={parseChoices(phase.choicesJson)}
+      requireFreeText={phase.requireFreeText}
       attemptsLeft={attemptsLeft}
       windowState={windowState}
       initialHasText={Boolean(latest?.recitedText)}
