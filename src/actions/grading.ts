@@ -71,6 +71,20 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   return { success: true }
 }
 
+// 保存某环节的批阅配置（评分标准 + 感知/评分模型）。空串=清空，回退到作业/平台默认。
+export async function savePhaseGradingConfig(assignmentId: number, phaseId: number, rubric: string, perceptionModel: string, judgeModel: string): Promise<ActionState> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(phaseId)) return { error: t('err.assignNotFound') }
+  const res = await assignmentRepo.updatePhaseGradingConfig(prisma, phaseId, user.schoolId, user.userId, user.role, {
+    rubric: (rubric ?? '').trim().slice(0, 2000) || null,
+    defaultPerceptionModel: (perceptionModel ?? '').trim().slice(0, 100) || null,
+    defaultJudgeModel: (judgeModel ?? '').trim().slice(0, 100) || null,
+  })
+  if (res.count === 0) return { error: t('err.subNoAccess') }
+  if (Number.isInteger(assignmentId)) revalidatePath(`/dashboard/assignments/${assignmentId}`)
+  return { success: true }
+}
+
 // Presigned playback URL (video or audio) so the teacher can review before grading.
 export async function getSubmissionMediaUrl(submissionId: number, kind: 'video' | 'audio' | 'image' = 'video'): Promise<{ url?: string; error?: string }> {
   const { user, prisma, t } = await staffContext()
