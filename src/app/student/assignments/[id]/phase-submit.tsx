@@ -121,6 +121,10 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       latestFeedback={latest?.feedback ?? null}
       latestPerSentence={graded.perSentence}
       latestTranscript={graded.transcript}
+      submissionId={latest?.id ?? null}
+      hasVideo={Boolean(latest?.videoKey)}
+      hasAudio={Boolean(latest?.audioKey)}
+      hasImage={Boolean(latest?.imageKey)}
       nextHref={nextHref}
       nextLabel={nextLabel}
       isFormalTest={phase.isFormalTest}

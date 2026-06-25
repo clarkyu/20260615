@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, ListChecks, MessageSquare } from 'lucide-react'
-import { submitRecitedText, submitChoice, submitFreeText, finishSubmission } from '@/actions/submissions'
+import { submitRecitedText, submitChoice, submitFreeText, finishSubmission, getOwnSubmissionMediaUrl } from '@/actions/submissions'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -166,6 +166,40 @@ function ChoiceStep({ phaseId, choices, initial, onDone }: { phaseId: number; ch
   )
 }
 
+// 学生回看自己提交的音/视频/手写图：点按钮拉取临时链接，就地内联播放/查看。
+function MySubmissionMedia({ submissionId, hasVideo, hasAudio, hasImage }: { submissionId: number; hasVideo: boolean; hasAudio: boolean; hasImage: boolean }) {
+  const t = useT()
+  const [media, setMedia] = useState<{ kind: 'video' | 'audio' | 'image'; url: string } | null>(null)
+  const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!hasVideo && !hasAudio && !hasImage) return null
+
+  async function open(kind: 'video' | 'audio' | 'image') {
+    setError(null)
+    setLoading(kind)
+    const res = await getOwnSubmissionMediaUrl(submissionId, kind)
+    setLoading(null)
+    if (res.error) setError(res.error)
+    else if (res.url) setMedia({ kind, url: res.url })
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl bg-secondary p-3">
+      <div className="text-xs font-medium text-muted-foreground">{t('sub.mySubmission')}</div>
+      <div className="flex flex-wrap gap-2">
+        {hasVideo ? <Button size="sm" variant="outline" disabled={loading === 'video'} onClick={() => open('video')}><Video className="h-4 w-4" />{t('sub.viewVideo')}</Button> : null}
+        {hasAudio ? <Button size="sm" variant="outline" disabled={loading === 'audio'} onClick={() => open('audio')}><Mic className="h-4 w-4" />{t('sub.viewAudio')}</Button> : null}
+        {hasImage ? <Button size="sm" variant="outline" disabled={loading === 'image'} onClick={() => open('image')}><Camera className="h-4 w-4" />{t('sub.viewImage')}</Button> : null}
+      </div>
+      {error ? <FormMessage>{error}</FormMessage> : null}
+      {media?.kind === 'video' ? <video src={media.url} controls playsInline className="w-full rounded-xl bg-black" /> : null}
+      {media?.kind === 'audio' ? <audio src={media.url} controls className="w-full" /> : null}
+      {media?.kind === 'image' ? <img src={media.url} alt={t('sub.mySubmission')} className="w-full rounded-xl" /> : null}
+    </div>
+  )
+}
+
 export function SubmissionFlow(props: {
   phaseId: number
   title: string
@@ -192,6 +226,10 @@ export function SubmissionFlow(props: {
   latestFeedback: string | null
   latestPerSentence: { order: number; accuracy: number; completeness: number; spokenText?: string }[]
   latestTranscript?: string
+  submissionId?: number | null
+  hasVideo?: boolean
+  hasAudio?: boolean
+  hasImage?: boolean
   nextHref?: string | null
   nextLabel?: string | null
   isFormalTest?: boolean
@@ -323,6 +361,9 @@ export function SubmissionFlow(props: {
               <span className="text-lg font-bold">{props.latestScore}</span>
               {props.latestFeedback ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{props.latestFeedback}</p> : null}
             </div>
+          ) : null}
+          {props.submissionId ? (
+            <MySubmissionMedia submissionId={props.submissionId} hasVideo={!!props.hasVideo} hasAudio={!!props.hasAudio} hasImage={!!props.hasImage} />
           ) : null}
           {hasPerSentence ? (
             <div className="space-y-1.5">
