@@ -117,6 +117,20 @@ export async function getShadowVideoUrl(phaseId: number): Promise<{ url?: string
   }
 }
 
+// 学生回看自己提交的音/视频/手写图：presign 下载链接，只认自己的提交（findOwn 按 studentId 限定）。
+export async function getOwnSubmissionMediaUrl(submissionId: number, kind: MediaKind): Promise<{ url?: string; error?: string }> {
+  const { user, prisma, t } = await studentContext()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
+  const submission = await submissionRepo.findOwn(prisma, submissionId, user.userId)
+  const key = kind === 'audio' ? submission?.audioKey : kind === 'image' ? submission?.imageKey : submission?.videoKey
+  if (!key) return { error: t('err.noVideo') }
+  try {
+    return { url: await presignDownload(key) }
+  } catch {
+    return { error: t('err.videoUrlFail') }
+  }
+}
+
 // Per-sentence shadowing: presigned URL for one sentence's take; records it on the
 // (draft) submission so progress survives a reload.
 export async function getShadowTakeUploadUrl(phaseId: number, order: number, contentType: string, ext: string) {
