@@ -15,6 +15,7 @@ export interface FocusRow {
   id: number
   studentName: string
   studentNo: string
+  phaseId: number
   status: string
   aiScore: number | null
   finalScore: number | null
@@ -33,18 +34,15 @@ export function GradeFocus({
   index,
   setIndex,
   onClose,
-  perceptionModel,
-  judgeModel,
-  rubric,
+  cfgFor,
   onChanged,
 }: {
   rows: FocusRow[]
   index: number
   setIndex: (i: number) => void
   onClose: () => void
-  perceptionModel: string
-  judgeModel: string
-  rubric: string
+  // 按聚焦中那一份提交所属环节，取该环节的批阅配置（评分标准 + 模型）。
+  cfgFor: (phaseId: number) => { perceptionModel: string; judgeModel: string; rubric: string }
   onChanged: () => void
 }) {
   const t = useT()
@@ -102,11 +100,12 @@ export function GradeFocus({
 
   async function runAi() {
     setBusy(true); setError(null)
+    const cfg = cfgFor(cur.phaseId)
     const fd = new FormData()
     fd.set('submissionId', String(cur.id))
-    fd.set('perceptionModel', perceptionModel)
-    fd.set('judgeModel', judgeModel)
-    fd.set('rubric', rubric)
+    fd.set('perceptionModel', cfg.perceptionModel)
+    fd.set('judgeModel', cfg.judgeModel)
+    fd.set('rubric', cfg.rubric)
     const res = await runGrading(null, fd)
     setBusy(false)
     if (res.error) setError(res.error)

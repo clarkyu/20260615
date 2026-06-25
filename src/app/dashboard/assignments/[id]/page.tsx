@@ -5,7 +5,7 @@ import { ChevronLeft, Eye } from 'lucide-react'
 import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
-import { PRESETS, modelsForCapability } from '@/lib/ai/registry'
+import { modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
 import { parseChoices } from '@/lib/choices'
 import * as assignmentRepo from '@/lib/repo/assignments'
@@ -59,6 +59,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       studentName: s.student.name ?? '',
       studentNo: s.student.studentNo ?? '',
       className: assignment.offering.class.name,
+      phaseId: s.phaseId ?? 0,
       phaseOrder: s.phase?.order ?? 0,
       phaseLabel: multiPhase ? (s.phase?.title?.trim() || t('phase.nth', { n: s.phase?.order ?? 0 })) : undefined,
       status: s.status,
@@ -69,10 +70,24 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       hasVideo: Boolean(s.videoKey),
       hasAudio: Boolean(s.audioKey),
       hasImage: Boolean(s.imageKey),
+      durationSec: s.durationSec ?? 0,
       recitedText: s.recitedText ?? '',
       violations: countViolations(s.violations),
     }))
     .sort((a, b) => a.studentNo.localeCompare(b.studentNo) || a.phaseOrder - b.phaseOrder)
+
+  // 可 AI 评阅的环节（要有音/视频；纯投票/自由文本/手写不走 AI）+ 各自已保存的批阅配置，
+  // 供老师「按环节」配置评分标准/模型并预估用量。
+  const phases = assignment.phases
+    .filter((p) => !pollPhaseIds.has(p.id) && (p.requireVideo || p.requireAudio))
+    .map((p) => ({
+      id: p.id,
+      label: p.title?.trim() || t('phase.nth', { n: p.order }),
+      rubric: p.rubric ?? '',
+      perceptionModel: p.defaultPerceptionModel ?? '',
+      judgeModel: p.defaultJudgeModel ?? '',
+      sentenceCount: p._count.sentences,
+    }))
 
   // 单选环节的票数分布：每个环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
   // 设了 correctChoice 的当作单选题：标出正确项并算正确率。
@@ -126,8 +141,8 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
         classes={[{ id: assignment.offering.class.id, name: assignment.offering.class.name }]}
         rows={rows}
         pollResults={pollResults}
+        phases={phases}
         notSubmitted={notSubmitted}
-        presets={PRESETS}
         perceptionModels={modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))}
         judgeModels={modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))}
         defaultRubric={assignment.rubric ?? ''}
