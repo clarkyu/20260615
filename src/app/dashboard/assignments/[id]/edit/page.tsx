@@ -45,6 +45,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       requireHandwriting: p.requireHandwriting,
       requireChoice: p.requireChoice,
       choices: parseChoices(p.choicesJson),
+      correctIndex: p.correctChoice ? parseChoices(p.choicesJson).indexOf(p.correctChoice) : -1,
       requireFreeText: p.requireFreeText,
       graded: p.graded,
       maxAttempts: p.maxAttempts,

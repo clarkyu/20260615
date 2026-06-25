@@ -181,6 +181,7 @@ export function SubmissionFlow(props: {
   requireHandwriting: boolean
   requireChoice: boolean
   choices: string[]
+  correctChoice?: string | null
   requireFreeText: boolean
   attemptsLeft: number
   windowState: 'open' | 'not-open' | 'closed'
@@ -278,6 +279,9 @@ export function SubmissionFlow(props: {
   if (completed && !redo) {
     const byOrder = new Map(props.latestPerSentence.map((p) => [p.order, p]))
     const hasPerSentence = props.latestPerSentence.length > 0 && props.sentences.length > 0
+    // 单选题（设了正确答案）：判断对错，便于回显对/错与揭晓答案。
+    const choiceGraded = props.requireChoice && !!props.correctChoice && !!props.initialRecitedText
+    const choiceRight = choiceGraded && props.initialRecitedText.trim() === (props.correctChoice as string).trim()
     // The lines the AI marked weak — so the student can drill just those (零压力练习).
     const weakSentences = props.sentences.filter((s) => {
       const p = byOrder.get(s.order)
@@ -299,6 +303,18 @@ export function SubmissionFlow(props: {
             <div className="rounded-xl bg-secondary p-3">
               <div className="text-xs font-medium text-muted-foreground">{t('sub.yourAnswer')}</div>
               <p className="mt-1 whitespace-pre-wrap">{props.initialRecitedText}</p>
+            </div>
+          ) : null}
+          {/* 单选题：显示对/错；答错且非正式测试时揭晓正确答案。 */}
+          {choiceGraded ? (
+            <div className={'rounded-xl p-3 ' + (choiceRight ? 'bg-success/10' : 'bg-destructive/10')}>
+              <p className={'flex items-center gap-1.5 font-medium ' + (choiceRight ? 'text-success' : 'text-destructive')}>
+                {choiceRight ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                {choiceRight ? t('sub.correct') : t('sub.wrong')}
+              </p>
+              {!choiceRight && !props.isFormalTest ? (
+                <p className="mt-1 text-xs text-muted-foreground">{t('sub.correctAnswer')}{props.correctChoice}</p>
+              ) : null}
             </div>
           ) : null}
           {props.latestScore != null ? (

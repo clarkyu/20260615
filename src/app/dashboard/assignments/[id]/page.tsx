@@ -74,18 +74,23 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
     }))
     .sort((a, b) => a.studentNo.localeCompare(b.studentNo) || a.phaseOrder - b.phaseOrder)
 
-  // 单选投票的票数分布：每个投票环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
+  // 单选环节的票数分布：每个环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
+  // 设了 correctChoice 的当作单选题：标出正确项并算正确率。
   const pollSubs = [...latestByStudentPhase.values()].filter((s) => s.status !== 'DRAFT')
   const pollResults = assignment.phases
     .filter((p) => p.requireChoice)
     .map((p) => {
       const subs = pollSubs.filter((s) => s.phaseId === p.id)
+      const correct = p.correctChoice?.trim() || null
       return {
         phaseLabel: multiPhase ? (p.title?.trim() || t('phase.nth', { n: p.order })) : undefined,
         total: subs.length,
+        correctChoice: correct,
+        correctCount: correct ? subs.filter((s) => (s.recitedText ?? '').trim() === correct).length : null,
         options: parseChoices(p.choicesJson).map((label) => ({
           label,
           count: subs.filter((s) => (s.recitedText ?? '') === label).length,
+          correct: correct != null && label.trim() === correct,
         })),
       }
     })

@@ -37,7 +37,7 @@ vi.mock('next/navigation', () => ({
 
 import type { PrismaClient } from '@prisma/client'
 import { login } from '@/actions/auth'
-import { finishSubmission } from '@/actions/submissions'
+import { finishSubmission, submitChoice } from '@/actions/submissions'
 import { batchOverride } from '@/actions/grading'
 import { getCurrentUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
@@ -104,6 +104,39 @@ describe('server actions E2E (real iron-session + real SQL)', () => {
 
     expect((await db.prisma.submission.findUnique({ where: { id: draft.id } }))?.status).toBe('UPLOADED')
     expect(await db.prisma.gradingJob.count({ where: { submissionId: draft.id, status: 'PENDING' } })).toBe(1)
+  })
+
+  it('graded single-choice auto-scores on submit: correct→100, wrong→0, both GRADED & no review', async () => {
+    const d = await seed(db.prisma)
+    const quiz = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, choicesJson: JSON.stringify(['A', 'B', 'C']), correctChoice: 'B', graded: true, maxAttempts: 5 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+
+    expect(await submitChoice(quiz.id, 'B')).toEqual({ success: true })
+    expect(await finishSubmission(quiz.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: quiz.id, attempt: 1 } })).toMatchObject({ status: 'GRADED', finalScore: 100, needsReview: false })
+
+    expect(await submitChoice(quiz.id, 'A')).toEqual({ success: true })
+    expect(await finishSubmission(quiz.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: quiz.id, attempt: 2 } })).toMatchObject({ status: 'GRADED', finalScore: 0, needsReview: false })
+  })
+
+  it('single-choice poll (no correct answer) records the vote without scoring or review', async () => {
+    const d = await seed(db.prisma)
+    const poll = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, choicesJson: JSON.stringify(['猫', '狗']), graded: false, maxAttempts: 1 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+
+    expect(await submitChoice(poll.id, '狗')).toEqual({ success: true })
+    expect(await finishSubmission(poll.id)).toEqual({ success: true })
+    const sub = await db.prisma.submission.findFirst({ where: { phaseId: poll.id, attempt: 1 } })
+    expect(sub).toMatchObject({ status: 'UPLOADED', needsReview: false, recitedText: '狗' })
+    expect(sub?.finalScore).toBeNull()
+  })
+
+  it('rejects a single-choice vote that is not one of the configured options', async () => {
+    const d = await seed(db.prisma)
+    const poll = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, choicesJson: JSON.stringify(['A', 'B']), graded: false, maxAttempts: 1 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+    expect(await submitChoice(poll.id, 'Z')).toHaveProperty('error')
   })
 
   it('teacher batch-overrides their own submission through the action', async () => {

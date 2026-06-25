@@ -16,6 +16,7 @@ export const templatePhaseSchema = z.object({
   requireHandwriting: z.boolean().default(false),
   requireChoice: z.boolean().default(false),
   choicesJson: z.string().nullable().default(null),
+  correctChoice: z.string().nullable().default(null),
   requireFreeText: z.boolean().default(false),
   graded: z.boolean().default(true),
   maxAttempts: z.coerce.number().int().min(1).max(99).default(1),

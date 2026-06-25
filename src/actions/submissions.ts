@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { logError } from '@/lib/log'
 import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
-import { hasAntiCheatViolation } from '@/lib/domain/grading'
+import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
 import { resolveAttempt, missingRequiredPart, isPollOnly } from '@/lib/domain/submit'
 import { parseChoices } from '@/lib/choices'
@@ -69,10 +69,23 @@ export async function finishSubmission(phaseId: number) {
   const missing = missingRequiredPart(resolved.requirements, submission)
   if (missing) return { error: t(missing) }
 
-  // 纯单选投票：无对错、无需复核，定稿即结束，不进老师待批队列。
-  const needsReview = !isPollOnly(resolved.requirements)
+  // 纯单选环节：无对错的投票 / 有正确答案的单选题。都不走 AI、不进老师待批队列。
+  if (isPollOnly(resolved.requirements)) {
+    const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
+    if (phase?.correctChoice) {
+      // 单选题：客观判分——选对=满分、选错=0，提交即定稿。
+      const correct = (submission.recitedText ?? '').trim() === phase.correctChoice.trim()
+      await submissionRepo.flipDraftGraded(prisma, submission.id, correct ? DEFAULT_MAX_SCORE : 0)
+    } else {
+      // 纯投票：记票即结束，无需复核。
+      await submissionRepo.flipDraft(prisma, submission.id, 'UPLOADED', false)
+    }
+    revalidatePath('/student')
+    return { success: true }
+  }
+
   const status = hasAntiCheatViolation(submission.violations) ? 'FLAGGED' : 'UPLOADED'
-  const flipped = await submissionRepo.flipDraft(prisma, submission.id, status, needsReview)
+  const flipped = await submissionRepo.flipDraft(prisma, submission.id, status, true)
   if (flipped.count === 0) {
     revalidatePath('/student')
     return { success: true }
