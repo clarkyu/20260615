@@ -210,11 +210,13 @@ export async function autoGradeById(prisma: PrismaClient, submissionId: number):
   if (submission.status === 'GRADED') return null
   if (!submission.videoKey && !submission.audioKey) return null
   if ((submission.phase ?? submission.assignment).sentences.length === 0) return null
-  // Model resolution: assignment-pinned → the teacher's own default → platform default.
+  // Model/rubric resolution: the PHASE's own config wins (按环节批阅配置), then the
+  // assignment-level pin, then the teacher's own default, then the platform default.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
+  const phase = submission.phase
   return autoGradeSubmission(prisma, submission, {
-    perceptionModel: submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
-    judgeModel: submission.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
-    rubric: submission.assignment.rubric || DEFAULT_RUBRIC,
+    perceptionModel: phase?.defaultPerceptionModel || submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
+    judgeModel: phase?.defaultJudgeModel || submission.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
+    rubric: phase?.rubric || submission.assignment.rubric || DEFAULT_RUBRIC,
   })
 }

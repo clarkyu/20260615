@@ -92,7 +92,7 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
     include: {
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
-      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireChoice: true, choicesJson: true, correctChoice: true, requireFreeText: true } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireVideo: true, requireAudio: true, requireChoice: true, choicesJson: true, correctChoice: true, requireFreeText: true, rubric: true, defaultPerceptionModel: true, defaultJudgeModel: true, _count: { select: { sentences: true } } } },
       submissions: {
         include: { student: { select: { name: true, studentNo: true } }, phase: { select: { order: true, title: true } } },
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
@@ -202,6 +202,22 @@ export async function updateWithPhases(prisma: PrismaClient, id: number, meta: A
 }
 
 // The edit screen: assignment + its ordered phases, each with sentences + chunk-set name.
+// Persist a phase's 批阅配置（评分标准 + 感知/评分模型）. Scoped to the staff member's
+// own offerings via assignment.offering — a TEACHER can only touch their own phases.
+export function updatePhaseGradingConfig(
+  prisma: PrismaClient,
+  phaseId: number,
+  schoolId: number | null | undefined,
+  userId: number,
+  role: Role,
+  data: { rubric: string | null; defaultPerceptionModel: string | null; defaultJudgeModel: string | null },
+) {
+  return prisma.phase.updateMany({
+    where: { id: phaseId, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
+    data,
+  })
+}
+
 export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findFirst({
     where: { id, offering: offeringScopeFor(schoolId, userId, role) },

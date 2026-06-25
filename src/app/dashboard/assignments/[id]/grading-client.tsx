@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig } from '@/actions/grading'
+import { estimateGrading, formatTokens } from '@/lib/ai/cost'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ interface Row {
   studentName: string
   studentNo: string
   className: string
+  phaseId: number
   phaseOrder?: number
   phaseLabel?: string
   status: string
@@ -30,11 +32,13 @@ interface Row {
   hasVideo: boolean
   hasAudio: boolean
   hasImage: boolean
+  durationSec: number
   recitedText: string
   violations: number
 }
 interface ModelOpt { id: string; label: string }
-interface Preset { id: string; label: string; perceptionModel: string; judgeModel: string }
+// 一个可 AI 评阅的环节 + 它当前保存的批阅配置（评分标准 + 感知/评分模型）。
+interface PhaseCfg { id: number; label: string; rubric: string; perceptionModel: string; judgeModel: string; sentenceCount: number }
 interface PollResult { phaseLabel?: string; total: number; correctChoice: string | null; correctCount: number | null; options: { label: string; count: number; correct: boolean }[] }
 
 const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
@@ -48,8 +52,8 @@ export function GradingClient(props: {
   classes: { id: number; name: string }[]
   rows: Row[]
   pollResults: PollResult[]
+  phases: PhaseCfg[]
   notSubmitted: { name: string; studentNo: string }[]
-  presets: Preset[]
   perceptionModels: ModelOpt[]
   judgeModels: ModelOpt[]
   defaultRubric: string
@@ -60,14 +64,25 @@ export function GradingClient(props: {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [presetId, setPresetId] = useState(props.presets[0]?.id ?? '')
-  const [advanced, setAdvanced] = useState(false)
-  const preset = props.presets.find((p) => p.id === presetId)
-  const [perceptionModel, setPerceptionModel] = useState(preset?.perceptionModel ?? props.perceptionModels[0]?.id ?? '')
-  const [judgeModel, setJudgeModel] = useState(preset?.judgeModel ?? props.judgeModels[0]?.id ?? '')
-  const [rubric, setRubric] = useState(props.defaultRubric)
+  const defaultPerception = props.perceptionModels[0]?.id ?? ''
+  const defaultJudge = props.judgeModels[0]?.id ?? ''
+  // 每环节一套批阅配置（评分标准 + 感知/评分模型）。初值取该环节已保存的，空则回退到
+  // 默认模型 / 默认评分标准。逐条评阅、本环节全部评阅、聚焦评阅都按各自环节的这套配置走。
+  const seedCfg = (p: PhaseCfg) => ({
+    rubric: p.rubric || props.defaultRubric,
+    perceptionModel: p.perceptionModel || defaultPerception,
+    judgeModel: p.judgeModel || defaultJudge,
+  })
+  const [cfgByPhase, setCfgByPhase] = useState<Record<number, { rubric: string; perceptionModel: string; judgeModel: string }>>(
+    () => Object.fromEntries(props.phases.map((p) => [p.id, seedCfg(p)])),
+  )
+  const cfgFor = (phaseId: number) => cfgByPhase[phaseId] ?? { rubric: props.defaultRubric, perceptionModel: defaultPerception, judgeModel: defaultJudge }
+  const patchCfg = (phaseId: number, patch: Partial<{ rubric: string; perceptionModel: string; judgeModel: string }>) =>
+    setCfgByPhase((prev) => ({ ...prev, [phaseId]: { ...cfgFor(phaseId), ...patch } }))
+
   const [editing, setEditing] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [phaseFilter, setPhaseFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [reviewOnly, setReviewOnly] = useState(false)
   const [focusIdx, setFocusIdx] = useState<number | null>(null)
@@ -86,22 +101,26 @@ export function GradingClient(props: {
   const aiAcceptable = useMemo(() => reviewQueue.filter((r) => r.aiScore != null).length, [reviewQueue])
   const doneCount = submitted.length - reviewQueue.length
 
-  const effPerception = advanced ? perceptionModel : preset?.perceptionModel ?? perceptionModel
-  const effJudge = advanced ? judgeModel : preset?.judgeModel ?? judgeModel
-  const pendingCount = useMemo(
-    () => props.rows.filter((r) => r.status === 'UPLOADED' || r.status === 'FLAGGED').length,
-    [props.rows],
-  )
+  // The AI-gradable queue for a phase = its UPLOADED/FLAGGED rows (matches what
+  // "本环节全部 AI 评阅" runs and what the token/费用 estimate is computed over).
+  const pendingForPhase = (phaseId: number) => props.rows.filter((r) => r.phaseId === phaseId && (r.status === 'UPLOADED' || r.status === 'FLAGGED'))
   const statuses = useMemo(() => [...new Set(props.rows.map((r) => r.status))], [props.rows])
+  // 列表的「按环节」筛选覆盖所有有提交的环节（含自由文本/手写，不止能 AI 评阅的）。
+  const phaseOptions = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const r of props.rows) if (r.phaseId && !m.has(r.phaseId)) m.set(r.phaseId, r.phaseLabel ?? '')
+    return [...m.entries()].map(([id, label]) => ({ id, label }))
+  }, [props.rows])
   const visibleRows = useMemo(() => {
     const needle = search.trim().toLowerCase()
     return props.rows.filter(
       (r) =>
         (!reviewOnly || (r.needsReview && r.status !== 'DRAFT')) &&
         (!statusFilter || r.status === statusFilter) &&
+        (!phaseFilter || r.phaseId === Number(phaseFilter)) &&
         (!needle || r.studentName.toLowerCase().includes(needle) || r.studentNo.toLowerCase().includes(needle)),
     )
-  }, [props.rows, statusFilter, search, reviewOnly])
+  }, [props.rows, statusFilter, phaseFilter, search, reviewOnly])
 
   const toggleSel = (id: number) => setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id))
@@ -147,17 +166,51 @@ export function GradingClient(props: {
     })
   }
 
-  function grade(submissionId: number) {
+  // Grade one submission with ITS phase's saved config (the per-row 「AI 评阅」 button).
+  function grade(submissionId: number, phaseId: number) {
+    const cfg = cfgFor(phaseId)
     setError(null)
     setBusyId(submissionId)
     startTransition(async () => {
       const fd = new FormData()
       fd.set('submissionId', String(submissionId))
-      fd.set('perceptionModel', effPerception)
-      fd.set('judgeModel', effJudge)
-      fd.set('rubric', rubric)
+      fd.set('perceptionModel', cfg.perceptionModel)
+      fd.set('judgeModel', cfg.judgeModel)
+      fd.set('rubric', cfg.rubric)
       const res = await runGrading(null, fd)
       setBusyId(null)
+      if (res.error) setError(res.error)
+      else router.refresh()
+    })
+  }
+
+  // 本环节全部 AI 评阅：对该环节所有待评且有视频的逐个跑（手动重评只支持视频；音频靠提交
+  // 时的自动评阅）。按本环节配置。
+  function gradePhase(phaseId: number) {
+    const cfg = cfgFor(phaseId)
+    const ids = pendingForPhase(phaseId).filter((r) => r.hasVideo).map((r) => r.id)
+    if (ids.length === 0) return
+    setError(null)
+    startTransition(async () => {
+      for (const id of ids) {
+        const fd = new FormData()
+        fd.set('submissionId', String(id))
+        fd.set('perceptionModel', cfg.perceptionModel)
+        fd.set('judgeModel', cfg.judgeModel)
+        fd.set('rubric', cfg.rubric)
+        const res = await runGrading(null, fd)
+        if (res.error) { setError(res.error); break }
+      }
+      router.refresh()
+    })
+  }
+
+  // 保存本环节批阅配置到该环节（之后自动评阅 / 重评都按此执行）。
+  function savePhaseCfg(phaseId: number) {
+    const cfg = cfgFor(phaseId)
+    setError(null)
+    startTransition(async () => {
+      const res = await savePhaseGradingConfig(props.assignmentId, phaseId, cfg.rubric, cfg.perceptionModel, cfg.judgeModel)
       if (res.error) setError(res.error)
       else router.refresh()
     })
@@ -292,53 +345,73 @@ export function GradingClient(props: {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t('grade.settings')}</CardTitle>
-          <CardDescription>{t('grade.settingsDesc')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!advanced ? (
-            <div className="space-y-1.5">
-              <Label>{t('grade.preset')}</Label>
-              <select value={presetId} onChange={(e) => setPresetId(e.target.value)} className={SELECT} aria-label={t('grade.preset')}>
-                {props.presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>{t('grade.perceptionModel')}</Label>
-                <select value={perceptionModel} onChange={(e) => setPerceptionModel(e.target.value)} className={SELECT} aria-label={t('grade.perceptionModel')}>
-                  {props.perceptionModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t('grade.judgeModel')}</Label>
-                <select value={judgeModel} onChange={(e) => setJudgeModel(e.target.value)} className={SELECT} aria-label={t('grade.judgeModel')}>
-                  {props.judgeModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </div>
-            </div>
-          )}
-          <label className="flex items-center gap-2.5 text-sm">
-            <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} className="h-4 w-4 accent-[hsl(var(--primary))]" />
-            {t('grade.advanced')}
-          </label>
-          {advanced ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="rubric">{t('grade.rubric')}</Label>
-              <Textarea id="rubric" value={rubric} onChange={(e) => setRubric(e.target.value)} rows={3} placeholder={t('grade.rubricPh')} />
-            </div>
-          ) : null}
-          {pendingCount > 0 ? (
-            <Button variant="secondary" disabled={pending}
-              onClick={() => props.rows.filter((r) => r.status === 'UPLOADED' || r.status === 'FLAGGED').forEach((r) => grade(r.id))}>
-              <Sparkles className="h-4 w-4" />{t('grade.gradeAll')}（{pendingCount}）
-            </Button>
-          ) : null}
-        </CardContent>
-      </Card>
+      {props.phases.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('grade.cfgTitle')}</CardTitle>
+            <CardDescription>{t('grade.cfgDesc')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {props.phases.map((p) => {
+              const cfg = cfgFor(p.id)
+              const pend = pendingForPhase(p.id)
+              const est = estimateGrading(
+                pend.map((r) => ({ hasVideo: r.hasVideo, hasAudio: r.hasAudio, hasImage: r.hasImage, durationSec: r.durationSec, recitedLen: r.recitedText.length })),
+                { perceptionModel: cfg.perceptionModel, judgeModel: cfg.judgeModel, rubricLen: cfg.rubric.length, sentencesLen: p.sentenceCount * 50 },
+              )
+              const body = (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>{t('grade.perceptionModel')}</Label>
+                      <select value={cfg.perceptionModel} onChange={(e) => patchCfg(p.id, { perceptionModel: e.target.value })} className={SELECT} aria-label={t('grade.perceptionModel')}>
+                        {props.perceptionModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{t('grade.judgeModel')}</Label>
+                      <select value={cfg.judgeModel} onChange={(e) => patchCfg(p.id, { judgeModel: e.target.value })} className={SELECT} aria-label={t('grade.judgeModel')}>
+                        {props.judgeModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t('grade.rubric')}</Label>
+                    <Textarea value={cfg.rubric} onChange={(e) => patchCfg(p.id, { rubric: e.target.value })} rows={3} placeholder={t('grade.rubricPh')} />
+                  </div>
+                  <div className="rounded-xl bg-secondary p-3">
+                    <div className="text-xs font-medium text-muted-foreground">{t('grade.estimate')}</div>
+                    <div className="mt-1 text-sm">
+                      {pend.length === 0
+                        ? t('grade.estimateNone')
+                        : t('grade.estimateLine', { n: pend.length, tokens: formatTokens(est.totalTokens), cny: est.cny.toFixed(2), usd: est.usd.toFixed(2) })}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => savePhaseCfg(p.id)}>{t('grade.saveCfg')}</Button>
+                    {pend.some((r) => r.hasVideo) ? (
+                      <Button size="sm" variant="secondary" disabled={pending} onClick={() => gradePhase(p.id)}>
+                        <Sparkles className="h-4 w-4" />{t('grade.gradePhase', { n: pend.filter((r) => r.hasVideo).length })}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+              return props.phases.length === 1 ? (
+                <div key={p.id}>{body}</div>
+              ) : (
+                <details key={p.id} className="rounded-xl border border-input">
+                  <summary className="tap flex cursor-pointer items-center justify-between gap-2 p-3 text-sm font-medium">
+                    <span className="min-w-0 truncate">{p.label}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{pend.length > 0 ? t('grade.pendN', { n: pend.length }) : t('grade.allReviewed')}</span>
+                  </summary>
+                  <div className="border-t border-border/60 p-3">{body}</div>
+                </details>
+              )
+            })}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {props.classes.length > 0 ? (
         <Card>
@@ -378,6 +451,12 @@ export function GradingClient(props: {
             <p className="text-sm text-muted-foreground">{t('grade.noSub')}</p>
           ) : (
             <>
+            {phaseOptions.length > 1 ? (
+              <select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value)} className={SELECT} aria-label={t('grade.byPhase')}>
+                <option value="">{t('grade.allPhases')}</option>
+                {phaseOptions.map((p) => <option key={p.id} value={String(p.id)}>{p.label}</option>)}
+              </select>
+            ) : null}
             <div className="grid grid-cols-2 gap-2">
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={SELECT} aria-label={t('grade.subTitle')}>
                 <option value="">{t('filter.allStatus')}</option>
@@ -440,7 +519,7 @@ export function GradingClient(props: {
                   </details>
                 ) : null}
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  <Button size="sm" disabled={pending && busyId === r.id} onClick={() => grade(r.id)}>
+                  <Button size="sm" disabled={pending && busyId === r.id} onClick={() => grade(r.id, r.phaseId)}>
                     <Sparkles className="h-3.5 w-3.5" />{busyId === r.id && pending ? t('grade.running') : t('grade.run')}
                   </Button>
                   {r.hasVideo ? <Button size="sm" variant="outline" onClick={() => watch(r.id, 'video')}><Play className="h-3.5 w-3.5" />{t('grade.watch')}</Button> : null}
@@ -462,9 +541,7 @@ export function GradingClient(props: {
           index={focusIdx}
           setIndex={setFocusIdx}
           onClose={() => setFocusIdx(null)}
-          perceptionModel={effPerception}
-          judgeModel={effJudge}
-          rubric={rubric}
+          cfgFor={cfgFor}
           onChanged={() => router.refresh()}
         />
       ) : null}
