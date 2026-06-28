@@ -25,7 +25,7 @@ export async function AppHeader({ user }: { user: CurrentUser | null }) {
               <button
                 type="submit"
                 aria-label={t('signOut')}
-                className="tap grid h-8 w-8 place-items-center rounded-full border border-border bg-card text-muted-foreground"
+                className="tap grid h-9 w-9 place-items-center rounded-full border border-border bg-card text-muted-foreground"
               >
                 <LogOut className="h-4 w-4" />
               </button>

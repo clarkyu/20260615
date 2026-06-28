@@ -8,11 +8,11 @@ import { useT } from '@/components/i18n-provider'
 import { AuthShell } from '@/components/auth-shell'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 
-const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function LoginForm({ next, schools }: { next: string; schools: { id: number; name: string }[] }) {
   const t = useT()
@@ -35,12 +35,12 @@ export function LoginForm({ next, schools }: { next: string; schools: { id: numb
           <>
             <div className="space-y-1.5">
               <Label htmlFor="school">{t('login.school')}</Label>
-              <select id="school" name="schoolId" required defaultValue={preferredId != null ? String(preferredId) : ''} className={SELECT}>
+              <Select id="school" name="schoolId" required defaultValue={preferredId != null ? String(preferredId) : ''}>
                 <option value="" disabled>{t('login.selectSchool')}</option>
                 {schools.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="identifier">{t('login.idOrStaff')}</Label>

@@ -9,6 +9,7 @@ import { estimateGrading, formatTokens } from '@/lib/ai/cost'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,7 +42,6 @@ interface ModelOpt { id: string; label: string }
 interface PhaseCfg { id: number; label: string; rubric: string; perceptionModel: string; judgeModel: string; sentenceCount: number }
 interface PollResult { phaseLabel?: string; total: number; correctChoice: string | null; correctCount: number | null; options: { label: string; count: number; correct: boolean }[] }
 
-const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function GradingClient(props: {
   assignmentId: number
@@ -321,14 +321,14 @@ export function GradingClient(props: {
       ))}
 
       {props.notSubmitted.length > 0 ? (
-        <Card className="border-[hsl(var(--warning))]/30 bg-warning/5">
+        <Card className="border-warning/30 bg-warning/5">
           <CardContent className="p-4">
             <details>
               <summary className="flex cursor-pointer items-center justify-between gap-3">
-                <span className="flex items-center gap-1.5 text-sm font-semibold text-[hsl(var(--warning))]">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-warning">
                   <UserX className="h-4 w-4" />{t('grade.notSubmitted')}
                 </span>
-                <span className="text-2xl font-extrabold tabular-nums text-[hsl(var(--warning))]">{props.notSubmitted.length}</span>
+                <span className="text-2xl font-extrabold tabular-nums text-warning">{props.notSubmitted.length}</span>
               </summary>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {props.notSubmitted.map((s) => (
@@ -364,15 +364,15 @@ export function GradingClient(props: {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label>{t('grade.perceptionModel')}</Label>
-                      <select value={cfg.perceptionModel} onChange={(e) => patchCfg(p.id, { perceptionModel: e.target.value })} className={SELECT} aria-label={t('grade.perceptionModel')}>
+                      <Select value={cfg.perceptionModel} onChange={(e) => patchCfg(p.id, { perceptionModel: e.target.value })} aria-label={t('grade.perceptionModel')}>
                         {props.perceptionModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                      </select>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label>{t('grade.judgeModel')}</Label>
-                      <select value={cfg.judgeModel} onChange={(e) => patchCfg(p.id, { judgeModel: e.target.value })} className={SELECT} aria-label={t('grade.judgeModel')}>
+                      <Select value={cfg.judgeModel} onChange={(e) => patchCfg(p.id, { judgeModel: e.target.value })} aria-label={t('grade.judgeModel')}>
                         {props.judgeModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -452,18 +452,18 @@ export function GradingClient(props: {
           ) : (
             <>
             {phaseOptions.length > 1 ? (
-              <select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value)} className={SELECT} aria-label={t('grade.byPhase')}>
+              <Select value={phaseFilter} onChange={(e) => setPhaseFilter(e.target.value)} aria-label={t('grade.byPhase')}>
                 <option value="">{t('grade.allPhases')}</option>
                 {phaseOptions.map((p) => <option key={p.id} value={String(p.id)}>{p.label}</option>)}
-              </select>
+              </Select>
             ) : null}
             <div className="grid grid-cols-2 gap-2">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={SELECT} aria-label={t('grade.subTitle')}>
+              <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label={t('grade.subTitle')}>
                 <option value="">{t('filter.allStatus')}</option>
                 {statuses.map((s) => (
                   <option key={s} value={s}>{t('st.' + s)}</option>
                 ))}
-              </select>
+              </Select>
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('filter.searchStudent')} aria-label={t('filter.searchStudent')} className="h-11" />
             </div>
 
@@ -503,7 +503,7 @@ export function GradingClient(props: {
                       {r.phaseLabel ? <Badge tone="primary">{r.phaseLabel}</Badge> : null}
                       <Badge tone={statusTone(r.status)}>{t('st.' + r.status)}</Badge>
                       {r.needsReview && r.status !== 'DRAFT' ? <Badge tone="warning">{t('grade.needsReview')}</Badge> : null}
-                      {r.violations > 0 ? <span className="text-[hsl(var(--warning))]">⚠️ {r.violations} {t('grade.leftCount')}</span> : null}
+                      {r.violations > 0 ? <span className="text-warning">⚠️ {r.violations} {t('grade.leftCount')}</span> : null}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">

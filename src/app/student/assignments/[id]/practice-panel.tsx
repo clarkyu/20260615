@@ -268,7 +268,7 @@ function FeedbackView({ result, sentences }: { result: PracticeFeedback; sentenc
             return (
               <li key={s.order} className="flex items-start gap-2 text-sm">
                 {weak ? (
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 ) : (
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                 )}

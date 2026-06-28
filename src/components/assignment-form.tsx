@@ -8,6 +8,7 @@ import { modelsForCapability } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -59,7 +60,6 @@ const CATEGORY_PRESETS = ['背诵作业', '口语作业', '书面作业', '试�
 // 评分模型可选项（纯静态目录，客户端直接读 registry）。空选项 = 跟随作业/平台默认。
 const PERCEPTION_MODELS = modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))
 const JUDGE_MODELS = modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))
-const MODEL_SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 // Open/due times round-trip through the browser, where the timezone is known. A
 // `datetime-local` input is a *local* wall-clock; a UTC server would otherwise read
@@ -352,12 +352,12 @@ export function AssignmentForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>
-              <select id="monthLabel" name="monthLabel" value={month} onChange={(e) => setMonth(e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
+              <Select id="monthLabel" name="monthLabel" value={month} onChange={(e) => setMonth(e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
                 <option value="">{t('asg.monthNone')}</option>
                 {monthOptions.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             </div>
 
@@ -570,7 +570,7 @@ function PhaseCard({
           {submitParts.length > 0 ? (
             <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">{t('asg.willSubmit')}{submitParts.join(' + ')}</p>
           ) : (
-            <p className="border-t border-border/50 pt-2 text-xs text-[hsl(var(--warning))]">{t('asg.needKind')}</p>
+            <p className="border-t border-border/50 pt-2 text-xs text-warning">{t('asg.needKind')}</p>
           )}
         </div>
       </div>
@@ -669,17 +669,17 @@ function PhaseCard({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>{t('grade.perceptionModel')}</Label>
-                <select value={phase.perceptionModel} onChange={(e) => onPatch({ perceptionModel: e.target.value })} className={MODEL_SELECT} aria-label={t('grade.perceptionModel')}>
+                <Select value={phase.perceptionModel} onChange={(e) => onPatch({ perceptionModel: e.target.value })} aria-label={t('grade.perceptionModel')}>
                   <option value="">{t('asg.modelDefault')}</option>
                   {PERCEPTION_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>{t('grade.judgeModel')}</Label>
-                <select value={phase.judgeModel} onChange={(e) => onPatch({ judgeModel: e.target.value })} className={MODEL_SELECT} aria-label={t('grade.judgeModel')}>
+                <Select value={phase.judgeModel} onChange={(e) => onPatch({ judgeModel: e.target.value })} aria-label={t('grade.judgeModel')}>
                   <option value="">{t('asg.modelDefault')}</option>
                   {JUDGE_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
+                </Select>
               </div>
             </div>
             <div className="space-y-1.5">
