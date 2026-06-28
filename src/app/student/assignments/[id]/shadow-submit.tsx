@@ -272,7 +272,7 @@ export function ShadowSubmit(props: {
             <ChunkLangToggle value={lang} onChange={setLang} />
           </div>
           {url ? (
-            <video src={url} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
+            <video src={url} controls playsInline className="aspect-[3/4] w-full rounded-lg bg-black object-contain" />
           ) : (
             <Skeleton className="aspect-[3/4] w-full" />
           )}

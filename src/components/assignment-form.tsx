@@ -733,7 +733,7 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true) } }}
       >
         <CardContent className="flex items-center gap-3 p-4">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">

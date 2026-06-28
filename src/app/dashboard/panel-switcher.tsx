@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 export async function PanelSwitcher({ panels, active }: { panels: Role[]; active: Role }) {
   const { t } = await getT()
   return (
-    <div className="flex gap-1 rounded-2xl bg-secondary p-1">
+    <div className="flex gap-1 rounded-lg bg-secondary p-1">
       {panels.map((r) => (
         <form key={r} action={setActivePanel} className="flex-1">
           <input type="hidden" name="role" value={r} />

@@ -42,6 +42,7 @@ const config: Config = {
           foreground: 'hsl(var(--card-foreground))',
         },
       },
+      // 「面」的圆角统一走 lg(=--radius)；表单控件用更紧的 rounded-xl(0.75rem，Tailwind 默认)。
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
