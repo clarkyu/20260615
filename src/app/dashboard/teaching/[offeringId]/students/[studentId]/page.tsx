@@ -138,7 +138,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       {weak.length > 0 ? (
         <section className="space-y-2">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-            <AlertTriangle className="h-4 w-4 text-[hsl(var(--warning))]" />{t('insights.weakTitle')}
+            <AlertTriangle className="h-4 w-4 text-warning" />{t('insights.weakTitle')}
           </h2>
           <Card>
             <CardContent className="space-y-2.5 p-4">
@@ -147,9 +147,9 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                 return (
                   <div key={`${w.assignmentId}:${w.phaseId ?? 0}:${w.order}`} className="text-sm">
                     <div className="flex items-center gap-3">
-                      <span className="w-10 shrink-0 text-xs font-medium text-[hsl(var(--warning))] tabular-nums">{pct}%</span>
+                      <span className="w-10 shrink-0 text-xs font-medium text-warning tabular-nums">{pct}%</span>
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full rounded-full bg-[hsl(var(--warning))]" style={{ width: `${pct}%` }} />
+                        <div className="h-full rounded-full bg-warning" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                     <div className="mt-0.5 pl-[3.25rem] text-xs text-muted-foreground">

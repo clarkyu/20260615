@@ -139,7 +139,7 @@ export function GradeFocus({
             <div className="font-semibold">{cur.studentName} <span className="text-muted-foreground">{cur.studentNo}</span></div>
             <div className="mt-1 flex items-center gap-2">
               <Badge tone={statusTone(cur.status)}>{t('st.' + cur.status)}</Badge>
-              {cur.violations > 0 ? <span className="text-xs text-[hsl(var(--warning))]">⚠️ {cur.violations} {t('grade.leftCount')}</span> : null}
+              {cur.violations > 0 ? <span className="text-xs text-warning">⚠️ {cur.violations} {t('grade.leftCount')}</span> : null}
             </div>
           </div>
           {cur.finalScore != null ? <div className="text-3xl font-extrabold leading-none">{cur.finalScore}</div> : null}
@@ -168,7 +168,7 @@ export function GradeFocus({
               <div key={tk.order} className="flex items-center gap-2">
                 <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{tk.order}</span>
                 {tk.score != null ? (
-                  <span className={'w-8 shrink-0 text-center text-xs font-bold tabular-nums ' + (tk.score < 60 ? 'text-[hsl(var(--warning))]' : 'text-success')}>{tk.score}</span>
+                  <span className={'w-8 shrink-0 text-center text-xs font-bold tabular-nums ' + (tk.score < 60 ? 'text-warning' : 'text-success')}>{tk.score}</span>
                 ) : null}
                 <audio src={tk.url} controls className="h-8 min-w-0 flex-1" />
               </div>

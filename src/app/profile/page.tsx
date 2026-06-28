@@ -69,7 +69,7 @@ export default async function ProfilePage() {
             </span>
           </div>
           {points.streak > 0 ? (
-            <p className="text-xs font-semibold text-[hsl(var(--warning))]">{t('pts.streak', { n: points.streak })}</p>
+            <p className="text-xs font-semibold text-warning">{t('pts.streak', { n: points.streak })}</p>
           ) : null}
           {points.rows.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">

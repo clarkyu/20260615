@@ -6,6 +6,7 @@ import { createOffering, updateOffering, deleteOffering } from '@/actions/offeri
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,7 +21,6 @@ export interface OfferingInitial {
   semester: string
 }
 
-const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 function currentAcademicYear(): string {
   const now = new Date()
@@ -55,12 +55,12 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
             {editing ? (
               <div className="space-y-1.5">
                 <Label htmlFor="cls">{t('teach.class')}</Label>
-                <select id="cls" name="classId" defaultValue={initial?.classId ?? ''} required className={SELECT}>
+                <Select id="cls" name="classId" defaultValue={initial?.classId ?? ''} required>
                   <option value="" disabled>—</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
-                </select>
+                </Select>
               </div>
             ) : (
               <MultiClassPicker classes={classes} t={t} />
@@ -72,10 +72,10 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="sem">{t('teach.semester')}</Label>
-                <select id="sem" name="semester" defaultValue={initial?.semester ?? '1'} className={SELECT}>
+                <Select id="sem" name="semester" defaultValue={initial?.semester ?? '1'}>
                   <option value="1">{t('teach.sem1')}</option>
                   <option value="2">{t('teach.sem2')}</option>
-                </select>
+                </Select>
               </div>
             </div>
             {state?.error ? <FormMessage>{state.error}</FormMessage> : null}

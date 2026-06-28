@@ -15,6 +15,7 @@ import {
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -42,7 +43,6 @@ interface MajorOpt {
 }
 
 type Action = (fd: FormData) => Promise<{ error?: string; success?: boolean }>
-const SELECT = 'h-10 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function ClassManager({
   cls,
@@ -105,12 +105,12 @@ export function ClassManager({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="maj">{t('cls.major')}</Label>
-                  <select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className={SELECT}>
+                  <Select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className="h-10">
                     <option value="">{t('cls.noMajor')}</option>
                     {majors.map((m) => (
                       <option key={m.id} value={m.id}>{m.name}（{m.department}）</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{t('cls.majorHint')}</p>

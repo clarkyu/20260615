@@ -35,10 +35,10 @@ const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
 export function FormalTestBanner() {
   const t = useT()
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-[hsl(var(--warning))]/30 bg-warning/10 p-3 text-sm">
-      <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[hsl(var(--warning))]" />
+    <div className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm">
+      <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
       <div>
-        <p className="font-semibold text-[hsl(var(--warning))]">{t('sub.formalTest')}</p>
+        <p className="font-semibold text-warning">{t('sub.formalTest')}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{t('sub.formalTestDesc')}</p>
       </div>
     </div>
@@ -376,7 +376,7 @@ export function SubmissionFlow(props: {
                     <li key={s.order} className="space-y-0.5">
                       <div className="flex items-start gap-2">
                         {weak
-                          ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
+                          ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                           : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
                         <span className={weak ? 'text-foreground' : 'text-muted-foreground'}>{s.text}</span>
                       </div>

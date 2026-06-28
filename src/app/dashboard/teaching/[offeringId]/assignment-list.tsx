@@ -6,6 +6,7 @@ import { ChevronRight } from 'lucide-react'
 import { useT } from '@/components/i18n-provider'
 import { LocalDate } from '@/components/local-date'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 
@@ -19,7 +20,6 @@ export interface AssignmentItem {
   submissionCount: number
 }
 
-const SELECT = 'h-10 flex-1 rounded-xl border border-input bg-background px-3 text-sm'
 
 // 老师在某授课下发布的作业列表 + 筛选器：按标题搜索、按作业类型、按月份。
 // 与 TeachingList 一致：筛选项只在「有得可筛」时才出现，作业不多时不打扰。
@@ -58,16 +58,16 @@ export function AssignmentList({ assignments }: { assignments: AssignmentItem[] 
           {categories.length > 1 || months.length > 1 ? (
             <div className="flex gap-2">
               {categories.length > 1 ? (
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className={SELECT} aria-label={t('filter.allCategories')}>
+                <Select value={category} onChange={(e) => setCategory(e.target.value)} className="h-10 flex-1" aria-label={t('filter.allCategories')}>
                   <option value="">{t('filter.allCategories')}</option>
                   {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                </Select>
               ) : null}
               {months.length > 1 ? (
-                <select value={month} onChange={(e) => setMonth(e.target.value)} className={SELECT} aria-label={t('filter.allMonths')}>
+                <Select value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 flex-1" aria-label={t('filter.allMonths')}>
                   <option value="">{t('filter.allMonths')}</option>
                   {months.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
+                </Select>
               ) : null}
             </div>
           ) : null}
