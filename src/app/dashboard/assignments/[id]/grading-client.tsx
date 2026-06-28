@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge, statusTone } from '@/components/ui/badge'
+import { useConfirm } from '@/components/ui/confirm'
 import { GradeFocus } from './grade-focus'
 
 interface Row {
@@ -59,6 +60,7 @@ export function GradingClient(props: {
   defaultRubric: string
 }) {
   const t = useT()
+  const confirm = useConfirm()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -132,11 +134,11 @@ export function GradingClient(props: {
       return n
     })
   }
-  function applyBatch() {
+  async function applyBatch() {
     const sc = batchScore.trim()
     const scoreNum = sc === '' ? null : Number(sc)
     if (scoreNum == null && !batchFeedback.trim()) { setError(t('grade.batchNeedField')); return }
-    if (!confirm(t('grade.batchConfirm', { n: selected.size }))) return
+    if (!(await confirm({ body: t('grade.batchConfirm', { n: selected.size }) }))) return
     setError(null)
     startTransition(async () => {
       const res = await batchOverride(props.assignmentId, [...selected], scoreNum, batchFeedback)
@@ -145,8 +147,8 @@ export function GradingClient(props: {
     })
   }
 
-  function markMissing() {
-    if (!confirm(t('grade.markMissingConfirm', { n: props.notSubmitted.length }))) return
+  async function markMissing() {
+    if (!(await confirm({ body: t('grade.markMissingConfirm', { n: props.notSubmitted.length }) }))) return
     setError(null)
     startTransition(async () => {
       const res = await markMissingAction(props.assignmentId)

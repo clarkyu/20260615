@@ -7,6 +7,7 @@ import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { useConfirm, confirmSubmit } from '@/components/ui/confirm'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,7 @@ function currentAcademicYear(): string {
 
 export function OfferingForm({ classes, initial }: { classes: { id: number; name: string }[]; initial?: OfferingInitial }) {
   const t = useT()
+  const confirm = useConfirm()
   const editing = Boolean(initial)
   const [state, action, isPending] = useActionState(editing ? updateOffering : createOffering, null)
 
@@ -89,7 +91,7 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
       {editing ? (
         <Card className="border-destructive/40">
           <CardContent className="p-4">
-            <form action={deleteOffering} onSubmit={(e) => { if (!confirm(t('teach.deleteConfirm'))) e.preventDefault() }}>
+            <form action={deleteOffering} onSubmit={confirmSubmit(confirm, { body: t('teach.deleteConfirm'), danger: true })}>
               <input type="hidden" name="offeringId" value={initial!.id} />
               <SubmitButton variant="destructive" className="w-full">{t('teach.delete')}</SubmitButton>
             </form>
