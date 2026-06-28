@@ -626,6 +626,12 @@ function PhaseCard({
           <Input type="datetime-local" value={phase.dueAt} onChange={(e) => onPatch({ dueAt: e.target.value })} />
         </div>
       </div>
+      {/* 进阶项收进「高级设置」，降低手机端默认密度（次数/计入成绩/正式测试/评分配置都有合理默认）。 */}
+      <details className="rounded-xl border border-input">
+        <summary className="tap cursor-pointer p-3 text-sm font-medium">
+          {t('asg.moreSettings')}<span className="ml-1.5 text-xs font-normal text-muted-foreground">{t('asg.moreSettingsHint')}</span>
+        </summary>
+        <div className="space-y-3 border-t border-border/60 p-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>{t('asg.fAttempts')}</Label>
@@ -683,6 +689,8 @@ function PhaseCard({
           </div>
         </details>
       ) : null}
+        </div>
+      </details>
       </div>
     </div>
   )
