@@ -9,6 +9,7 @@ import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { useConfirm, confirmSubmit } from '@/components/ui/confirm'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -154,6 +155,7 @@ export function AssignmentForm({
   chunkSet?: { id: number; name: string; count: number; hasVideo: boolean }
 }) {
   const t = useT()
+  const confirm = useConfirm()
   // `initial` with an id = editing an existing assignment; `initial` without an id =
   // prefilling a NEW publish from a template (still create mode).
   const editing = Boolean(initial?.id)
@@ -422,7 +424,7 @@ export function AssignmentForm({
       {editing ? (
         <Card className="border-destructive/40">
           <CardContent className="p-4">
-            <form action={deleteAssignment} onSubmit={(e) => { if (!confirm(t('asg.deleteConfirm'))) e.preventDefault() }}>
+            <form action={deleteAssignment} onSubmit={confirmSubmit(confirm, { body: t('asg.deleteConfirm'), danger: true })}>
               <input type="hidden" name="assignmentId" value={initial!.id ?? ""} />
               <SubmitButton variant="destructive" className="w-full">{t('asg.delete')}</SubmitButton>
             </form>

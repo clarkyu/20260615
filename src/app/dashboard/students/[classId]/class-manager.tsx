@@ -16,6 +16,7 @@ import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { useConfirm, confirmSubmit } from '@/components/ui/confirm'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -56,6 +57,7 @@ export function ClassManager({
   isAdmin: boolean
 }) {
   const t = useT()
+  const confirm = useConfirm()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [editId, setEditId] = useState<number | null>(null)
@@ -161,8 +163,8 @@ export function ClassManager({
                           size="sm"
                           variant="ghost"
                           disabled={pending && busyId === s.id}
-                          onClick={() => {
-                            if (!confirm(t('cls.resetPwConfirm'))) return
+                          onClick={async () => {
+                            if (!(await confirm({ body: t('cls.resetPwConfirm') }))) return
                             const fd = new FormData()
                             fd.set('studentId', String(s.id))
                             run(resetStudentPassword, fd, s.id)
@@ -175,8 +177,8 @@ export function ClassManager({
                           variant="ghost"
                           className="text-destructive"
                           disabled={pending && busyId === s.id}
-                          onClick={() => {
-                            if (!confirm(t('cls.removeConfirm'))) return
+                          onClick={async () => {
+                            if (!(await confirm({ body: t('cls.removeConfirm'), danger: true }))) return
                             const fd = new FormData()
                             fd.set('studentId', String(s.id))
                             fd.set('classId', String(cls.id))
@@ -237,7 +239,7 @@ export function ClassManager({
       {isAdmin ? (
       <Card className="border-destructive/40">
         <CardContent className="p-4">
-          <form action={deleteClass} onSubmit={(e) => { if (!confirm(t('cls.deleteClassConfirm'))) e.preventDefault() }}>
+          <form action={deleteClass} onSubmit={confirmSubmit(confirm, { body: t('cls.deleteClassConfirm'), danger: true })}>
             <input type="hidden" name="classId" value={cls.id} />
             <SubmitButton variant="destructive" className="w-full">{t('cls.deleteClass')}</SubmitButton>
           </form>
