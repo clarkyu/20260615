@@ -215,7 +215,7 @@ export default async function StudentHome() {
                     {single && sub?.feedback ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{sub.feedback}</p> : null}
                   </div>
                 ) : null}
-                <Link href={`/student/assignments/${a.id}`}>
+                <Link href={`/student/assignments/${a.id}`} aria-label={`${buttonText}：${a.title}（${statusLabel}）`}>
                   <Button className="w-full" variant={notStarted ? 'default' : 'outline'}>
                     {buttonText}
                   </Button>

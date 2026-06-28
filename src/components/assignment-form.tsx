@@ -520,7 +520,7 @@ function PhaseCard({
               </div>
             </div>
           ) : (
-            <Textarea rows={5} value={phase.sentences} onChange={(e) => onPatch({ sentences: e.target.value })} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
+            <Textarea rows={5} value={phase.sentences} onChange={(e) => onPatch({ sentences: e.target.value })} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} aria-label={t('asg.fSentences')} />
           )}
         </div>
       ) : (
@@ -621,11 +621,11 @@ function PhaseCard({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>{t('asg.fOpenAt')}</Label>
-          <Input type="datetime-local" value={phase.openAt} onChange={(e) => onPatch({ openAt: e.target.value })} />
+          <Input type="datetime-local" value={phase.openAt} onChange={(e) => onPatch({ openAt: e.target.value })} aria-label={t('asg.fOpenAt')} />
         </div>
         <div className="space-y-1.5">
           <Label>{t('asg.fDueAt')}</Label>
-          <Input type="datetime-local" value={phase.dueAt} onChange={(e) => onPatch({ dueAt: e.target.value })} />
+          <Input type="datetime-local" value={phase.dueAt} onChange={(e) => onPatch({ dueAt: e.target.value })} aria-label={t('asg.fDueAt')} />
         </div>
       </div>
       {/* 进阶项收进「高级设置」，降低手机端默认密度（次数/计入成绩/正式测试/评分配置都有合理默认）。 */}
@@ -637,7 +637,7 @@ function PhaseCard({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>{t('asg.fAttempts')}</Label>
-          <Input type="number" min={1} value={phase.maxAttempts} onChange={(e) => onPatch({ maxAttempts: Math.max(1, Number(e.target.value) || 1) })} />
+          <Input type="number" min={1} value={phase.maxAttempts} onChange={(e) => onPatch({ maxAttempts: Math.max(1, Number(e.target.value) || 1) })} aria-label={t('asg.fAttempts')} />
         </div>
         <label className="flex items-end gap-2.5 pb-2.5 text-sm">
           <input type="checkbox" checked={phase.graded} onChange={(e) => onPatch({ graded: e.target.checked })} className="h-4 w-4 accent-primary" />
