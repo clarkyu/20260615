@@ -42,6 +42,9 @@ export interface PhaseInput {
   choicesJson?: string | null
   correctChoice?: string | null
   requireFreeText?: boolean
+  rubric?: string | null
+  perceptionModel?: string | null
+  judgeModel?: string | null
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -138,6 +141,9 @@ function phaseData(p: PhaseInput) {
     choicesJson: p.choicesJson ?? null,
     correctChoice: p.correctChoice ?? null,
     requireFreeText: p.requireFreeText ?? false,
+    rubric: p.rubric ?? null,
+    defaultPerceptionModel: p.perceptionModel ?? null,
+    defaultJudgeModel: p.judgeModel ?? null,
     graded: p.graded,
     maxAttempts: p.maxAttempts,
     isFormalTest: p.isFormalTest,

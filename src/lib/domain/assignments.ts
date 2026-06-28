@@ -34,6 +34,10 @@ export interface PhaseDraft {
   choicesJson?: string | null
   correctChoice?: string | null
   requireFreeText?: boolean
+  // 每环节批阅配置（可选，空=跟随作业/平台默认）。
+  rubric?: string | null
+  perceptionModel?: string | null
+  judgeModel?: string | null
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -93,6 +97,9 @@ async function resolvePhases(
       choicesJson: d.choicesJson ?? null,
       correctChoice: d.correctChoice ?? null,
       requireFreeText: d.requireFreeText ?? false,
+      rubric: d.rubric ?? null,
+      perceptionModel: d.perceptionModel ?? null,
+      judgeModel: d.judgeModel ?? null,
       graded: d.graded,
       maxAttempts: d.maxAttempts,
       isFormalTest: d.isFormalTest,

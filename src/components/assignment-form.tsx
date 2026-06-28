@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from 'react'
 import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Check, Video, Eye, Mic, PenLine, Camera } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
+import { modelsForCapability } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,10 @@ export interface PhaseInitial {
   // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
   correctIndex: number
   requireFreeText: boolean
+  // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
+  rubric: string
+  perceptionModel: string
+  judgeModel: string
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -50,6 +55,11 @@ export interface AssignmentInitial {
 }
 
 const CATEGORY_PRESETS = ['背诵作业', '口语作业', '书面作业', '试卷作业', '听写作业', '默写作业']
+
+// 评分模型可选项（纯静态目录，客户端直接读 registry）。空选项 = 跟随作业/平台默认。
+const PERCEPTION_MODELS = modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))
+const JUDGE_MODELS = modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))
+const MODEL_SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 // Open/due times round-trip through the browser, where the timezone is known. A
 // `datetime-local` input is a *local* wall-clock; a UTC server would otherwise read
@@ -87,6 +97,10 @@ interface PhaseState {
   // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
   correctIndex: number
   requireFreeText: boolean
+  // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
+  rubric: string
+  perceptionModel: string
+  judgeModel: string
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -113,6 +127,9 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     choices: [],
     correctIndex: -1,
     requireFreeText: false,
+    rubric: '',
+    perceptionModel: '',
+    judgeModel: '',
     graded: true,
     maxAttempts: 3,
     isFormalTest: false,
@@ -216,6 +233,9 @@ export function AssignmentForm({
       // 正确答案存「选项文本」（与学生作答 recitedText 同形，便于判分）；-1 或空选项 → 仅投票。
       correctChoice: p.requireChoice && p.correctIndex >= 0 ? (p.choices[p.correctIndex]?.trim() || null) : null,
       requireFreeText: p.requireFreeText,
+      rubric: p.rubric.trim() || null,
+      perceptionModel: p.perceptionModel || null,
+      judgeModel: p.judgeModel || null,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,
@@ -630,6 +650,39 @@ function PhaseCard({
         <input type="checkbox" checked={phase.isFormalTest} onChange={(e) => onPatch({ isFormalTest: e.target.checked })} className="mt-0.5 h-4 w-4 accent-primary" />
         <span>{t('asg.formalTest')}<span className="block text-xs text-muted-foreground">{t('asg.formalTestHint')}</span></span>
       </label>
+
+      {/* 每环节批阅配置（仅音/视频环节走 AI 评阅时有意义）：评分标准 + 感知/评分模型。
+          留空 = 跟随作业/平台默认；评阅时也可在评分页再改。 */}
+      {phase.requireVideo || phase.requireAudio ? (
+        <details className="rounded-xl border border-input">
+          <summary className="tap flex cursor-pointer items-center gap-1.5 p-3 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-primary" />{t('asg.gradeCfg')}
+            <span className="text-xs font-normal text-muted-foreground">{t('asg.gradeCfgHint')}</span>
+          </summary>
+          <div className="space-y-3 border-t border-border/60 p-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>{t('grade.perceptionModel')}</Label>
+                <select value={phase.perceptionModel} onChange={(e) => onPatch({ perceptionModel: e.target.value })} className={MODEL_SELECT} aria-label={t('grade.perceptionModel')}>
+                  <option value="">{t('asg.modelDefault')}</option>
+                  {PERCEPTION_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t('grade.judgeModel')}</Label>
+                <select value={phase.judgeModel} onChange={(e) => onPatch({ judgeModel: e.target.value })} className={MODEL_SELECT} aria-label={t('grade.judgeModel')}>
+                  <option value="">{t('asg.modelDefault')}</option>
+                  {JUDGE_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('grade.rubric')}</Label>
+              <Textarea value={phase.rubric} onChange={(e) => onPatch({ rubric: e.target.value })} rows={3} placeholder={t('grade.rubricPh')} />
+            </div>
+          </div>
+        </details>
+      ) : null}
       </div>
     </div>
   )
