@@ -263,6 +263,18 @@ export function AssignmentForm({
   const [step, setStep] = useState(0)
   const STEP_KEYS = ['asg.stepBasic', 'asg.stepPhases', 'asg.stepReview']
 
+  // 确认步「发布前小结」用：把每个环节的提交类型拼成一句话；勾选的发布目标班级。
+  const kindsOf = (p: PhaseState) =>
+    [
+      p.requireVideo && t('asg.kindVideo'),
+      p.requireAudio && t('asg.kindAudio'),
+      p.requireText && t('asg.kindText'),
+      p.requireHandwriting && t('asg.kindHandwriting'),
+      p.requireChoice && t('asg.kindChoice'),
+      p.requireFreeText && t('asg.kindFreeText'),
+    ].filter(Boolean).join(' / ')
+  const targetLabels = (targets ?? []).filter((tg) => selected.has(tg.offeringId)).map((tg) => tg.label)
+
   // The month list + default — computed in an effect (not during render) so a UTC
   // server and the teacher's local-TZ browser can't disagree at hydration.
   const [monthOptions, setMonthOptions] = useState<string[]>([])
@@ -389,6 +401,31 @@ export function AssignmentForm({
             </div>
 
             <div className={wizard && step !== 2 ? 'hidden' : 'space-y-4'}>
+              {/* 发布前小结：标题 / 发到哪个班 / 各环节提交类型与截止——发布前再核一遍。 */}
+              {wizard ? (
+                <div className="space-y-2 rounded-lg border border-border/70 bg-secondary/40 p-3 text-sm">
+                  <div className="text-xs font-semibold text-muted-foreground">{t('asg.summaryTitle')}</div>
+                  <div><span className="text-muted-foreground">{t('asg.fTitle')}：</span><span className="font-medium">{title.trim() || t('asg.summaryNoTitle')}</span></div>
+                  {targetLabels.length > 0 ? (
+                    <div><span className="text-muted-foreground">{t('asg.publishTo')}：</span>{targetLabels.join('、')}</div>
+                  ) : null}
+                  <div>
+                    <span className="text-muted-foreground">{t('asg.phases')}：</span>{phases.length} {t('asg.phaseUnit')}
+                    <ul className="mt-1 space-y-1">
+                      {phases.map((p, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs">
+                          <span className="shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
+                          <span className="min-w-0">
+                            <span className="font-medium">{p.title.trim() || t('phase.nth', { n: i + 1 })}</span>
+                            {kindsOf(p) ? <span className="text-muted-foreground"> · {kindsOf(p)}</span> : null}
+                            {p.dueAt ? <span className="text-muted-foreground"> · {t('asg.due')} {p.dueAt.replace('T', ' ')}</span> : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
               {!editing ? (
                 <div className="space-y-2 rounded-xl border border-input p-3">
                   <label className="flex items-center gap-2.5 text-sm">
