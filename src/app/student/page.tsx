@@ -154,7 +154,7 @@ export default async function StudentHome() {
         <Link href="/student/weak-points">
           <Card className="tap hover:shadow-card">
             <CardContent className="flex items-center gap-3 p-4">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
                 <Target className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">

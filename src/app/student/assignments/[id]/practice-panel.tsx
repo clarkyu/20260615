@@ -130,7 +130,7 @@ export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentenc
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true) } }}
       >
         <CardContent className="flex items-center gap-3 p-4">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -179,7 +179,7 @@ export function PracticePanel({ phaseId, sentences }: { phaseId: number; sentenc
 
         {phase === 'recording' ? (
           <div className="space-y-3">
-            <div className="grid aspect-[5/2] w-full place-items-center rounded-2xl bg-secondary">
+            <div className="grid aspect-[5/2] w-full place-items-center rounded-lg bg-secondary">
               <Mic className="h-12 w-12 animate-pulse text-red-500" />
               <div className="absolute mt-24 flex items-center gap-1.5 text-sm font-semibold tabular-nums text-muted-foreground">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
@@ -237,7 +237,7 @@ function FeedbackView({ result, sentences }: { result: PracticeFeedback; sentenc
 
   return (
     <div className="space-y-3">
-      <div className="flex items-end justify-between rounded-2xl bg-primary/5 p-3">
+      <div className="flex items-end justify-between rounded-lg bg-primary/5 p-3">
         <div>
           <div className="text-xs text-muted-foreground">{t('practice.aiScore')}</div>
           <div className="text-4xl font-extrabold leading-none tabular-nums text-primary">{result.score}</div>

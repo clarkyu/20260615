@@ -65,7 +65,7 @@ export function PhotoStep({ phaseId, onDone }: { phaseId: number; onDone: () => 
           type="button"
           onClick={() => inputRef.current?.click()}
           aria-label={t('photo.pick')}
-          className="grid aspect-[3/4] w-full cursor-pointer place-items-center overflow-hidden rounded-2xl border border-dashed border-input bg-secondary/40"
+          className="grid aspect-[3/4] w-full cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-input bg-secondary/40"
         >
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element

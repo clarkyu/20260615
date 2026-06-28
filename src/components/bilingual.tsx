@@ -122,7 +122,7 @@ export function BilingualChunkList({ chunks, title }: { chunks: BiChunk[]; title
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-semibold text-muted-foreground">{title ?? t('bank.chunkList')}</h2>
-      <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
         {chunks.map((c, i) => (
           <BilingualChunkRow key={i} chunk={c} index={i} />
         ))}

@@ -147,7 +147,7 @@ export function GradeFocus({
 
         {cur.hasVideo ? (
           videoUrl ? (
-            <video src={videoUrl} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
+            <video src={videoUrl} controls playsInline className="aspect-[3/4] w-full rounded-lg bg-black object-contain" />
           ) : (
             <Skeleton className="aspect-[3/4] w-full" />
           )
@@ -158,7 +158,7 @@ export function GradeFocus({
         {cur.hasImage ? (
           imageUrl
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={imageUrl} alt="" className="w-full rounded-2xl bg-secondary object-contain" />
+            ? <img src={imageUrl} alt="" className="w-full rounded-lg bg-secondary object-contain" />
             : <Skeleton className="h-28 w-full" />
         ) : null}
         {takes.length > 0 ? (
@@ -176,7 +176,7 @@ export function GradeFocus({
           </div>
         ) : null}
         {!cur.hasVideo && !cur.hasAudio && !cur.hasImage && takes.length === 0 ? (
-          <div className="grid h-28 w-full place-items-center rounded-2xl bg-secondary text-sm text-muted-foreground">{t('grade.noSub')}</div>
+          <div className="grid h-28 w-full place-items-center rounded-lg bg-secondary text-sm text-muted-foreground">{t('grade.noSub')}</div>
         ) : null}
 
         {cur.recitedText ? (

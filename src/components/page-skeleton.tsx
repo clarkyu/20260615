@@ -9,9 +9,9 @@ export function PageSkeleton() {
     <div className="space-y-3 py-2">
       <span className="sr-only" role="status">加载中 · Loading…</span>
       <div className="skeleton h-8 w-40 rounded-lg" aria-hidden="true" />
-      <div className="skeleton h-24 w-full rounded-2xl" aria-hidden="true" />
-      <div className="skeleton h-24 w-full rounded-2xl" aria-hidden="true" />
-      <div className="skeleton h-24 w-full rounded-2xl" aria-hidden="true" />
+      <div className="skeleton h-24 w-full rounded-lg" aria-hidden="true" />
+      <div className="skeleton h-24 w-full rounded-lg" aria-hidden="true" />
+      <div className="skeleton h-24 w-full rounded-lg" aria-hidden="true" />
     </div>
   )
 }

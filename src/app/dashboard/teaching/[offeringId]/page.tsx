@@ -57,7 +57,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
       <Link href={`/dashboard/teaching/${offering.id}/insights`}>
         <Card className="tap border-primary/30 bg-primary/5 hover:shadow-card">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
               <TrendingUp className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
