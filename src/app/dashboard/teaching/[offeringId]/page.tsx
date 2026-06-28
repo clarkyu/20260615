@@ -6,10 +6,9 @@ import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as offeringRepo from '@/lib/repo/offerings'
-import { LocalDate } from '@/components/local-date'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { AssignmentList } from './assignment-list'
 
 // Tab title = the course name for this offering. Scoped like the page (own offering
 // for a TEACHER) so a guessed id can't leak a course name; generic menu name otherwise.
@@ -85,23 +84,17 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
           </CardContent>
         </Card>
       ) : (
-        offering.assignments.map((a) => (
-          <Link key={a.id} href={`/dashboard/assignments/${a.id}`}>
-            <Card className="tap hover:shadow-card">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
-                  <p className="font-semibold leading-snug">{a.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {a._count.sentences} {t('asg.sentences')} · {a._count.submissions} {t('asg.submissions')}
-                    {a.dueAt ? <> · {t('asg.due')} <LocalDate iso={a.dueAt.toISOString()} /></> : null}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-        ))
+        <AssignmentList
+          assignments={offering.assignments.map((a) => ({
+            id: a.id,
+            title: a.title,
+            category: a.category,
+            monthLabel: a.monthLabel,
+            dueAtIso: a.dueAt ? a.dueAt.toISOString() : null,
+            sentenceCount: a._count.sentences,
+            submissionCount: a._count.submissions,
+          }))}
+        />
       )}
     </div>
   )
