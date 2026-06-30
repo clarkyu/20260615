@@ -2,9 +2,20 @@
 // attempts left) and whether every required part is present. Pure-ish — data reads
 // go through repos; no auth/i18n/Next plumbing. Errors are i18n keys.
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, SubmissionStatus } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
+
+// The submission that represents a phase's state on the student's STATUS screens (home
+// list + multi-phase checklist): the latest non-DRAFT attempt if one exists, otherwise
+// the latest attempt (an in-progress draft). Starting a redo creates a higher-attempt
+// DRAFT — it must NOT erase the student's already-submitted/graded attempt from view
+// (that's why "提交成功的视频显示未提交"). Teacher-side queries already exclude DRAFT;
+// this keeps the student view consistent. `subs` must be ordered by attempt DESC, as
+// the repo queries return them.
+export function representativeSubmission<T extends { status: SubmissionStatus }>(subs: T[]): T | null {
+  return subs.find((s) => s.status !== 'DRAFT') ?? subs[0] ?? null
+}
 
 export interface Requirements {
   requireText: boolean

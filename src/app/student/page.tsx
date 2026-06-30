@@ -8,6 +8,7 @@ import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as practiceRepo from '@/lib/repo/practice'
+import { representativeSubmission } from '@/lib/domain/submit'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -62,9 +63,11 @@ export default async function StudentHome() {
   function summarize(a: Asg) {
     const graded = a.phases.filter((p) => p.graded)
     const counted = graded.length > 0 ? graded : a.phases
-    const done = counted.filter((p) => { const s = p.submissions[0]; return s && DONE_STATUSES.includes(s.status) }).length
-    const scores = counted.map((p) => (p.submissions[0]?.status === 'GRADED' ? p.submissions[0]?.finalScore : null)).filter((v): v is number => v != null)
-    const newGraded = a.phases.some((p) => { const s = p.submissions[0]; return s?.status === 'GRADED' && s.gradedAt != null && s.gradedAt.getTime() > seenMs })
+    // The phase's representative submission: the latest non-DRAFT attempt, so an
+    // in-progress redo draft can't make a submitted/graded phase read as 未提交.
+    const done = counted.filter((p) => { const s = representativeSubmission(p.submissions); return s && DONE_STATUSES.includes(s.status) }).length
+    const scores = counted.map((p) => { const s = representativeSubmission(p.submissions); return s?.status === 'GRADED' ? s.finalScore : null }).filter((v): v is number => v != null)
+    const newGraded = a.phases.some((p) => { const s = representativeSubmission(p.submissions); return s?.status === 'GRADED' && s.gradedAt != null && s.gradedAt.getTime() > seenMs })
     return {
       single: a.phases.length === 1,
       p0: a.phases[0],
@@ -178,7 +181,7 @@ export default async function StudentHome() {
         summaries.map(({ a, single, p0, doneCount, totalPhases, allDone, sentenceCount, examScore, newGraded }) => {
           // Single-phase keeps the original per-submission card; multi-phase shows a
           // 「done/total 环节」progress badge that links into the phase checklist.
-          const sub = single ? p0.submissions[0] : null
+          const sub = single ? representativeSubmission(p0.submissions) : null
           const status = sub?.status ?? 'DRAFT'
           const partialText = single ? Boolean(sub?.recitedText) && status === 'DRAFT' : false
           const statusLabel = single

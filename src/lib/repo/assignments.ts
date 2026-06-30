@@ -343,7 +343,9 @@ export function listWithSentencesForOffering(prisma: PrismaClient, offeringId: n
 // ── student-facing reads (scoped to the student's class, not their school) ────
 
 // The student home list: the assignments of all the student's classes, each with
-// the student's latest submission (take 1), sentence count, and course name.
+// the student's latest submission, sentence count, and course name. Fetch the top 2
+// attempts (not 1): a redo creates an in-progress DRAFT above the submitted attempt, so
+// the caller picks the representative via `representativeSubmission` (latest non-DRAFT).
 export function listForStudent(prisma: PrismaClient, classIds: number[], studentId: number) {
   return prisma.assignment.findMany({
     where: { offering: { classId: { in: classIds } } },
@@ -356,7 +358,7 @@ export function listForStudent(prisma: PrismaClient, classIds: number[], student
           id: true,
           graded: true,
           _count: { select: { sentences: true } },
-          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, select: { status: true, finalScore: true, feedback: true, recitedText: true, gradedAt: true } },
+          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 2, select: { status: true, finalScore: true, feedback: true, recitedText: true, gradedAt: true } },
         },
       },
     },
@@ -422,7 +424,9 @@ export function findForStudentPhaseList(prisma: PrismaClient, id: number, classI
         orderBy: { order: 'asc' },
         include: {
           _count: { select: { sentences: true } },
-          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 1, select: { status: true, finalScore: true } },
+          // Top 2 attempts so a redo's in-progress DRAFT can't shadow the submitted one
+          // (see representativeSubmission); the checklist picks the latest non-DRAFT.
+          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 2, select: { status: true, finalScore: true } },
         },
       },
     },

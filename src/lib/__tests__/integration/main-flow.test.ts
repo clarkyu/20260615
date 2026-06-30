@@ -16,11 +16,12 @@ vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_k: unknown, fn: () 
 vi.mock('@/lib/ai/teacher-keys', () => ({ resolveTeacherKeys: async () => ({}) }))
 
 import { hashPassword, verifyPassword } from '@/lib/password'
-import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart, representativeSubmission } from '@/lib/domain/submit'
 import { enqueueGrading } from '@/lib/domain/jobs'
 import { autoGradeById } from '@/lib/domain/grading'
 import { gradeSubmission } from '@/lib/ai/grade'
 import * as submissionRepo from '@/lib/repo/submissions'
+import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 
 const PW = 'secret-123'
@@ -112,5 +113,34 @@ describe('main flow (login → submit → grade) against real SQL', () => {
 
     const after = await p.submission.findUnique({ where: { id: sub.id } })
     expect(after).toMatchObject({ status: 'GRADED', needsReview: false, teacherScore: 95, finalScore: 95, gradedById: d.teacher.id })
+  })
+
+  it('⑤ redo does not unsubmit: a graded attempt + a later in-progress DRAFT still reads as submitted on the home', async () => {
+    const p = db.prisma
+    const d = await seed(p)
+    const classIds = await userRepo.studentClassIds(p, d.student.id)
+    // Attempt 1 graded, then the student starts a redo → attempt 2 DRAFT (highest attempt).
+    await p.submission.create({ data: { assignmentId: d.assignment.id, phaseId: d.phase.id, studentId: d.student.id, attempt: 1, status: 'GRADED', videoKey: 'vid1', finalScore: 88, gradedAt: new Date() } })
+    await p.submission.create({ data: { assignmentId: d.assignment.id, phaseId: d.phase.id, studentId: d.student.id, attempt: 2, status: 'DRAFT', videoKey: 'vid2' } })
+
+    const assignments = await assignmentRepo.listForStudent(p, classIds, d.student.id)
+    const phase = assignments.find((a) => a.id === d.assignment.id)!.phases[0]
+    // Raw take-2 fetch keeps the DRAFT on top (highest attempt)…
+    expect(phase.submissions[0].status).toBe('DRAFT')
+    // …but the representative the UI shows is the graded attempt, not 未提交.
+    const rep = representativeSubmission(phase.submissions)
+    expect(rep).toMatchObject({ status: 'GRADED', finalScore: 88 })
+  })
+})
+
+describe('representativeSubmission', () => {
+  it('prefers the latest non-DRAFT attempt over a higher-attempt redo draft', () => {
+    expect(representativeSubmission([{ status: 'DRAFT' }, { status: 'GRADED' }])).toEqual({ status: 'GRADED' })
+  })
+  it('falls back to the in-progress draft when nothing has been submitted yet', () => {
+    expect(representativeSubmission([{ status: 'DRAFT' }])).toEqual({ status: 'DRAFT' })
+  })
+  it('returns null when there are no submissions', () => {
+    expect(representativeSubmission([])).toBeNull()
   })
 })
