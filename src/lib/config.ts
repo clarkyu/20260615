@@ -48,6 +48,13 @@ export const config = {
 // dynamic `env()` helper above is NOT inlined client-side, so it can't be used here.)
 export const APP_VERSION: string = process.env.NEXT_PUBLIC_APP_VERSION || 'dev'
 
+// Public-facing build id: the first 12 chars of the SHA, used anywhere the value is
+// exposed to clients (the /api/version probe + the update gate). Avoids publishing the
+// full 40-char commit SHA (a precise fingerprint) while staying a stable per-build
+// value; 12 hex chars are collision-safe for the update gate's equality check. Both
+// the gate and /api/version MUST use THIS same value so they still match within a build.
+export const APP_VERSION_SHORT: string = APP_VERSION.slice(0, 12)
+
 // ── feature-presence flags (do we have what a feature needs?) ─────────────────
 
 export function storageConfigured(): boolean {
