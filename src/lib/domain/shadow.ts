@@ -83,10 +83,17 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   await withAiKeys(keys, async () => {
   try {
     const scoreByOrder = new Map<number, number>()
+    // Retry dedup: a prior interrupted run may have already scored some takes. Each take
+    // is a PAID perception call, so reuse the stored scores and only grade the ones still
+    // missing one — a reclaimed/retried run no longer re-pays for the whole set (this is
+    // the "句数 × 重试" cost blow-up the audit flagged).
+    for (const tk of submission.shadowTakes) {
+      if (tk.aiScore != null) scoreByOrder.set(tk.order, tk.aiScore)
+    }
+    const pending = submission.shadowTakes.filter((tk) => tk.aiScore == null)
     // Grade in small batches to stay within Worker limits without firing 50 at once.
-    const takes = submission.shadowTakes
-    for (let i = 0; i < takes.length; i += 4) {
-      const batch = takes.slice(i, i + 4)
+    for (let i = 0; i < pending.length; i += 4) {
+      const batch = pending.slice(i, i + 4)
       const results = await Promise.allSettled(
         batch.map(async (tk) => {
           const text = textByOrder.get(tk.order)
