@@ -7,6 +7,7 @@ import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, 
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
 import { resolveAttempt, missingRequiredPart, isPollOnly } from '@/lib/domain/submit'
+import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices } from '@/lib/choices'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
@@ -47,6 +48,12 @@ export async function recordMedia(submissionId: number, kind: MediaKind, sizeByt
   const submission = await submissionRepo.findOwn(prisma, submissionId, user.userId)
   if (!submission) return { error: t('err.subNotFound') }
 
+  // Cost guard (early UX): reject an over-long/over-large recording up front so the
+  // student re-records now, rather than being turned away at submit.
+  if (mediaExceedsLimit(Math.round(sizeBytes), Math.round(durationSec))) {
+    return { error: t('err.mediaTooLarge') }
+  }
+
   await submissionRepo.updateMediaMeta(prisma, submission.id, {
     sizeBytes: Math.round(sizeBytes) || submission.sizeBytes,
     durationSec: Math.round(durationSec) || submission.durationSec,
@@ -68,6 +75,13 @@ export async function finishSubmission(phaseId: number) {
 
   const missing = missingRequiredPart(resolved.requirements, submission)
   if (missing) return { error: t(missing) }
+
+  // Cost gate (authoritative): don't let an over-long/over-large recording reach AI
+  // grading, even if recordMedia was bypassed. Media-agnostic — text/choice-only
+  // submissions have no size/duration and pass through.
+  if (mediaExceedsLimit(submission.sizeBytes, submission.durationSec)) {
+    return { error: t('err.mediaTooLarge') }
+  }
 
   // 纯单选环节：无对错的投票 / 有正确答案的单选题。都不走 AI、不进老师待批队列。
   if (isPollOnly(resolved.requirements)) {
