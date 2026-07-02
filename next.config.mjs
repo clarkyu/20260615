@@ -13,6 +13,11 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // The app records recitations, so camera/mic must be allowed for our own origin.
   { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
+  // Isolate our browsing-context group from cross-origin openers/openees. The only
+  // window.open() (a fire-and-forget export-download tab) ignores the returned handle,
+  // so severing opener access is safe. COEP/CORP are deliberately NOT set — COEP would
+  // break the R2 cross-origin media the app relies on.
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   {
     key: 'Content-Security-Policy',
     value: [
@@ -32,6 +37,8 @@ const securityHeaders = [
 ]
 
 const config = {
+  // Drop the `X-Powered-By: Next.js` framework fingerprint from every response.
+  poweredByHeader: false,
   // Prisma client must not be bundled by Next; it's resolved at runtime.
   serverExternalPackages: ['@prisma/client', '.prisma/client'],
   async headers() {
