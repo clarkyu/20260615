@@ -7,5 +7,16 @@
 #
 # Only /_next/static/* is hashed/immutable — the public icons & manifest keep default
 # caching so a future icon/manifest change isn't pinned stale in browsers.
+#
+# Security headers: static assets are served by the Workers Assets binding and never
+# reach the Worker, so next.config's headers() (which set these on dynamic routes)
+# can't cover them. Re-declare the transport-safety headers here so EVERY response —
+# hashed chunks, icons, manifest — carries them. nosniff matters for .js/.css/.map
+# MIME handling; HSTS keeps the whole origin (incl. bare-asset loads) on TLS and is a
+# prerequisite for hstspreload.org submission (every response must assert it).
+/*
+  X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
