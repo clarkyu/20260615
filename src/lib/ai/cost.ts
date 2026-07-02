@@ -11,11 +11,14 @@ interface Rate {
   outputPerM: number
   currency: 'USD' | 'CNY'
   perMinuteUsd?: number
+  // Gemini bills AUDIO input at a premium over text/image/video input; when set, audio
+  // tokens use this rate instead of inputPerM (otherwise audio is under-estimated ~3×).
+  audioInputPerM?: number
 }
 
 export const MODEL_RATES: Record<string, Rate> = {
-  'gemini-2.5-flash': { inputPerM: 0.3, outputPerM: 2.5, currency: 'USD' },
-  'gemini-3-flash-preview': { inputPerM: 0.5, outputPerM: 3.0, currency: 'USD' },
+  'gemini-2.5-flash': { inputPerM: 0.3, outputPerM: 2.5, currency: 'USD', audioInputPerM: 1.0 },
+  'gemini-3-flash-preview': { inputPerM: 0.5, outputPerM: 3.0, currency: 'USD', audioInputPerM: 1.0 },
   'gemini-3.5-flash': { inputPerM: 1.5, outputPerM: 9.0, currency: 'USD' },
   'gemini-2.5-pro': { inputPerM: 1.875, outputPerM: 12.5, currency: 'USD' },
   'gemini-3.1-pro-preview': { inputPerM: 3.0, outputPerM: 15.0, currency: 'USD' },
@@ -57,8 +60,11 @@ export interface GradingEstimate {
   cny: number
 }
 
-// 预估一个环节「全部 AI 评阅」的用量与费用。输入按感知模型单价、输出按评分模型单价；
-// whisper 这种按分钟计的感知模型用 perMinuteUsd。币种不同的统一折成 USD（再给出 CNY）。
+// 预估一个环节「全部 AI 评阅」的用量与费用。评阅是两段式（感知 perceive → 评分 judge），
+// 这里把两段都算上：感知输入(媒体+参考句)+感知输出(转写)按感知模型单价，评分输入(转写+
+// 评分标准+参考句+背诵文本)+评分输出(分数+评语)按评分模型单价。Gemini 音频按音频单价、
+// 其余输入按基础单价。whisper 这种按分钟计的感知模型用 perMinuteUsd（转写不另计 token 输出）。
+// 币种不同的统一折成 USD（再给出 CNY）。仍是「约」——真实用量以各家控制台账单为准。
 export function estimateGrading(
   subs: SubInput[],
   opts: { perceptionModel: string; judgeModel: string; rubricLen: number; sentencesLen: number },
@@ -67,28 +73,47 @@ export function estimateGrading(
   const jr = MODEL_RATES[opts.judgeModel]
   const refTok = Math.ceil((Math.max(0, opts.rubricLen) + Math.max(0, opts.sentencesLen)) / TOK.charsPerToken)
 
-  let inputTokens = 0
-  let outputTokens = 0
+  let percOtherInput = 0 // 感知输入里按基础单价计的部分（视频/图/文）
+  let percAudioInput = 0 // 感知输入里的音频（按音频单价，Gemini 有溢价）
+  let perceptionOutput = 0 // 感知输出（转写）
+  let judgeInput = 0 // 评分输入（转写 + 参考材料 + 背诵文本）
+  let judgeOutput = 0 // 评分输出（分数 + 评语）
   let whisperMin = 0
   for (const s of subs) {
     let media = 0
     if (s.hasVideo) media += (s.durationSec || TOK.defaultVideoSec) * TOK.videoPerSec
+    if (s.hasImage) media += TOK.imageTokens
     if (s.hasAudio) {
       const sec = s.durationSec || TOK.defaultAudioSec
-      media += sec * TOK.audioPerSec
+      percAudioInput += sec * TOK.audioPerSec
       whisperMin += sec / 60
     }
-    if (s.hasImage) media += TOK.imageTokens
-    inputTokens += media + Math.ceil(Math.max(0, s.recitedLen) / TOK.charsPerToken) + refTok
-    outputTokens += TOK.outputPerSub
+    const recited = Math.ceil(Math.max(0, s.recitedLen) / TOK.charsPerToken)
+    percOtherInput += media + recited + refTok
+    perceptionOutput += TOK.outputPerSub
+    // 评分阶段要重读感知转写 + 参考材料 + 背诵文本——这段此前完全没算进去。
+    judgeInput += refTok + TOK.outputPerSub + recited
+    judgeOutput += TOK.outputPerSub
   }
 
   const toUsd = (amt: number, cur: 'USD' | 'CNY') => (cur === 'USD' ? amt : amt / CNY_PER_USD)
   let usd = 0
-  if (pr?.perMinuteUsd) usd += whisperMin * pr.perMinuteUsd
-  else if (pr) usd += toUsd((inputTokens / 1e6) * pr.inputPerM, pr.currency)
-  if (jr) usd += toUsd((outputTokens / 1e6) * jr.outputPerM, jr.currency)
+  // 感知：whisper 按分钟；其余按 token（音频用音频单价）。
+  if (pr?.perMinuteUsd) {
+    usd += whisperMin * pr.perMinuteUsd
+  } else if (pr) {
+    usd += toUsd((percOtherInput / 1e6) * pr.inputPerM, pr.currency)
+    usd += toUsd((percAudioInput / 1e6) * (pr.audioInputPerM ?? pr.inputPerM), pr.currency)
+    usd += toUsd((perceptionOutput / 1e6) * pr.outputPerM, pr.currency)
+  }
+  // 评分：输入 + 输出。
+  if (jr) {
+    usd += toUsd((judgeInput / 1e6) * jr.inputPerM, jr.currency)
+    usd += toUsd((judgeOutput / 1e6) * jr.outputPerM, jr.currency)
+  }
 
+  const inputTokens = percOtherInput + percAudioInput + judgeInput
+  const outputTokens = perceptionOutput + judgeOutput
   return {
     count: subs.length,
     inputTokens,
