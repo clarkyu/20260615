@@ -6,11 +6,12 @@ const sub = (over: Partial<{ hasVideo: boolean; hasAudio: boolean; hasImage: boo
 })
 
 describe('estimateGrading', () => {
-  it('counts video by duration and scales with the number of submissions', () => {
+  it('counts both stages (perception + judge) and scales with the number of submissions', () => {
     const one = estimateGrading([sub({ hasVideo: true, durationSec: 60 })], { perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash', rubricLen: 0, sentencesLen: 0 })
-    // 60s × 260 tok/s = 15600 input; output 400.
-    expect(one.inputTokens).toBe(15600)
-    expect(one.outputTokens).toBe(400)
+    // perception: 60s×260 = 15600 input + 400 output (transcript);
+    // judge: 400 input (re-reads the transcript — previously uncounted) + 400 output.
+    expect(one.inputTokens).toBe(16000) // 15600 perception + 400 judge input
+    expect(one.outputTokens).toBe(800) //  400 perception + 400 judge
     expect(one.usd).toBeGreaterThan(0)
 
     const three = estimateGrading([sub({ hasVideo: true, durationSec: 60 }), sub({ hasVideo: true, durationSec: 60 }), sub({ hasVideo: true, durationSec: 60 })], { perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash', rubricLen: 0, sentencesLen: 0 })
@@ -19,7 +20,15 @@ describe('estimateGrading', () => {
 
   it('falls back to a default duration when none was recorded', () => {
     const e = estimateGrading([sub({ hasVideo: true, durationSec: 0 })], { perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash', rubricLen: 0, sentencesLen: 0 })
-    expect(e.inputTokens).toBe(60 * 260) // defaultVideoSec
+    expect(e.inputTokens).toBe(60 * 260 + 400) // defaultVideoSec (15600) + judge input (400)
+  })
+
+  it('prices Gemini audio at its audio rate, not the cheaper text/video input rate', () => {
+    expect(MODEL_RATES['gemini-2.5-flash'].audioInputPerM).toBe(1.0)
+    // 60s audio = 1500 tok. At the $1.0/M audio rate (not $0.30/M base) plus the other
+    // stage costs, the total clears a bound the under-priced version could not.
+    const e = estimateGrading([sub({ hasAudio: true, durationSec: 60 })], { perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash', rubricLen: 0, sentencesLen: 0 })
+    expect(e.usd).toBeGreaterThan(0.0033)
   })
 
   it('prices whisper perception by audio minutes, not tokens', () => {
