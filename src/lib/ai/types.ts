@@ -46,11 +46,21 @@ export interface PerSentenceResult {
   accuracy: number // 0..1
 }
 
+// Real token usage reported by the provider for ONE API call (input=prompt tokens,
+// output=completion tokens). Optional: whisper (per-minute) and any provider that
+// doesn't surface usage leave it undefined. Captured so real spend is observable
+// instead of only estimated — it rides along in the persisted aiResult.
+export interface TokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+}
+
 export interface PerceptionResult {
   transcript: string
   perSentence: PerSentenceResult[]
   pronunciationImpression?: string
   observations: PerceptionObservation
+  usage?: TokenUsage
   raw?: unknown
 }
 
@@ -70,6 +80,7 @@ export interface JudgeResult {
   // Model's self-rated certainty (0..1). Drives "AI-first grading": high-confidence
   // clean submissions can skip the teacher queue; everything else is reviewed.
   confidence?: number
+  usage?: TokenUsage
   raw?: unknown
 }
 

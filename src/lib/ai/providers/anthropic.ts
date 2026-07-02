@@ -41,9 +41,10 @@ export const claudeJudge: JudgeProvider = {
       signal: AbortSignal.timeout(180_000),
     })
     if (!res.ok) throw new Error(`claude ${res.status}: ${(await res.text()).slice(0, 300)}`)
-    const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+    const data = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } }
     const text = data.content?.find((c) => c.type === 'text')?.text
     if (!text) throw new Error('模型无有效返回')
-    return normalizeJudge(JSON.parse(stripCodeFence(text)), input.maxScore)
+    const usage = data.usage ? { inputTokens: Number(data.usage.input_tokens) || 0, outputTokens: Number(data.usage.output_tokens) || 0 } : undefined
+    return { ...normalizeJudge(JSON.parse(stripCodeFence(text)), input.maxScore), usage }
   },
 }
