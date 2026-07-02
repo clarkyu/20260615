@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getDb } from '@/lib/db'
 import { config } from '@/lib/config'
+import { timingSafeEqual } from '@/lib/safe-compare'
 import { deleteObject, storageConfigured } from '@/lib/storage'
 import { sweepExpiredMedia } from '@/lib/domain/retention'
 
@@ -10,7 +11,7 @@ import { sweepExpiredMedia } from '@/lib/domain/retention'
 // positive VIDEO_RETENTION_DAYS are set, so no deploy ever silently wipes recordings.
 export async function POST(req: NextRequest) {
   const secret = config.cronSecret()
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
+  if (!secret || !timingSafeEqual(req.headers.get('authorization') ?? '', `Bearer ${secret}`)) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
   const days = config.videoRetentionDays()

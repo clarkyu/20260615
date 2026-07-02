@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { config } from '@/lib/config'
+import { timingSafeEqual } from '@/lib/safe-compare'
 import { getDb } from '@/lib/db'
 import { runAfterResponse } from '@/lib/cf'
 import { drainGradingJobs } from '@/lib/domain/jobs'
@@ -12,7 +13,7 @@ import { drainGradingJobs } from '@/lib/domain/jobs'
 // the queue is durable + self-healing. Protected by CRON_SECRET.
 export async function POST(req: NextRequest) {
   const secret = config.cronSecret()
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
+  if (!secret || !timingSafeEqual(req.headers.get('authorization') ?? '', `Bearer ${secret}`)) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
   await runAfterResponse(async () => {

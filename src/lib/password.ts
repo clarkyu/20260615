@@ -4,6 +4,8 @@
 // Cloudflare caps PBKDF2 at 100k iterations; that's our cost. Stored format:
 //   pbkdf2$<iterations>$<saltB64>$<hashB64>
 
+import { timingSafeEqual } from './safe-compare'
+
 const ITERATIONS = 100_000
 const SALT_BYTES = 16
 const KEY_BITS = 256
@@ -25,13 +27,6 @@ async function deriveBits(password: string, salt: Uint8Array, iterations = ITERA
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt as BufferSource, iterations, hash: 'SHA-256' }, key, KEY_BITS)
   return new Uint8Array(bits)
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return diff === 0
 }
 
 export async function hashPassword(password: string, iterations = ITERATIONS): Promise<string> {
