@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RateLimitStore, checkRateLimit, extractClientIp } from '@/lib/rate-limit'
+import { RateLimitStore, checkRateLimit, extractClientIp, PRACTICE_DAILY_MAX } from '@/lib/rate-limit'
 
 describe('checkRateLimit', () => {
   it('allows up to the limit then blocks within the window', () => {
@@ -15,6 +15,25 @@ describe('checkRateLimit', () => {
     expect(checkRateLimit(store, 'a', 1, 60_000)).toBe(true)
     expect(checkRateLimit(store, 'a', 1, 60_000)).toBe(false)
     expect(checkRateLimit(store, 'b', 1, 60_000)).toBe(true)
+  })
+})
+
+describe('practice cap', () => {
+  const DAY = 24 * 60 * 60_000
+  it('is a sane, generous bound (never trips genuine repeated practice)', () => {
+    expect(PRACTICE_DAILY_MAX).toBeGreaterThanOrEqual(20)
+    expect(PRACTICE_DAILY_MAX).toBeLessThanOrEqual(200)
+  })
+
+  it('allows PRACTICE_DAILY_MAX rounds per (student, phase) window then blocks', () => {
+    const store = new RateLimitStore()
+    const key = 'practice:7:42'
+    for (let i = 0; i < PRACTICE_DAILY_MAX; i++) {
+      expect(checkRateLimit(store, key, PRACTICE_DAILY_MAX, DAY)).toBe(true)
+    }
+    expect(checkRateLimit(store, key, PRACTICE_DAILY_MAX, DAY)).toBe(false)
+    // A different phase (or student) has its own independent budget.
+    expect(checkRateLimit(store, 'practice:7:43', PRACTICE_DAILY_MAX, DAY)).toBe(true)
   })
 })
 

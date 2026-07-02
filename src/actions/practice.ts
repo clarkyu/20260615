@@ -8,6 +8,7 @@ import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { withAiKeys } from '@/lib/ai/key-context'
+import { rateLimitPractice } from '@/lib/rate-limit'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 import * as practiceRepo from '@/lib/repo/practice'
@@ -62,6 +63,12 @@ export async function gradePracticeAttempt(
   const phase = await assignmentRepo.findPhaseWithSentencesForClasses(prisma, phaseId, classIds)
   if (!phase) return { status: 'error', message: t('err.assignNotFound') }
   const assignmentId = phase.assignment.id
+
+  // Cost guard: practice is unlimited by design but every round costs ~2 AI calls, so
+  // cap it per (student, phase) per rolling 24h before doing any presign/AI work.
+  if (!(await rateLimitPractice(user.userId, phaseId))) {
+    return { status: 'error', message: t('err.practiceLimit') }
+  }
 
   // Security: only presign a key that demonstrably belongs to THIS student under
   // THIS phase's practice prefix — never trust an arbitrary client-supplied key.
