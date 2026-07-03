@@ -124,6 +124,18 @@ export function estimateGrading(
   }
 }
 
+// 真实成本（USD）：给定一次模型调用的【实际】token 用量，按 MODEL_RATES 折算。用于把
+// provider 回报的真实用量换成钱、落库观测。与 estimateGrading 的事前估算不同——这里吃的是
+// 真实 token。whisper（按分钟、token 单价为 0）在这里得 0（其音频成本不走 token）；未知模型
+// 也得 0。注意：provider 回报的是总 promptTokens，不区分模态，故音频溢价无法施加于真实用量，
+// 这里一律用基础 inputPerM（对音频重的调用会略微低估）。
+export function costUsd(modelId: string, inputTokens: number, outputTokens: number): number {
+  const r = MODEL_RATES[modelId]
+  if (!r) return 0
+  const raw = (Math.max(0, inputTokens) / 1e6) * r.inputPerM + (Math.max(0, outputTokens) / 1e6) * r.outputPerM
+  return r.currency === 'CNY' ? raw / CNY_PER_USD : raw
+}
+
 // 紧凑展示 token 数（语言中立，避免在 en/es 里出现中文「万」）：≥1M → X.XM，≥1k → Xk。
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

@@ -9,6 +9,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
 import { gradeSubmission } from '@/lib/ai/grade'
+import { costUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { presignDownload, storageConfigured } from '@/lib/storage'
@@ -169,6 +170,17 @@ export async function autoGradeSubmission(
       freePractice: submission.phase?.freePractice ?? false,
     })
 
+    // Real usage/cost from the providers (perception + judge). Absent when a provider
+    // didn't report usage (or per-minute whisper) → persist null rather than a fake 0.
+    const pu = result.perception.usage
+    const ju = result.judge.usage
+    const inputTokens = (pu?.inputTokens ?? 0) + (ju?.inputTokens ?? 0)
+    const outputTokens = (pu?.outputTokens ?? 0) + (ju?.outputTokens ?? 0)
+    const cost =
+      costUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+      costUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    const hasUsage = Boolean(pu || ju)
+
     await submissionRepo.applyGradeResult(prisma, submission.id, {
       status: decision.status,
       needsReview: decision.needsReview,
@@ -182,6 +194,9 @@ export async function autoGradeSubmission(
       finalScore: submission.teacherScore ?? result.judge.score,
       feedback: result.judge.feedback,
       gradedById: opts.graderUserId ?? null,
+      inputTokens: hasUsage ? inputTokens : null,
+      outputTokens: hasUsage ? outputTokens : null,
+      costUsd: hasUsage ? cost : null,
     })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {

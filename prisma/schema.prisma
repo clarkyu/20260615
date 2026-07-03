@@ -390,6 +390,12 @@ model Submission {
   aiResult        String?
   aiScore         Float?
   confidence      Float?
+  // Real token usage + cost of this grade (perception + judge), captured from the
+  // providers' responses. Null for legacy rows, per-minute models (whisper), or any
+  // provider that didn't report usage. Drives spend observability.
+  inputTokens     Int?
+  outputTokens    Int?
+  costUsd         Float?
   needsReview     Boolean   @default(false)
   teacherScore    Float?
   finalScore      Float?
