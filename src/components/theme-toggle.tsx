@@ -29,7 +29,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={t('theme.toggle')}
       aria-pressed={dark}
-      className="tap grid h-8 w-8 place-items-center rounded-full border border-border bg-card text-muted-foreground"
+      className="tap grid h-9 w-9 place-items-center rounded-full border border-border bg-card text-muted-foreground"
     >
       {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>

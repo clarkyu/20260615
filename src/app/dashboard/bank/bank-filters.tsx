@@ -1,11 +1,11 @@
 'use client'
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { Select } from '@/components/ui/select'
 import { X, Video } from 'lucide-react'
 import { CEFR_LEVELS, STRANDS, DOMAINS } from '@/lib/curriculum/taxonomy'
 import { useT } from '@/components/i18n-provider'
 
-const SELECT = 'h-9 shrink-0 rounded-lg border border-input bg-background px-2.5 text-sm'
 const speakingStrands = STRANDS.filter((s) => s.parent === 'english.speaking')
 
 // URL-driven filters for the bank index. Each select writes its value into the
@@ -32,23 +32,23 @@ export function BankFilters({ cefr, strand, domain, series, video, seriesOptions
     <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <span className="shrink-0 text-xs text-muted-foreground">{t('bank.filter')}</span>
       {seriesOptions.length > 0 ? (
-        <select aria-label={t('bank.series')} value={series ?? ''} onChange={(e) => set('series', e.target.value)} className={SELECT}>
+        <Select aria-label={t('bank.series')} value={series ?? ''} onChange={(e) => set('series', e.target.value)} className="h-9 w-auto shrink-0 rounded-lg px-2.5">
           <option value="">{t('bank.series')}</option>
           {seriesOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        </Select>
       ) : null}
-      <select aria-label={t('bank.level')} value={cefr ?? ''} onChange={(e) => set('cefr', e.target.value)} className={SELECT}>
+      <Select aria-label={t('bank.level')} value={cefr ?? ''} onChange={(e) => set('cefr', e.target.value)} className="h-9 w-auto shrink-0 rounded-lg px-2.5">
         <option value="">{t('bank.level')}</option>
         {CEFR_LEVELS.map((l) => <option key={l.band} value={l.band}>{l.label}</option>)}
-      </select>
-      <select aria-label={t('bank.skill')} value={strand ?? ''} onChange={(e) => set('strand', e.target.value)} className={SELECT}>
+      </Select>
+      <Select aria-label={t('bank.skill')} value={strand ?? ''} onChange={(e) => set('strand', e.target.value)} className="h-9 w-auto shrink-0 rounded-lg px-2.5">
         <option value="">{t('bank.skill')}</option>
         {speakingStrands.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-      </select>
-      <select aria-label={t('bank.domain')} value={domain ?? ''} onChange={(e) => set('domain', e.target.value)} className={SELECT}>
+      </Select>
+      <Select aria-label={t('bank.domain')} value={domain ?? ''} onChange={(e) => set('domain', e.target.value)} className="h-9 w-auto shrink-0 rounded-lg px-2.5">
         <option value="">{t('bank.domain')}</option>
         {DOMAINS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-      </select>
+      </Select>
       <button
         type="button"
         onClick={() => set('video', videoOn ? '' : '1')}

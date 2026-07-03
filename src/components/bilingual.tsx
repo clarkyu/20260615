@@ -98,23 +98,33 @@ export function BilingualChunk({ chunk, lang }: { chunk: BiChunk; lang: ChunkLan
   )
 }
 
-// A numbered, toggle-headed list of chunks — for the server-rendered teacher bank
-// detail + assignment preview (they pass plain chunk rows; the toggle state lives here).
-export function BilingualChunkList({ chunks, title }: { chunks: BiChunk[]; title?: string }) {
-  const t = useT()
-  const [lang, setLang] = useChunkLang()
+// One chunk row with its OWN 中英文开关 above the sentence — each sentence carries its
+// own toggle (per-sentence, not a single fixed control), so the reader flips languages
+// sentence by sentence. Defaults to 「both」; the choice is per-row and independent.
+function BilingualChunkRow({ chunk, index }: { chunk: BiChunk; index: number }) {
+  const [lang, setLang] = useState<ChunkLang>('both')
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 p-3.5 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">{title ?? t('bank.chunkList')}</h2>
+        <span className="text-xs font-medium text-muted-foreground tabular-nums">{index + 1}</span>
         <ChunkLangToggle value={lang} onChange={setLang} />
       </div>
-      <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60">
+      <BilingualChunk chunk={chunk} lang={lang} />
+    </div>
+  )
+}
+
+// A numbered list of chunks, each with its own per-sentence language toggle on top —
+// for the server-rendered teacher bank detail + assignment preview (they pass plain
+// chunk rows; each row owns its toggle state).
+export function BilingualChunkList({ chunks, title }: { chunks: BiChunk[]; title?: string }) {
+  const t = useT()
+  return (
+    <div className="space-y-2">
+      <h2 className="text-sm font-semibold text-muted-foreground">{title ?? t('bank.chunkList')}</h2>
+      <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
         {chunks.map((c, i) => (
-          <div key={i} className="flex gap-3 p-3.5 text-sm">
-            <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{i + 1}</span>
-            <BilingualChunk chunk={c} lang={lang} />
-          </div>
+          <BilingualChunkRow key={i} chunk={c} index={i} />
         ))}
       </div>
     </div>

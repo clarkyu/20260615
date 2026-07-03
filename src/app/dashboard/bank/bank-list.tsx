@@ -58,7 +58,7 @@ function SetRow({ s, favorited, onToggleFav, favBusy }: { s: BankSet; favorited:
         aria-label={t('bank.favorite')}
         className="tap grid h-12 w-11 shrink-0 place-items-center text-muted-foreground"
       >
-        <Star className={'h-4 w-4 ' + (favorited ? 'fill-[hsl(var(--warning))] text-[hsl(var(--warning))]' : '')} />
+        <Star className={'h-4 w-4 ' + (favorited ? 'fill-warning text-warning' : '')} />
       </button>
       <Link href={`/dashboard/bank/${s.id}`} className="tap grid h-12 w-8 shrink-0 place-items-center"><ChevronRight className="h-5 w-5 text-muted-foreground" /></Link>
     </div>
@@ -132,9 +132,9 @@ export function BankList({
       <BankFilters cefr={cefr} strand={strand} domain={domain} series={series} video={video} seriesOptions={seriesOptions} />
 
       {favorites.length > 0 && !filtered && !query ? (
-        <section className="overflow-hidden rounded-2xl border border-[hsl(var(--warning))]/30 bg-warning/5">
+        <section className="overflow-hidden rounded-lg border border-warning/30 bg-warning/5">
           <div className="flex items-center gap-2.5 px-4 py-3 text-sm font-semibold">
-            <Star className="h-4 w-4 fill-[hsl(var(--warning))] text-[hsl(var(--warning))]" />{t('bank.favorites')}
+            <Star className="h-4 w-4 fill-warning text-warning" />{t('bank.favorites')}
           </div>
           <div className="divide-y divide-border/50 border-t border-border/50">
             {favorites.map((s) => row(s))}
@@ -143,7 +143,7 @@ export function BankList({
       ) : null}
 
       {recent.length > 0 && !filtered && !query ? (
-        <section className="overflow-hidden rounded-2xl border border-primary/30 bg-primary/5">
+        <section className="overflow-hidden rounded-lg border border-primary/30 bg-primary/5">
           <div className="flex items-center gap-2.5 px-4 py-3 text-sm font-semibold">
             <Clock className="h-4 w-4 text-primary" />{t('bank.recentlyUsed')}
           </div>
@@ -161,7 +161,7 @@ export function BankList({
             const open = expanded.has(key) || query.length > 0
             const range = levelRange(gs)
             return (
-              <section key={key || 'ungrouped'} className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+              <section key={key || 'ungrouped'} className="overflow-hidden rounded-lg border border-border/60 bg-card">
                 <button
                   type="button"
                   onClick={() => toggle(key)}

@@ -4,9 +4,12 @@ import { useActionState, useEffect, useRef, useState } from 'react'
 import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Check, Video, Eye, Mic, PenLine, Camera } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
+import { modelsForCapability } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
+import { useConfirm, confirmSubmit } from '@/components/ui/confirm'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -32,6 +35,10 @@ export interface PhaseInitial {
   // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
   correctIndex: number
   requireFreeText: boolean
+  // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
+  rubric: string
+  perceptionModel: string
+  judgeModel: string
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -50,6 +57,10 @@ export interface AssignmentInitial {
 }
 
 const CATEGORY_PRESETS = ['背诵作业', '口语作业', '书面作业', '试卷作业', '听写作业', '默写作业']
+
+// 评分模型可选项（纯静态目录，客户端直接读 registry）。空选项 = 跟随作业/平台默认。
+const PERCEPTION_MODELS = modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))
+const JUDGE_MODELS = modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))
 
 // Open/due times round-trip through the browser, where the timezone is known. A
 // `datetime-local` input is a *local* wall-clock; a UTC server would otherwise read
@@ -87,6 +98,10 @@ interface PhaseState {
   // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
   correctIndex: number
   requireFreeText: boolean
+  // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
+  rubric: string
+  perceptionModel: string
+  judgeModel: string
   graded: boolean
   maxAttempts: number
   isFormalTest: boolean
@@ -113,6 +128,9 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     choices: [],
     correctIndex: -1,
     requireFreeText: false,
+    rubric: '',
+    perceptionModel: '',
+    judgeModel: '',
     graded: true,
     maxAttempts: 3,
     isFormalTest: false,
@@ -137,6 +155,7 @@ export function AssignmentForm({
   chunkSet?: { id: number; name: string; count: number; hasVideo: boolean }
 }) {
   const t = useT()
+  const confirm = useConfirm()
   // `initial` with an id = editing an existing assignment; `initial` without an id =
   // prefilling a NEW publish from a template (still create mode).
   const editing = Boolean(initial?.id)
@@ -216,6 +235,9 @@ export function AssignmentForm({
       // 正确答案存「选项文本」（与学生作答 recitedText 同形，便于判分）；-1 或空选项 → 仅投票。
       correctChoice: p.requireChoice && p.correctIndex >= 0 ? (p.choices[p.correctIndex]?.trim() || null) : null,
       requireFreeText: p.requireFreeText,
+      rubric: p.rubric.trim() || null,
+      perceptionModel: p.perceptionModel || null,
+      judgeModel: p.judgeModel || null,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,
@@ -240,6 +262,18 @@ export function AssignmentForm({
   const wizard = !editing
   const [step, setStep] = useState(0)
   const STEP_KEYS = ['asg.stepBasic', 'asg.stepPhases', 'asg.stepReview']
+
+  // 确认步「发布前小结」用：把每个环节的提交类型拼成一句话；勾选的发布目标班级。
+  const kindsOf = (p: PhaseState) =>
+    [
+      p.requireVideo && t('asg.kindVideo'),
+      p.requireAudio && t('asg.kindAudio'),
+      p.requireText && t('asg.kindText'),
+      p.requireHandwriting && t('asg.kindHandwriting'),
+      p.requireChoice && t('asg.kindChoice'),
+      p.requireFreeText && t('asg.kindFreeText'),
+    ].filter(Boolean).join(' / ')
+  const targetLabels = (targets ?? []).filter((tg) => selected.has(tg.offeringId)).map((tg) => tg.label)
 
   // The month list + default — computed in an effect (not during render) so a UTC
   // server and the teacher's local-TZ browser can't disagree at hydration.
@@ -332,12 +366,12 @@ export function AssignmentForm({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>
-              <select id="monthLabel" name="monthLabel" value={month} onChange={(e) => setMonth(e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
+              <Select id="monthLabel" name="monthLabel" value={month} onChange={(e) => setMonth(e.target.value)} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm">
                 <option value="">{t('asg.monthNone')}</option>
                 {monthOptions.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             </div>
 
@@ -367,6 +401,31 @@ export function AssignmentForm({
             </div>
 
             <div className={wizard && step !== 2 ? 'hidden' : 'space-y-4'}>
+              {/* 发布前小结：标题 / 发到哪个班 / 各环节提交类型与截止——发布前再核一遍。 */}
+              {wizard ? (
+                <div className="space-y-2 rounded-lg border border-border/70 bg-secondary/40 p-3 text-sm">
+                  <div className="text-xs font-semibold text-muted-foreground">{t('asg.summaryTitle')}</div>
+                  <div><span className="text-muted-foreground">{t('asg.fTitle')}：</span><span className="font-medium">{title.trim() || t('asg.summaryNoTitle')}</span></div>
+                  {targetLabels.length > 0 ? (
+                    <div><span className="text-muted-foreground">{t('asg.publishTo')}：</span>{targetLabels.join('、')}</div>
+                  ) : null}
+                  <div>
+                    <span className="text-muted-foreground">{t('asg.phases')}：</span>{phases.length} {t('asg.phaseUnit')}
+                    <ul className="mt-1 space-y-1">
+                      {phases.map((p, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs">
+                          <span className="shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
+                          <span className="min-w-0">
+                            <span className="font-medium">{p.title.trim() || t('phase.nth', { n: i + 1 })}</span>
+                            {kindsOf(p) ? <span className="text-muted-foreground"> · {kindsOf(p)}</span> : null}
+                            {p.dueAt ? <span className="text-muted-foreground"> · {t('asg.due')} {p.dueAt.replace('T', ' ')}</span> : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
               {!editing ? (
                 <div className="space-y-2 rounded-xl border border-input p-3">
                   <label className="flex items-center gap-2.5 text-sm">
@@ -402,7 +461,7 @@ export function AssignmentForm({
       {editing ? (
         <Card className="border-destructive/40">
           <CardContent className="p-4">
-            <form action={deleteAssignment} onSubmit={(e) => { if (!confirm(t('asg.deleteConfirm'))) e.preventDefault() }}>
+            <form action={deleteAssignment} onSubmit={confirmSubmit(confirm, { body: t('asg.deleteConfirm'), danger: true })}>
               <input type="hidden" name="assignmentId" value={initial!.id ?? ""} />
               <SubmitButton variant="destructive" className="w-full">{t('asg.delete')}</SubmitButton>
             </form>
@@ -498,7 +557,7 @@ function PhaseCard({
               </div>
             </div>
           ) : (
-            <Textarea rows={5} value={phase.sentences} onChange={(e) => onPatch({ sentences: e.target.value })} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} />
+            <Textarea rows={5} value={phase.sentences} onChange={(e) => onPatch({ sentences: e.target.value })} placeholder={'1. The early bird catches the worm.\n2. Actions speak louder than words.'} aria-label={t('asg.fSentences')} />
           )}
         </div>
       ) : (
@@ -550,7 +609,7 @@ function PhaseCard({
           {submitParts.length > 0 ? (
             <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">{t('asg.willSubmit')}{submitParts.join(' + ')}</p>
           ) : (
-            <p className="border-t border-border/50 pt-2 text-xs text-[hsl(var(--warning))]">{t('asg.needKind')}</p>
+            <p className="border-t border-border/50 pt-2 text-xs text-warning">{t('asg.needKind')}</p>
           )}
         </div>
       </div>
@@ -599,17 +658,23 @@ function PhaseCard({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>{t('asg.fOpenAt')}</Label>
-          <Input type="datetime-local" value={phase.openAt} onChange={(e) => onPatch({ openAt: e.target.value })} />
+          <Input type="datetime-local" value={phase.openAt} onChange={(e) => onPatch({ openAt: e.target.value })} aria-label={t('asg.fOpenAt')} />
         </div>
         <div className="space-y-1.5">
           <Label>{t('asg.fDueAt')}</Label>
-          <Input type="datetime-local" value={phase.dueAt} onChange={(e) => onPatch({ dueAt: e.target.value })} />
+          <Input type="datetime-local" value={phase.dueAt} onChange={(e) => onPatch({ dueAt: e.target.value })} aria-label={t('asg.fDueAt')} />
         </div>
       </div>
+      {/* 进阶项收进「高级设置」，降低手机端默认密度（次数/计入成绩/正式测试/评分配置都有合理默认）。 */}
+      <details className="rounded-xl border border-input">
+        <summary className="tap cursor-pointer p-3 text-sm font-medium">
+          {t('asg.moreSettings')}<span className="ml-1.5 text-xs font-normal text-muted-foreground">{t('asg.moreSettingsHint')}</span>
+        </summary>
+        <div className="space-y-3 border-t border-border/60 p-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>{t('asg.fAttempts')}</Label>
-          <Input type="number" min={1} value={phase.maxAttempts} onChange={(e) => onPatch({ maxAttempts: Math.max(1, Number(e.target.value) || 1) })} />
+          <Input type="number" min={1} value={phase.maxAttempts} onChange={(e) => onPatch({ maxAttempts: Math.max(1, Number(e.target.value) || 1) })} aria-label={t('asg.fAttempts')} />
         </div>
         <label className="flex items-end gap-2.5 pb-2.5 text-sm">
           <input type="checkbox" checked={phase.graded} onChange={(e) => onPatch({ graded: e.target.checked })} className="h-4 w-4 accent-primary" />
@@ -630,6 +695,41 @@ function PhaseCard({
         <input type="checkbox" checked={phase.isFormalTest} onChange={(e) => onPatch({ isFormalTest: e.target.checked })} className="mt-0.5 h-4 w-4 accent-primary" />
         <span>{t('asg.formalTest')}<span className="block text-xs text-muted-foreground">{t('asg.formalTestHint')}</span></span>
       </label>
+
+      {/* 每环节批阅配置（仅音/视频环节走 AI 评阅时有意义）：评分标准 + 感知/评分模型。
+          留空 = 跟随作业/平台默认；评阅时也可在评分页再改。 */}
+      {phase.requireVideo || phase.requireAudio ? (
+        <details className="rounded-xl border border-input">
+          <summary className="tap flex cursor-pointer items-center gap-1.5 p-3 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-primary" />{t('asg.gradeCfg')}
+            <span className="text-xs font-normal text-muted-foreground">{t('asg.gradeCfgHint')}</span>
+          </summary>
+          <div className="space-y-3 border-t border-border/60 p-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>{t('grade.perceptionModel')}</Label>
+                <Select value={phase.perceptionModel} onChange={(e) => onPatch({ perceptionModel: e.target.value })} aria-label={t('grade.perceptionModel')}>
+                  <option value="">{t('asg.modelDefault')}</option>
+                  {PERCEPTION_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t('grade.judgeModel')}</Label>
+                <Select value={phase.judgeModel} onChange={(e) => onPatch({ judgeModel: e.target.value })} aria-label={t('grade.judgeModel')}>
+                  <option value="">{t('asg.modelDefault')}</option>
+                  {JUDGE_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('grade.rubric')}</Label>
+              <Textarea value={phase.rubric} onChange={(e) => onPatch({ rubric: e.target.value })} rows={3} placeholder={t('grade.rubricPh')} />
+            </div>
+          </div>
+        </details>
+      ) : null}
+        </div>
+      </details>
       </div>
     </div>
   )
@@ -672,7 +772,7 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true) } }}
       >
         <CardContent className="flex items-center gap-3 p-4">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">

@@ -153,7 +153,7 @@ export default async function DashboardPage() {
       <Link href="/dashboard/teaching/new-assignment">
         <Card className="tap bg-primary text-primary-foreground hover:shadow-card">
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-white/15">
               <ClipboardPen className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">

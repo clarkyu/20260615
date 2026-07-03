@@ -251,7 +251,7 @@ export function Recorder(props: {
       <Card className="overflow-hidden">
         <CardContent className="space-y-3 p-4">
           {isAudio ? (
-            <div className="relative grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-2xl bg-secondary">
+            <div className="relative grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-lg bg-secondary">
               <Mic className={'h-16 w-16 ' + (phase === 'recording' ? 'animate-pulse text-red-500' : 'text-muted-foreground')} />
               {phase === 'recording' ? (
                 <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-foreground/80 px-2.5 py-1 text-xs font-semibold text-background">
@@ -267,7 +267,7 @@ export function Recorder(props: {
               {phase === 'recorded' ? <audio ref={audioRef} className="absolute bottom-3 left-3 right-3 w-auto" /> : null}
             </div>
           ) : (
-            <div className="relative overflow-hidden rounded-2xl bg-black">
+            <div className="relative overflow-hidden rounded-lg bg-black">
               <video ref={videoRef} playsInline className={'aspect-[3/4] w-full object-cover ' + (live ? '-scale-x-100' : '')} />
               {phase === 'recording' ? (
                 <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-semibold text-white">

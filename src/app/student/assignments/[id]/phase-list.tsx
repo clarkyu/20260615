@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ChevronRight, CheckCircle2, Circle, Lock } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { getT } from '@/lib/i18n-server'
+import { representativeSubmission } from '@/lib/domain/submit'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -39,7 +40,7 @@ export async function PhaseList({ assignment }: { assignment: PhaseListData }) {
 
       <ol className="space-y-2.5">
         {assignment.phases.map((p, i) => {
-          const latest = p.submissions[0]
+          const latest = representativeSubmission(p.submissions)
           const done = latest ? DONE.includes(latest.status) : false
           const notOpen = p.openAt ? now < p.openAt : false
           const closed = p.dueAt ? now > p.dueAt : false

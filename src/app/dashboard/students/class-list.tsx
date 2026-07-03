@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronRight, Search } from 'lucide-react'
 import { useT } from '@/components/i18n-provider'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 
 export interface ClassItem {
   id: number
@@ -15,7 +16,6 @@ export interface ClassItem {
   count: number
 }
 
-const SELECT = 'h-10 w-full rounded-xl border border-input bg-background px-2 text-sm'
 
 // Distinct, sorted non-empty values of a field across the classes.
 function distinctValues(classes: ClassItem[], pick: (c: ClassItem) => string | null) {
@@ -54,18 +54,18 @@ export function ClassList({ classes }: { classes: ClassItem[] }) {
     <div className="space-y-2.5">
       {hasFilters ? (
         <div className="grid grid-cols-3 gap-2">
-          <select value={dept} onChange={(e) => setDept(e.target.value)} className={SELECT} aria-label={t('cls.dept')}>
+          <Select value={dept} onChange={(e) => setDept(e.target.value)} className="h-10 px-2" aria-label={t('cls.dept')}>
             <option value="">{t('filter.allDepts')}</option>
             {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <select value={major} onChange={(e) => setMajor(e.target.value)} className={SELECT} aria-label={t('cls.major')}>
+          </Select>
+          <Select value={major} onChange={(e) => setMajor(e.target.value)} className="h-10 px-2" aria-label={t('cls.major')}>
             <option value="">{t('filter.allMajors')}</option>
             {majors.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <select value={grade} onChange={(e) => setGrade(e.target.value)} className={SELECT} aria-label={t('filter.grade')}>
+          </Select>
+          <Select value={grade} onChange={(e) => setGrade(e.target.value)} className="h-10 px-2" aria-label={t('filter.grade')}>
             <option value="">{t('filter.allGrades')}</option>
             {grades.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
+          </Select>
         </div>
       ) : null}
 

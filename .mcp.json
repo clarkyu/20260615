@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"],
+      "_comment": "shadcn 组件注册表（搜索/预览/新增组件）。本项目的 src/components/ui/* 是手写的、没有 components.json，所以这个 MCP 主要用于「新增」官方/第三方 shadcn 组件，而非匹配现有手写组件。需要完整集成时先 `npx shadcn@latest init`。"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--browser", "chromium"],
+      "_comment": "微软官方 Playwright MCP：让 Claude 在真实浏览器里点/填/截图/查无障碍树，自助验证 UI。本环境已预装 Chromium（PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers）。配合 ui-review skill 跑本地 app。"
+    }
+  }
+}

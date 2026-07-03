@@ -6,11 +6,11 @@ import { renameSchool } from '@/actions/schools'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function StaffSettings({
   staffNo,
@@ -46,12 +46,12 @@ export function StaffSettings({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="departmentId">{t('prof.department')}</Label>
-              <select id="departmentId" name="departmentId" defaultValue={departmentId ?? ''} className={SELECT}>
+              <Select id="departmentId" name="departmentId" defaultValue={departmentId ?? ''}>
                 <option value="">{t('prof.noDept')}</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             {pState?.error ? <FormMessage>{pState.error}</FormMessage> : null}
             {pState?.success ? <FormMessage tone="success">{t('prof.updated')}</FormMessage> : null}

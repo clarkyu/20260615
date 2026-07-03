@@ -5,6 +5,7 @@ import { Link2, Copy, Check, X } from 'lucide-react'
 import { createSchoolInvite, revokeSchoolInvite } from '@/actions/staff'
 import { useT } from '@/components/i18n-provider'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm'
 import { LocalDate } from '@/components/local-date'
 
 type PendingInvite = { id: number; expiresAt: string }
@@ -12,6 +13,7 @@ type PendingInvite = { id: number; expiresAt: string }
 // School-admin: generate a single-use, 7-day invite link, and view/revoke pending ones.
 export function InviteTeacher({ pending = [] }: { pending?: PendingInvite[] }) {
   const t = useT()
+  const confirm = useConfirm()
   const [url, setUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [pendingGen, startGen] = useTransition()
@@ -27,8 +29,8 @@ export function InviteTeacher({ pending = [] }: { pending?: PendingInvite[] }) {
     if (!url) return
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { /* clipboard blocked */ }
   }
-  function revoke(id: number) {
-    if (!confirm(t('teacher.revokeConfirm'))) return
+  async function revoke(id: number) {
+    if (!(await confirm({ body: t('teacher.revokeConfirm'), danger: true }))) return
     startRevoke(async () => {
       const fd = new FormData()
       fd.set('inviteId', String(id))

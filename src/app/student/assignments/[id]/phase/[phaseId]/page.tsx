@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import { representativeSubmission } from '@/lib/domain/submit'
 import { PhaseSubmit } from '../../phase-submit'
 
 // One phase's submit screen (reached from the multi-phase checklist).
@@ -40,7 +41,8 @@ export default async function StudentPhasePage({ params }: { params: Promise<{ i
     const curIdx = overview.phases.findIndex((p) => p.id === pid)
     for (let i = curIdx + 1; i < overview.phases.length; i++) {
       const p = overview.phases[i]
-      const done = p.submissions[0] ? DONE.includes(p.submissions[0].status) : false
+      const rep = representativeSubmission(p.submissions)
+      const done = rep ? DONE.includes(rep.status) : false
       const notOpen = p.openAt ? now < p.openAt : false
       const closed = p.dueAt ? now > p.dueAt : false
       if (!done && !notOpen && !closed) {

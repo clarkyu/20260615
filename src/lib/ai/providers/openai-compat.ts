@@ -6,6 +6,7 @@ import type {
   PerceptionResult,
   JudgeProvider,
   Provider,
+  TokenUsage,
 } from '../types'
 import { buildJudgePrompt, buildPerceptionPrompt, normalizeJudge, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
@@ -81,7 +82,14 @@ export function parseChatJson(data: unknown): unknown {
 
 type Content = string | Array<Record<string, unknown>>
 
-async function chat(cfg: CompatConfig, model: string, messages: { role: string; content: Content }[]): Promise<unknown> {
+// Real token usage from an OpenAI-compatible chat response (undefined when absent).
+export function extractCompatUsage(data: unknown): TokenUsage | undefined {
+  const u = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number } })?.usage
+  if (!u) return undefined
+  return { inputTokens: Number(u.prompt_tokens) || 0, outputTokens: Number(u.completion_tokens) || 0 }
+}
+
+async function chat(cfg: CompatConfig, model: string, messages: { role: string; content: Content }[]): Promise<{ data: unknown; usage?: TokenUsage }> {
   const base = (config.env(cfg.baseUrlEnv) || cfg.baseUrl).replace(/\/$/, '')
   const groupId = cfg.groupIdEnv ? config.env(cfg.groupIdEnv) : undefined
   const url = `${base}${cfg.chatPath}` + (groupId ? `?GroupId=${encodeURIComponent(groupId)}` : '')
@@ -93,7 +101,8 @@ async function chat(cfg: CompatConfig, model: string, messages: { role: string; 
     signal: AbortSignal.timeout(180_000),
   })
   if (!res.ok) throw new Error(`${cfg.provider} ${res.status}: ${(await res.text()).slice(0, 300)}`)
-  return parseChatJson(await res.json())
+  const raw = await res.json()
+  return { data: parseChatJson(raw), usage: extractCompatUsage(raw) }
 }
 
 const JUDGE_JSON_HINT =
@@ -109,7 +118,8 @@ export function makeJudge(cfg: CompatConfig): JudgeProvider {
         { role: 'system', content: '你是英语背诵作业的阅卷老师，只输出 JSON。' },
         { role: 'user', content: buildJudgePrompt(input) + JUDGE_JSON_HINT },
       ]
-      return normalizeJudge(await chat(cfg, modelId, messages), input.maxScore)
+      const { data, usage } = await chat(cfg, modelId, messages)
+      return { ...normalizeJudge(data, input.maxScore), usage }
     },
   }
 }
@@ -129,12 +139,14 @@ export function makePerception(cfg: CompatConfig): PerceptionProvider {
           ],
         },
       ]
-      const json = (await chat(cfg, modelId, messages)) as PerceptionResult
+      const { data, usage } = await chat(cfg, modelId, messages)
+      const json = data as PerceptionResult
       return {
         transcript: json.transcript ?? '',
         perSentence: Array.isArray(json.perSentence) ? json.perSentence : [],
         pronunciationImpression: json.pronunciationImpression,
         observations: json.observations ?? {},
+        usage,
         raw: json,
       }
     },

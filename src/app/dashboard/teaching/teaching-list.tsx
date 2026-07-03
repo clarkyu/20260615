@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { useT } from '@/components/i18n-provider'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 
 export interface OfferingItem {
   id: number
@@ -17,7 +18,6 @@ export interface OfferingItem {
   assignmentCount: number
 }
 
-const SELECT = 'h-10 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function TeachingList({ offerings }: { offerings: OfferingItem[] }) {
   const t = useT()
@@ -49,18 +49,18 @@ export function TeachingList({ offerings }: { offerings: OfferingItem[] }) {
     <div className="space-y-3">
       {(classes.length > 1 || terms.length > 1) ? (
         <div className="grid grid-cols-2 gap-2">
-          <select value={classId} onChange={(e) => setClassId(e.target.value)} className={SELECT} aria-label={t('teach.class')}>
+          <Select value={classId} onChange={(e) => setClassId(e.target.value)} className="h-10" aria-label={t('teach.class')}>
             <option value="">{t('filter.allClasses')}</option>
             {classes.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
-          </select>
-          <select value={term} onChange={(e) => setTerm(e.target.value)} className={SELECT} aria-label={t('teach.semester')}>
+          </Select>
+          <Select value={term} onChange={(e) => setTerm(e.target.value)} className="h-10" aria-label={t('teach.semester')}>
             <option value="">{t('filter.allTerms')}</option>
             {terms.map((tm) => (
               <option key={tm.key} value={tm.key}>{tm.year} {sem(tm.semester)}</option>
             ))}
-          </select>
+          </Select>
         </div>
       ) : null}
 

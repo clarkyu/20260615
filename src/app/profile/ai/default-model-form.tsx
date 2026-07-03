@@ -5,9 +5,9 @@ import { setDefaultModels } from '@/actions/ai-keys'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 
-const SELECT = 'h-11 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function DefaultModelForm({
   perceptionOptions,
@@ -27,17 +27,17 @@ export function DefaultModelForm({
     <form action={action} className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="perception">{t('ai.perceptionModel')}</Label>
-        <select id="perception" name="perception" defaultValue={perception ?? ''} className={SELECT}>
+        <Select id="perception" name="perception" defaultValue={perception ?? ''}>
           <option value="">{t('ai.platformDefault')}</option>
           {perceptionOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="judge">{t('ai.judgeModel')}</Label>
-        <select id="judge" name="judge" defaultValue={judge ?? ''} className={SELECT}>
+        <Select id="judge" name="judge" defaultValue={judge ?? ''}>
           <option value="">{t('ai.platformDefault')}</option>
           {judgeOptions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
+        </Select>
       </div>
       {state?.error ? <FormMessage>{state.error}</FormMessage> : null}
       {state?.ok ? <FormMessage tone="success">{t('ai.saved')}</FormMessage> : null}

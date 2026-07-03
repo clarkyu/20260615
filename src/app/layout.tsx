@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { config, validateConfigOnce, APP_VERSION } from '@/lib/config'
+import { config, validateConfigOnce, APP_VERSION_SHORT } from '@/lib/config'
 import { getLocale } from '@/lib/i18n-server'
 import { parseTzOffset } from '@/lib/time'
 import * as userRepo from '@/lib/repo/users'
@@ -63,7 +63,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         {/* 自动更新闸：发现线上已发新版就整页刷新，避免长期挂着的安装版一直跑旧程序。 */}
-        <VersionGate currentVersion={APP_VERSION} />
+        <VersionGate currentVersion={APP_VERSION_SHORT} />
         {/* Ambient backdrop only on the logged-out / auth surfaces (login, register,
             forgot/reset, join) — exactly the pages an unauthenticated visitor sees. */}
         {!user ? <AuroraBg /> : null}

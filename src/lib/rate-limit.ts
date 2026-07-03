@@ -140,3 +140,15 @@ export async function rateLimitResetRequest(): Promise<boolean> {
 export async function rateLimitResetExecute(): Promise<boolean> {
   return limit(resetExecuteStore, `reset-exec:${await getClientIp()}`, 5, 60 * 60_000)
 }
+
+// Practice grading is student-driven and unlimited by design, but each round costs
+// ~2 AI calls (perceive + judge) — the single biggest runaway/abuse cost vector. Cap
+// it per (student, phase) on a rolling 24h window: high enough that genuine repeated
+// practice is never hit, low enough that a stuck client or a script can't run the
+// owner's AI bill away. Keyed on the STUDENT, not the IP — a whole class shares one
+// school IP, so an IP key would throttle a classroom.
+const practiceStore = new RateLimitStore()
+export const PRACTICE_DAILY_MAX = 50
+export async function rateLimitPractice(studentId: number, phaseId: number): Promise<boolean> {
+  return limit(practiceStore, `practice:${studentId}:${phaseId}`, PRACTICE_DAILY_MAX, 24 * 60 * 60_000)
+}

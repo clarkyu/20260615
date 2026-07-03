@@ -6,10 +6,9 @@ import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as offeringRepo from '@/lib/repo/offerings'
-import { LocalDate } from '@/components/local-date'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { AssignmentList } from './assignment-list'
 
 // Tab title = the course name for this offering. Scoped like the page (own offering
 // for a TEACHER) so a guessed id can't leak a course name; generic menu name otherwise.
@@ -58,7 +57,7 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
       <Link href={`/dashboard/teaching/${offering.id}/insights`}>
         <Card className="tap border-primary/30 bg-primary/5 hover:shadow-card">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
               <TrendingUp className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -85,23 +84,17 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
           </CardContent>
         </Card>
       ) : (
-        offering.assignments.map((a) => (
-          <Link key={a.id} href={`/dashboard/assignments/${a.id}`}>
-            <Card className="tap hover:shadow-card">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
-                  <p className="font-semibold leading-snug">{a.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {a._count.sentences} {t('asg.sentences')} · {a._count.submissions} {t('asg.submissions')}
-                    {a.dueAt ? <> · {t('asg.due')} <LocalDate iso={a.dueAt.toISOString()} /></> : null}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-        ))
+        <AssignmentList
+          assignments={offering.assignments.map((a) => ({
+            id: a.id,
+            title: a.title,
+            category: a.category,
+            monthLabel: a.monthLabel,
+            dueAtIso: a.dueAt ? a.dueAt.toISOString() : null,
+            sentenceCount: a._count.sentences,
+            submissionCount: a._count.submissions,
+          }))}
+        />
       )}
     </div>
   )

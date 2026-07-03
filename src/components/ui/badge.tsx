@@ -6,7 +6,7 @@ const tones: Record<Tone, string> = {
   default: 'bg-secondary text-secondary-foreground',
   primary: 'bg-accent text-accent-foreground',
   success: 'bg-success/15 text-success',
-  warning: 'bg-warning/15 text-[hsl(var(--warning))]',
+  warning: 'bg-warning/15 text-warning',
   danger: 'bg-destructive/12 text-destructive',
   muted: 'bg-muted text-muted-foreground',
 }

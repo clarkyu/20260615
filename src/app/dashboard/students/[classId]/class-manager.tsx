@@ -15,6 +15,8 @@ import {
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
+import { useConfirm, confirmSubmit } from '@/components/ui/confirm'
 import { SubmitButton } from '@/components/submit-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -42,7 +44,6 @@ interface MajorOpt {
 }
 
 type Action = (fd: FormData) => Promise<{ error?: string; success?: boolean }>
-const SELECT = 'h-10 w-full rounded-xl border border-input bg-background px-3 text-sm'
 
 export function ClassManager({
   cls,
@@ -56,6 +57,7 @@ export function ClassManager({
   isAdmin: boolean
 }) {
   const t = useT()
+  const confirm = useConfirm()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [editId, setEditId] = useState<number | null>(null)
@@ -105,12 +107,12 @@ export function ClassManager({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="maj">{t('cls.major')}</Label>
-                  <select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className={SELECT}>
+                  <Select id="maj" name="majorId" defaultValue={cls.majorId ?? ''} className="h-10">
                     <option value="">{t('cls.noMajor')}</option>
                     {majors.map((m) => (
                       <option key={m.id} value={m.id}>{m.name}（{m.department}）</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{t('cls.majorHint')}</p>
@@ -161,8 +163,8 @@ export function ClassManager({
                           size="sm"
                           variant="ghost"
                           disabled={pending && busyId === s.id}
-                          onClick={() => {
-                            if (!confirm(t('cls.resetPwConfirm'))) return
+                          onClick={async () => {
+                            if (!(await confirm({ body: t('cls.resetPwConfirm') }))) return
                             const fd = new FormData()
                             fd.set('studentId', String(s.id))
                             run(resetStudentPassword, fd, s.id)
@@ -175,8 +177,8 @@ export function ClassManager({
                           variant="ghost"
                           className="text-destructive"
                           disabled={pending && busyId === s.id}
-                          onClick={() => {
-                            if (!confirm(t('cls.removeConfirm'))) return
+                          onClick={async () => {
+                            if (!(await confirm({ body: t('cls.removeConfirm'), danger: true }))) return
                             const fd = new FormData()
                             fd.set('studentId', String(s.id))
                             fd.set('classId', String(cls.id))
@@ -237,7 +239,7 @@ export function ClassManager({
       {isAdmin ? (
       <Card className="border-destructive/40">
         <CardContent className="p-4">
-          <form action={deleteClass} onSubmit={(e) => { if (!confirm(t('cls.deleteClassConfirm'))) e.preventDefault() }}>
+          <form action={deleteClass} onSubmit={confirmSubmit(confirm, { body: t('cls.deleteClassConfirm'), danger: true })}>
             <input type="hidden" name="classId" value={cls.id} />
             <SubmitButton variant="destructive" className="w-full">{t('cls.deleteClass')}</SubmitButton>
           </form>

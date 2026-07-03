@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import * as userRepo from '@/lib/repo/users'
+import { ConfirmProvider } from '@/components/ui/confirm'
 
 // Force a first-login staff member (their initial password was set by an admin)
 // through the change-password screen before they can use any dashboard page. The
@@ -12,5 +13,5 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const prisma = await getDb()
   const me = await userRepo.findById(prisma, user.userId)
   if (me?.mustChangePassword) redirect('/change-password')
-  return <>{children}</>
+  return <ConfirmProvider>{children}</ConfirmProvider>
 }

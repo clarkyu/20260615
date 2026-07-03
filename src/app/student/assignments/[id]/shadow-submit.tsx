@@ -228,7 +228,7 @@ export function ShadowSubmit(props: {
                     return (
                       <li key={i} className="space-y-0.5">
                         <div className="flex items-start gap-2">
-                          {weak ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--warning))]" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
+                          {weak ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
                           <span className={weak ? 'flex-1 text-foreground' : 'flex-1 text-muted-foreground'}>{c.exampleEn || c.english}</span>
                           {tk?.aiScore != null ? <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{tk.aiScore}</span> : null}
                         </div>
@@ -272,7 +272,7 @@ export function ShadowSubmit(props: {
             <ChunkLangToggle value={lang} onChange={setLang} />
           </div>
           {url ? (
-            <video src={url} controls playsInline className="aspect-[3/4] w-full rounded-2xl bg-black object-contain" />
+            <video src={url} controls playsInline className="aspect-[3/4] w-full rounded-lg bg-black object-contain" />
           ) : (
             <Skeleton className="aspect-[3/4] w-full" />
           )}

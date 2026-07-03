@@ -19,7 +19,7 @@ export function AuthShell({
         <CardContent className="space-y-5 p-6 pt-7">
           <div className="space-y-2 text-center">
             {icon ? (
-              <div className="mx-auto mb-1 grid h-14 w-14 place-items-center rounded-2xl bg-accent text-accent-foreground">
+              <div className="mx-auto mb-1 grid h-14 w-14 place-items-center rounded-lg bg-accent text-accent-foreground">
                 {icon}
               </div>
             ) : null}

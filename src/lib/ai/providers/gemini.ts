@@ -6,6 +6,7 @@ import type {
   PerceptionResult,
   JudgeProvider,
   ReferenceSentence,
+  TokenUsage,
 } from '../types'
 import { config } from '@/lib/config'
 import { overrideKey } from '../key-context'
@@ -106,6 +107,13 @@ export function extractJson(data: unknown): unknown {
   return JSON.parse(stripCodeFence(text))
 }
 
+// Real token usage from a generateContent response (undefined when absent).
+export function extractUsage(data: unknown): TokenUsage | undefined {
+  const u = (data as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } })?.usageMetadata
+  if (!u) return undefined
+  return { inputTokens: Number(u.promptTokenCount) || 0, outputTokens: Number(u.candidatesTokenCount) || 0 }
+}
+
 function referenceBlock(sentences: ReferenceSentence[]): string {
   return sentences.map((s) => `${s.order}. ${s.text}`).join('\n')
 }
@@ -166,7 +174,7 @@ export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
 const GEN_TIMEOUT_MS = 180_000
 const NET_TIMEOUT_MS = 60_000
 
-async function generate(model: string, parts: Part[], schema: unknown): Promise<unknown> {
+async function generate(model: string, parts: Part[], schema: unknown): Promise<{ data: unknown; usage?: TokenUsage }> {
   const res = await fetch(`${baseUrl()}/v1beta/models/${model}:generateContent?key=${apiKey()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -177,7 +185,8 @@ async function generate(model: string, parts: Part[], schema: unknown): Promise<
     signal: AbortSignal.timeout(GEN_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`)
-  return extractJson(await res.json())
+  const raw = await res.json()
+  return { data: extractJson(raw), usage: extractUsage(raw) }
 }
 
 const INLINE_MAX_BYTES = 18 * 1024 * 1024 // inline base64 is limited; larger goes through the File API
@@ -261,12 +270,14 @@ export const geminiPerception: PerceptionProvider = {
     const media = input.videoUrl || input.audioUrl
     if (!media) throw new Error('没有可评阅的视频（请确认已配置 R2 并已上传）')
     const parts: Part[] = [{ text: buildPerceptionPrompt(input) }, await mediaPart(media)]
-    const json = (await generate(modelId, parts, PERCEPTION_SCHEMA)) as PerceptionResult
+    const { data, usage } = await generate(modelId, parts, PERCEPTION_SCHEMA)
+    const json = data as PerceptionResult
     return {
       transcript: json.transcript ?? '',
       perSentence: Array.isArray(json.perSentence) ? json.perSentence : [],
       pronunciationImpression: json.pronunciationImpression,
       observations: json.observations ?? {},
+      usage,
       raw: json,
     }
   },
@@ -274,8 +285,8 @@ export const geminiPerception: PerceptionProvider = {
 
 export const geminiJudge: JudgeProvider = {
   async judge(input: JudgeInput, modelId: string): Promise<JudgeResult> {
-    const json = await generate(modelId, [{ text: buildJudgePrompt(input) }], JUDGE_SCHEMA)
-    return normalizeJudge(json, input.maxScore)
+    const { data, usage } = await generate(modelId, [{ text: buildJudgePrompt(input) }], JUDGE_SCHEMA)
+    return { ...normalizeJudge(data, input.maxScore), usage }
   },
 }
 
@@ -334,6 +345,6 @@ export async function geminiAuthor(input: AuthorInput, modelId: string): Promise
   if (input.imageBase64 && input.imageMime) {
     parts.push({ inlineData: { mimeType: input.imageMime, data: input.imageBase64 } })
   }
-  const json = await generate(modelId, parts, AUTHOR_SCHEMA)
-  return normalizeAuthorDraft(json)
+  const { data } = await generate(modelId, parts, AUTHOR_SCHEMA)
+  return normalizeAuthorDraft(data)
 }
