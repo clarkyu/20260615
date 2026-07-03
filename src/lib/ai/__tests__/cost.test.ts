@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { estimateGrading, formatTokens, MODEL_RATES } from '../cost'
+import { estimateGrading, formatTokens, MODEL_RATES, costUsd } from '../cost'
 
 const sub = (over: Partial<{ hasVideo: boolean; hasAudio: boolean; hasImage: boolean; durationSec: number; recitedLen: number }> = {}) => ({
   hasVideo: false, hasAudio: false, hasImage: false, durationSec: 0, recitedLen: 0, ...over,
@@ -46,6 +46,27 @@ describe('estimateGrading', () => {
     for (const id of ['gemini-3.5-flash', 'gemini-2.5-flash', 'qwen-omni-turbo', 'whisper-1', 'deepseek-chat', 'MiniMax-Text-01', 'claude-opus-4-8']) {
       expect(MODEL_RATES[id]).toBeDefined()
     }
+  })
+})
+
+describe('costUsd (real usage → USD)', () => {
+  it('prices USD models from actual tokens', () => {
+    // gemini-3.5-flash: $1.5/M in, $9/M out. 1e6 in + 1e6 out = 1.5 + 9 = 10.5.
+    expect(costUsd('gemini-3.5-flash', 1_000_000, 1_000_000)).toBeCloseTo(10.5, 5)
+  })
+
+  it('converts CNY-priced models to USD', () => {
+    // deepseek-chat: ¥1/M in, ¥2/M out. 1e6+1e6 = ¥3 → /7.2 ≈ $0.4167.
+    expect(costUsd('deepseek-chat', 1_000_000, 1_000_000)).toBeCloseTo(3 / 7.2, 4)
+  })
+
+  it('is 0 for per-minute (whisper) and unknown models', () => {
+    expect(costUsd('whisper-1', 5000, 5000)).toBe(0)
+    expect(costUsd('nope', 1000, 1000)).toBe(0)
+  })
+
+  it('never goes negative on junk input', () => {
+    expect(costUsd('gemini-3.5-flash', -100, -100)).toBe(0)
   })
 })
 

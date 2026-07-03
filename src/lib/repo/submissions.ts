@@ -293,6 +293,10 @@ export interface GradeResult {
   finalScore: number
   feedback: string
   gradedById: number | null
+  // Real usage/cost of this grade (null when the providers didn't report usage).
+  inputTokens: number | null
+  outputTokens: number | null
+  costUsd: number | null
 }
 
 // Fenced to PROCESSING (see markFailed): a late AI write never overwrites a teacher

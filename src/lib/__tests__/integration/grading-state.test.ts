@@ -26,7 +26,8 @@ async function seed(p: PrismaClient): Promise<{ subId: number; teacherId: number
 
 const gradeResult = (over: Partial<GradeResult> = {}): GradeResult => ({
   status: 'GRADED', needsReview: false, confidence: 0.9, perceptionModel: 'p', judgeModel: 'j',
-  transcript: 't', aiResult: '{}', aiScore: 60, finalScore: 60, feedback: 'ok', gradedById: null, ...over,
+  transcript: 't', aiResult: '{}', aiScore: 60, finalScore: 60, feedback: 'ok', gradedById: null,
+  inputTokens: null, outputTokens: null, costUsd: null, ...over,
 })
 
 describe('grading status state machine (real SQL)', () => {
