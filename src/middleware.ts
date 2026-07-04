@@ -46,7 +46,15 @@ export function middleware(request: NextRequest) {
   const csp = strictCsp(nonce)
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+  // Next reads the nonce for its OWN scripts from the `content-security-policy` (or the
+  // `-report-only`) REQUEST header — see app-render `parseRequestHeaders`. Under `next dev`
+  // this makes Next stamp every script; but OpenNext-on-Cloudflare drops the plain
+  // `content-security-policy` request-header override (our custom `x-nonce` survives, so the
+  // theme script is nonced, but Next's 18 framework scripts are NOT — verified in prod).
+  // Next also accepts the `-report-only` name as the nonce source, and that one survives
+  // OpenNext's handling — so set both; whichever reaches app-render nonces the scripts.
   requestHeaders.set('content-security-policy', csp)
+  requestHeaders.set('content-security-policy-report-only', csp)
   const response = NextResponse.next({ request: { headers: requestHeaders } })
   response.headers.set('content-security-policy-report-only', csp)
   return response
