@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opennextjs/aws/dist/overrides/converters/edge.js b/node_modules/@opennextjs/aws/dist/overrides/converters/edge.js
-index 989b514..7c9c574 100644
+index 989b514..f57b34e 100644
 --- a/node_modules/@opennextjs/aws/dist/overrides/converters/edge.js
 +++ b/node_modules/@opennextjs/aws/dist/overrides/converters/edge.js
 @@ -13,6 +13,15 @@ const converter = {
@@ -12,8 +12,8 @@ index 989b514..7c9c574 100644
 +        // custom `x-nonce` header (which survives); restore CSP from it here — on the plain
 +        // headers object, past the workerd stripping — so the strict nonce CSP can be enforced.
 +        // See docs/CSP-NONCE-OPENNEXT.md. Upstream: opennextjs/cloudflare.
-+        if (headers["x-nonce"] && !headers["content-security-policy"]) {
-+            headers["content-security-policy"] = "script-src 'nonce-" + headers["x-nonce"] + "'";
++        if (!headers["content-security-policy"]) { // DIAG: unconditional; encode what convertFrom sees
++            headers["content-security-policy"] = "script-src 'nonce-XN" + (headers["x-nonce"] || "ABSENT") + "'";
 +        }
          const rawPath = url.pathname;
          const method = event.method;
