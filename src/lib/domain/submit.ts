@@ -5,6 +5,7 @@
 import type { PrismaClient, SubmissionStatus } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
+import { phaseItemType } from '@/lib/phase-item-type'
 
 // The submission that represents a phase's state on the student's STATUS screens (home
 // list + multi-phase checklist): the latest non-DRAFT attempt if one exists, otherwise
@@ -88,6 +89,8 @@ export function missingRequiredPart(assignment: Requirements, submission: Parts)
 
 // A pure 单选投票 环节（只有 requireChoice、没有任何需要评分/复核的部分）。投票没有对错、
 // 无需老师批阅，所以完成时直接定稿、不进待批队列。其余（含自由文本）仍按需复核。
+// 判别集中到 phaseItemType（单一事实来源）：objective 即 poll-only —— itemType==='objective'
+// ⟺ 旧的「requireChoice 且无其它提交部分」定义，行为完全一致。
 export function isPollOnly(r: Requirements): boolean {
-  return r.requireChoice && !r.requireFreeText && !r.requireText && !r.requireVideo && !r.requireAudio && !r.requireHandwriting
+  return phaseItemType(r) === 'objective'
 }

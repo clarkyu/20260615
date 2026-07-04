@@ -284,6 +284,13 @@ model Phase {
   order        Int       @default(1)
   title        String?
   category     String?
+  // 环节类型判别式（speech/writing/objective）——把原先散落在各路由点、靠 require* 布尔
+  // 临时推断的"类型"集中成一个显式字段。由 src/lib/phase-item-type.ts 的 phaseItemType()
+  // 从提交要求派生并写入；迁移 0042 回填历史行（可空 = 历史行回填前 / 防御性缺省）。它是
+  // grader 路由的支点，对应题库分类学 curriculum/taxonomy 的 AssessmentMethod
+  // （speech↔ai-speaking、objective↔objective、writing↔ai-text/ai-writing-rubric），
+  // 比其内容形态 ItemType（recitation/shadowing/…）更粗——只管"哪种 grader"。
+  itemType     String?
   instructions String?
   rubric       String?
   shadowVideoKey String?
