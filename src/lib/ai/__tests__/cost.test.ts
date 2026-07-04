@@ -32,8 +32,8 @@ describe('estimateGrading', () => {
   })
 
   it('prices whisper perception by audio minutes, not tokens', () => {
-    const e = estimateGrading([sub({ hasAudio: true, durationSec: 120 })], { perceptionModel: 'whisper-1', judgeModel: 'deepseek-chat', rubricLen: 0, sentencesLen: 0 })
-    // 2 min × $0.006 = $0.012 for perception; plus deepseek output (¥) converted.
+    const e = estimateGrading([sub({ hasAudio: true, durationSec: 120 })], { perceptionModel: 'whisper-1', judgeModel: 'deepseek-v4-flash', rubricLen: 0, sentencesLen: 0 })
+    // 2 min × $0.006 = $0.012 for perception; plus a small deepseek output cost.
     expect(e.usd).toBeGreaterThanOrEqual(0.012)
   })
 
@@ -43,7 +43,7 @@ describe('estimateGrading', () => {
   })
 
   it('has a rate for every preset-reachable model', () => {
-    for (const id of ['gemini-3.5-flash', 'gemini-2.5-flash', 'qwen-omni-turbo', 'whisper-1', 'deepseek-chat', 'MiniMax-Text-01', 'claude-opus-4-8']) {
+    for (const id of ['gemini-3.5-flash', 'gemini-2.5-flash', 'qwen-omni-turbo', 'whisper-1', 'deepseek-v4-flash', 'MiniMax-Text-01', 'claude-opus-4-8']) {
       expect(MODEL_RATES[id]).toBeDefined()
     }
   })
@@ -56,8 +56,8 @@ describe('costUsd (real usage → USD)', () => {
   })
 
   it('converts CNY-priced models to USD', () => {
-    // deepseek-chat: ¥1/M in, ¥2/M out. 1e6+1e6 = ¥3 → /7.2 ≈ $0.4167.
-    expect(costUsd('deepseek-chat', 1_000_000, 1_000_000)).toBeCloseTo(3 / 7.2, 4)
+    // MiniMax-Text-01: ¥1/M in, ¥8/M out. 1e6+1e6 = ¥9 → /7.2 ≈ $1.25.
+    expect(costUsd('MiniMax-Text-01', 1_000_000, 1_000_000)).toBeCloseTo(9 / 7.2, 4)
   })
 
   it('is 0 for per-minute (whisper) and unknown models', () => {

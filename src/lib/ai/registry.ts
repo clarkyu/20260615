@@ -75,12 +75,12 @@ export const MODELS: ModelDescriptor[] = [
     note: '只转写，发音分弱；配合文本评分模型用。',
   },
   {
-    id: 'deepseek-chat',
-    label: 'DeepSeek（按评分标准打分）',
+    id: 'deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash（按评分标准打分）',
     provider: 'deepseek',
     capabilities: ['judge'],
     modalities: ['text'],
-    note: '纯文本，只能做评分阶段。',
+    note: '纯文本，只能做评分阶段。deepseek-chat 的继任者。',
   },
   {
     id: 'claude-opus-4-8',
@@ -105,7 +105,7 @@ export const PRESETS: Preset[] = [
   { id: 'gemini-allinone', label: 'Gemini 2.5 一把梭（更省）', perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash' },
   { id: 'qwen-allinone', label: 'Qwen 一把梭', perceptionModel: 'qwen-omni-turbo', judgeModel: 'qwen-omni-turbo' },
   { id: 'qwen-minimax', label: 'Qwen 感知 + MiniMax 评分', perceptionModel: 'qwen-omni-turbo', judgeModel: 'MiniMax-Text-01' },
-  { id: 'whisper-deepseek', label: 'Whisper 感知 + DeepSeek 评分', perceptionModel: 'whisper-1', judgeModel: 'deepseek-chat' },
+  { id: 'whisper-deepseek', label: 'Whisper 感知 + DeepSeek 评分', perceptionModel: 'whisper-1', judgeModel: 'deepseek-v4-flash' },
   { id: 'gemini-claude', label: 'Gemini 感知 + Claude 评分', perceptionModel: 'gemini-2.5-flash', judgeModel: 'claude-opus-4-8' },
 ]
 
@@ -166,13 +166,23 @@ export const MODEL_PRICING: Record<string, string> = {
   'qwen-omni-turbo': '约 ¥0.3 起（输入）/ ¥0.6 起（输出）· 以阿里控制台为准',
   'gpt-4o': '约 $2.50（输入）｜ 输出 $10 · 旧款，需核对',
   'claude-opus-4-8': '输入 $5 ｜ 输出 $25',
-  'deepseek-chat': '输入 ¥1（缓存 ¥0.02）｜ 输出 ¥2 · 2026-07-24 停用→V4 Flash',
+  'deepseek-v4-flash': '输入 $0.14（缓存命中 $0.0028）｜ 输出 $0.28 · 以 DeepSeek 控制台为准',
   'MiniMax-Text-01': '输入 ¥1 ｜ 输出 ¥8',
   'whisper-1': '约 $0.006 / 分钟（按音频时长计）',
 }
 
+// Retired model ids that live on in the DB (an assignment/teacher pinned them) mapped to
+// their live successor. DeepSeek retires `deepseek-chat`/`deepseek-reasoner` on 2026-07-24
+// (both were modes of V4 Flash), and sending those strings to the API fails after that —
+// so a stored pin transparently resolves to the new id here, no data migration needed.
+const LEGACY_MODEL_ALIASES: Record<string, string> = {
+  'deepseek-chat': 'deepseek-v4-flash',
+  'deepseek-reasoner': 'deepseek-v4-flash',
+}
+
 export function getModel(id: string): ModelDescriptor | undefined {
-  return MODELS.find((m) => m.id === id)
+  const resolved = LEGACY_MODEL_ALIASES[id] ?? id
+  return MODELS.find((m) => m.id === resolved)
 }
 
 export function modelsForCapability(cap: 'perception' | 'judge'): ModelDescriptor[] {
