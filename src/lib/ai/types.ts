@@ -73,6 +73,20 @@ export interface JudgeInput {
   recitedText?: string
 }
 
+// Writing (text-only) grading: the student submitted written text (自由文本 / 默写),
+// graded against the teacher's rubric with NO speech-perception stage. Any judge model
+// (a text LLM) can do it — same JudgeResult shape as the speech judge.
+export interface TextJudgeInput {
+  studentText: string
+  rubric: string
+  maxScore: number
+  // What the student was asked to write (the phase instructions), for context.
+  instructions?: string
+  // Optional model/reference lines (e.g. a 默写 phase's target sentences); absent for
+  // open-ended writing.
+  referenceSentences?: ReferenceSentence[]
+}
+
 export interface JudgeResult {
   score: number // 0..maxScore
   breakdown?: Record<string, number>
@@ -90,4 +104,6 @@ export interface PerceptionProvider {
 
 export interface JudgeProvider {
   judge(input: JudgeInput, modelId: string): Promise<JudgeResult>
+  // Grade written text against a rubric (no perception stage). Same result shape.
+  judgeText(input: TextJudgeInput, modelId: string): Promise<JudgeResult>
 }

@@ -6,9 +6,10 @@ import type {
   PerceptionResult,
   JudgeProvider,
   Provider,
+  TextJudgeInput,
   TokenUsage,
 } from '../types'
-import { buildJudgePrompt, buildPerceptionPrompt, normalizeJudge, stripCodeFence } from './gemini'
+import { buildJudgePrompt, buildPerceptionPrompt, buildWritingJudgePrompt, normalizeJudge, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
 import { config } from '@/lib/config'
@@ -117,6 +118,14 @@ export function makeJudge(cfg: CompatConfig): JudgeProvider {
       const messages = [
         { role: 'system', content: '你是英语背诵作业的阅卷老师，只输出 JSON。' },
         { role: 'user', content: buildJudgePrompt(input) + JUDGE_JSON_HINT },
+      ]
+      const { data, usage } = await chat(cfg, modelId, messages)
+      return { ...normalizeJudge(data, input.maxScore), usage }
+    },
+    async judgeText(input: TextJudgeInput, modelId: string): Promise<JudgeResult> {
+      const messages = [
+        { role: 'system', content: '你是英语写作阅卷老师，只输出 JSON。' },
+        { role: 'user', content: buildWritingJudgePrompt(input) + JUDGE_JSON_HINT },
       ]
       const { data, usage } = await chat(cfg, modelId, messages)
       return { ...normalizeJudge(data, input.maxScore), usage }

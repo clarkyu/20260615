@@ -16,11 +16,12 @@
 import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
 import { autoGradeById } from './grading'
+import { autoGradeWritingById } from './grading-writing'
 import { gradeShadowSubmission } from './shadow'
 import { runAfterResponse } from '@/lib/cf'
 import { getDb } from '@/lib/db'
 
-export type GradingKind = 'submission' | 'shadow'
+export type GradingKind = 'submission' | 'shadow' | 'writing'
 
 // After this many tries a job dead-letters instead of retrying forever.
 export const MAX_ATTEMPTS = 4
@@ -59,6 +60,10 @@ async function defaultRunner(prisma: PrismaClient, job: JobRow): Promise<RunOutc
   try {
     if (job.kind === 'shadow') {
       await gradeShadowSubmission(prisma, job.submissionId, () => heartbeatJob(prisma, job.submissionId))
+    } else if (job.kind === 'writing') {
+      const r = await autoGradeWritingById(prisma, job.submissionId)
+      if (r === null) return { done: true } // nothing to grade — settle, don't loop
+      if (!r.ok) error = r.error
     } else {
       const r = await autoGradeById(prisma, job.submissionId)
       if (r === null) return { done: true } // nothing to grade — settle, don't loop

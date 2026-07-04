@@ -6,6 +6,7 @@ import type {
   PerceptionResult,
   JudgeProvider,
   ReferenceSentence,
+  TextJudgeInput,
   TokenUsage,
 } from '../types'
 import { config } from '@/lib/config'
@@ -153,6 +154,28 @@ export function buildJudgePrompt(input: JudgeInput): string {
   ].join('\n')
 }
 
+// The writing (text-only) judge prompt: grade a student's written answer against the
+// rubric, no perception/speech step. Reuses JUDGE_SCHEMA + normalizeJudge (same output).
+export function buildWritingJudgePrompt(input: TextJudgeInput): string {
+  return [
+    '你是英语写作阅卷老师。请依据【评分标准】给学生这篇书面作答打分并写详细中文评语。',
+    '',
+    `满分：${input.maxScore} 分。score 必须在 0~${input.maxScore} 之间。`,
+    'breakdown 给出各维度得分（dimension+points）。feedback 用中文，指出优点与需改进之处，可引用学生原文的具体词句并给出改写建议。',
+    'confidence 取 0~1，表示你对本次评分的把握程度（作答完整、切题时给高分；空泛、离题、过短或疑似作弊时给低分）。',
+    '',
+    ...(input.instructions ? ['写作要求 / 题目：', input.instructions, ''] : []),
+    ...(input.referenceSentences && input.referenceSentences.length
+      ? ['参考 / 范文（默写题请据此比对）：', referenceBlock(input.referenceSentences), '']
+      : []),
+    '学生作答：',
+    input.studentText,
+    '',
+    '评分标准：',
+    input.rubric,
+  ].join('\n')
+}
+
 export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
   const r = raw as { score?: unknown; breakdown?: { dimension?: string; points?: number }[]; feedback?: unknown; confidence?: unknown }
   const score = Math.max(0, Math.min(maxScore, Math.round(Number(r?.score) || 0)))
@@ -286,6 +309,10 @@ export const geminiPerception: PerceptionProvider = {
 export const geminiJudge: JudgeProvider = {
   async judge(input: JudgeInput, modelId: string): Promise<JudgeResult> {
     const { data, usage } = await generate(modelId, [{ text: buildJudgePrompt(input) }], JUDGE_SCHEMA)
+    return { ...normalizeJudge(data, input.maxScore), usage }
+  },
+  async judgeText(input: TextJudgeInput, modelId: string): Promise<JudgeResult> {
+    const { data, usage } = await generate(modelId, [{ text: buildWritingJudgePrompt(input) }], JUDGE_SCHEMA)
     return { ...normalizeJudge(data, input.maxScore), usage }
   },
 }
