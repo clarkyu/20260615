@@ -1,5 +1,6 @@
 import type { PrismaClient, Role, SubmissionStatus } from '@prisma/client'
 import { offeringScopeFor } from './scope'
+import { phaseItemType } from '@/lib/phase-item-type'
 
 // Tenant-scoped data access for assignments. An assignment belongs to a school
 // through its offering, so every scope check goes via `offering: offeringScopeFor(...)`
@@ -141,6 +142,10 @@ function phaseData(p: PhaseInput) {
     choicesJson: p.choicesJson ?? null,
     correctChoice: p.correctChoice ?? null,
     requireFreeText: p.requireFreeText ?? false,
+    // Explicit type discriminator, derived from the submit-requirement flags by the one
+    // source of truth (lib/phase-item-type) — kept consistent with migration 0042's
+    // backfill so the stored column and the runtime derivation never disagree.
+    itemType: phaseItemType(p),
     rubric: p.rubric ?? null,
     defaultPerceptionModel: p.perceptionModel ?? null,
     defaultJudgeModel: p.judgeModel ?? null,
