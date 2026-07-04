@@ -55,7 +55,8 @@ export function middleware(request: NextRequest) {
   // theme script gets a nonce (verified in prod: 1/19). That's why the policy stays
   // Report-Only: enforcing it would block Next's un-nonced scripts and white-screen the app.
   // This line is a no-op in prod today but is kept so the enforce-flip is a one-liner the
-  // moment OpenNext/workerd stops stripping the header (tracked upstream).
+  // moment OpenNext/workerd stops stripping the header. Full analysis + upstream issue text +
+  // the exact flip steps: docs/CSP-NONCE-OPENNEXT.md.
   requestHeaders.set('content-security-policy', csp)
   const response = NextResponse.next({ request: { headers: requestHeaders } })
   response.headers.set('content-security-policy-report-only', csp)
