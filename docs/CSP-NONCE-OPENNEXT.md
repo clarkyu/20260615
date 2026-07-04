@@ -1,6 +1,8 @@
 # CSP 严格策略：为什么收在 Report-Only（OpenNext/workerd 的两道剔头 + 压缩运行时）
 
 > 状态：**Report-Only（监控中）**。enforce 阻于 Cloudflare/OpenNext，非我们代码问题。
+> **上游追踪：https://github.com/opennextjs/opennextjs-cloudflare/issues/1302** —— 修复后即可
+> 按下文「何时/如何真正 enforce」一节翻转。
 > 相关：`src/middleware.ts`、`next.config.mjs`（静态 CSP，带 unsafe-inline 的强制头）、
 > `src/app/api/csp-report/route.ts`（违规上报）。
 
@@ -70,6 +72,8 @@ const nonce = typeof csp === 'string' ? getScriptNonceFromHeader(csp) : undefine
 并删掉 `next.config.mjs` 里带 unsafe-inline 的静态 CSP（middleware 策略是其严格超集）。
 
 ## 上游 Issue 文案（opennextjs/cloudflare）
+
+> 已提交：**https://github.com/opennextjs/opennextjs-cloudflare/issues/1302**（下为原文，留档）。
 
 > **Title:** CSP request header stripped on Cloudflare — Next.js automatic script nonce doesn't work
 >
