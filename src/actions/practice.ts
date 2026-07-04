@@ -6,6 +6,7 @@ import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } f
 import { gradePractice } from '@/lib/domain/practice'
 import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
+import { costUsd } from '@/lib/ai/cost'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { rateLimitPractice } from '@/lib/rate-limit'
@@ -99,6 +100,16 @@ export async function gradePracticeAttempt(
     recitedText: payload.recitedText?.trim() || undefined,
   }))
 
+  // Real usage/cost of this round (perception + judge), when the providers reported it.
+  const r = outcome.status === 'graded' ? outcome.result : null
+  const pu = r?.perception.usage
+  const ju = r?.judge.usage
+  const hasUsage = Boolean(pu || ju)
+  const cost = r
+    ? costUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+      costUsd(r.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    : 0
+
   // Persist every practice round (even unavailable/error) for later analytics.
   await practiceRepo.createAttempt(prisma, {
     assignmentId,
@@ -111,6 +122,9 @@ export async function gradePracticeAttempt(
     confidence: outcome.status === 'graded' ? outcome.result.judge.confidence ?? null : null,
     feedback: outcome.status === 'graded' ? outcome.result.judge.feedback : null,
     feedbackJson: outcome.status === 'graded' ? JSON.stringify(outcome.result) : null,
+    inputTokens: hasUsage ? (pu?.inputTokens ?? 0) + (ju?.inputTokens ?? 0) : null,
+    outputTokens: hasUsage ? (pu?.outputTokens ?? 0) + (ju?.outputTokens ?? 0) : null,
+    costUsd: hasUsage ? cost : null,
   })
 
   if (outcome.status === 'unavailable') return { status: 'unavailable' }

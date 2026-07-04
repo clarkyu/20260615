@@ -340,6 +340,10 @@ model PracticeAttempt {
   confidence   Float?
   feedback     String?
   feedbackJson String?  // 结构化 GradeResult（逐句/分维度/转写）
+  // 真实用量/成本（感知+评分），从 provider 响应捕获；provider 没回报时为空。
+  inputTokens  Int?
+  outputTokens Int?
+  costUsd      Float?
   createdAt    DateTime @default(now())
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)

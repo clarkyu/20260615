@@ -80,7 +80,7 @@ describe('grading status state machine (real SQL)', () => {
   it('applyShadowResult is fenced to PROCESSING as well', async () => {
     const p = db.prisma
     const { subId } = await seed(p)
-    const shadow = { needsReview: false, aiScore: 80, finalScore: 80, confidence: 0.8, feedback: 'f' }
+    const shadow = { needsReview: false, aiScore: 80, finalScore: 80, confidence: 0.8, feedback: 'f', inputTokens: null, outputTokens: null, costUsd: null }
     // Not claimed → no-op.
     expect((await submissionRepo.applyShadowResult(p, subId, shadow)).count).toBe(0)
     // Claimed → finalizes.

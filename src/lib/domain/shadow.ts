@@ -6,8 +6,10 @@
 // uncertain ones. Best-effort + graceful: no model key ⇒ leave it for the teacher.
 
 import type { PrismaClient } from '@prisma/client'
+import type { TokenUsage } from '@/lib/ai/types'
 import { logError } from '../log'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
+import { costUsd } from '@/lib/ai/cost'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { withAiKeys } from '@/lib/ai/key-context'
@@ -18,7 +20,7 @@ import { isUnavailable } from './grading'
 import { unavailable } from '@/lib/ai/errors'
 
 // Score one sentence's audio: weighted accuracy(0.7) + completeness(0.3), 0..100.
-export async function gradeShadowTake(audioUrl: string, sentenceText: string, perceptionModelId: string): Promise<{ score: number; spokenText: string }> {
+export async function gradeShadowTake(audioUrl: string, sentenceText: string, perceptionModelId: string): Promise<{ score: number; spokenText: string; usage?: TokenUsage }> {
   const model = getModel(perceptionModelId)
   if (!model || !model.capabilities.includes('perception')) throw unavailable('感知 provider 未实现')
   const provider = getPerceptionProvider(model.provider)
@@ -30,7 +32,7 @@ export async function gradeShadowTake(audioUrl: string, sentenceText: string, pe
   const clamp01 = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, Math.min(1, n as number)) : 0)
   const accuracy = clamp01(ps?.accuracy)
   const completeness = clamp01(ps?.completeness)
-  return { score: Math.round((accuracy * 0.7 + completeness * 0.3) * 100), spokenText: ps?.spokenText || perception.transcript || '' }
+  return { score: Math.round((accuracy * 0.7 + completeness * 0.3) * 100), spokenText: ps?.spokenText || perception.transcript || '', usage: perception.usage }
 }
 
 // Above this overall score (and with no terribly weak sentence) a shadowing
@@ -83,6 +85,11 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   await withAiKeys(keys, async () => {
   try {
     const scoreByOrder = new Map<number, number>()
+    // Real usage summed across the takes graded IN THIS run (each take is one perception
+    // call). Reused takes from a prior interrupted run aren't re-fetched, so this can
+    // undercount cost across retries — acceptable for observability; the dedup below keeps
+    // re-grading (and thus double-spend) to a minimum anyway.
+    let usedIn = 0, usedOut = 0, gotUsage = false
     // Retry dedup: a prior interrupted run may have already scored some takes. Each take
     // is a PAID perception call, so reuse the stored scores and only grade the ones still
     // missing one — a reclaimed/retried run no longer re-pays for the whole set (this is
@@ -101,12 +108,15 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
           const url = await presignDownload(tk.audioKey)
           const r = await gradeShadowTake(url, text, perceptionModel)
           await submissionRepo.setShadowTakeScore(prisma, tk.id, { aiScore: r.score, spokenText: r.spokenText })
-          return { order: tk.order, score: r.score }
+          return { order: tk.order, score: r.score, usage: r.usage }
         }),
       )
       for (const res of results) {
         if (res.status === 'fulfilled') {
-          if (res.value) scoreByOrder.set(res.value.order, res.value.score)
+          if (res.value) {
+            scoreByOrder.set(res.value.order, res.value.score)
+            if (res.value.usage) { gotUsage = true; usedIn += res.value.usage.inputTokens ?? 0; usedOut += res.value.usage.outputTokens ?? 0 }
+          }
         } else {
           const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
           if (isUnavailable(msg)) { await revert(); return } // model not configured — leave for teacher
@@ -132,6 +142,9 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       finalScore: submission.teacherScore ?? overall,
       confidence: overall / 100,
       feedback,
+      inputTokens: gotUsage ? usedIn : null,
+      outputTokens: gotUsage ? usedOut : null,
+      costUsd: gotUsage ? costUsd(perceptionModel, usedIn, usedOut) : null,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''

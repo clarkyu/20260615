@@ -14,6 +14,10 @@ export interface NewPracticeAttempt {
   confidence: number | null
   feedback: string | null
   feedbackJson: string | null
+  // Real usage/cost of this practice round (null when the providers didn't report usage).
+  inputTokens: number | null
+  outputTokens: number | null
+  costUsd: number | null
 }
 
 export function createAttempt(prisma: PrismaClient, data: NewPracticeAttempt) {
