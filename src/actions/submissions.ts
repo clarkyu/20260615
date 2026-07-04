@@ -6,7 +6,8 @@ import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
-import { resolveAttempt, missingRequiredPart, isPollOnly } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
+import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices } from '@/lib/choices'
 import * as submissionRepo from '@/lib/repo/submissions'
@@ -83,8 +84,11 @@ export async function finishSubmission(phaseId: number) {
     return { error: t('err.mediaTooLarge') }
   }
 
-  // 纯单选环节：无对错的投票 / 有正确答案的单选题。都不走 AI、不进老师待批队列。
-  if (isPollOnly(resolved.requirements)) {
+  // 按环节类型路由（判别式来自 ① 的 phaseItemType）。
+  const itemType = phaseItemType(resolved.requirements)
+
+  // objective：无对错的投票 / 有正确答案的单选题。都不走 AI、不进老师待批队列。
+  if (itemType === 'objective') {
     const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
     if (phase?.correctChoice) {
       // 单选题：客观判分——选对=满分、选错=0，提交即定稿。
@@ -108,9 +112,12 @@ export async function finishSubmission(phaseId: number) {
   // AI-first, durably: persist a grading job up front, then kick a background drain
   // so the teacher usually only sees exceptions. If the kick is lost (worker
   // eviction) the job is still PENDING and a later drain picks it up.
-  // Text/handwriting-only work has no media to AI-grade — straight to the queue.
   if (submission.videoKey || submission.audioKey) {
+    // 口语类：感知 + 评分 AI 流水线。
     await scheduleGrading(prisma, submission.id, 'submission')
+  } else if (itemType === 'writing' && submission.recitedText?.trim()) {
+    // 写作类（自由文本 / 默写）：AI 文本评分（②）。手写（只有图、无文本）仍留老师人工评。
+    await scheduleGrading(prisma, submission.id, 'writing')
   }
 
   revalidatePath('/student')

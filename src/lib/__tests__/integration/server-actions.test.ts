@@ -37,7 +37,7 @@ vi.mock('next/navigation', () => ({
 
 import type { PrismaClient } from '@prisma/client'
 import { login } from '@/actions/auth'
-import { finishSubmission, submitChoice } from '@/actions/submissions'
+import { finishSubmission, submitChoice, submitFreeText } from '@/actions/submissions'
 import { batchOverride } from '@/actions/grading'
 import { getCurrentUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
@@ -156,5 +156,21 @@ describe('server actions E2E (real iron-session + real SQL)', () => {
 
     expect(await batchOverride(d.assignment.id, [sub.id], 50, 'x')).toMatchObject({ updated: 0 }) // scoped away
     expect((await db.prisma.submission.findUnique({ where: { id: sub.id } }))?.status).toBe('UPLOADED') // untouched
+  })
+
+  it('free-text submit routes to the durable WRITING grader (not speech), pending review', async () => {
+    const d = await seed(db.prisma)
+    const essay = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireFreeText: true, itemType: 'writing', graded: true, maxAttempts: 1 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+
+    expect(await submitFreeText(essay.id, 'My weekend was great.')).toEqual({ success: true })
+    expect(await finishSubmission(essay.id)).toEqual({ success: true })
+
+    const s = await db.prisma.submission.findFirst({ where: { phaseId: essay.id, attempt: 1 } })
+    expect(s).toMatchObject({ status: 'UPLOADED', needsReview: true, recitedText: 'My weekend was great.' })
+    // Enqueued as a 'writing' job (AI text grading), not 'submission' (speech). Drain is
+    // mocked out (runAfterResponse no-op), so it stays PENDING for us to assert.
+    expect(await db.prisma.gradingJob.count({ where: { submissionId: s!.id, kind: 'writing', status: 'PENDING' } })).toBe(1)
+    expect(await db.prisma.gradingJob.count({ where: { submissionId: s!.id, kind: 'submission' } })).toBe(0)
   })
 })

@@ -65,3 +65,41 @@ export async function gradeSubmission(req: GradeRequest): Promise<GradeResult> {
 
   return { perceptionModel: perceptionModel.id, judgeModel: judgeModel.id, perception, judge }
 }
+
+export interface GradeWritingRequest {
+  judgeModelId: string
+  rubric: string
+  maxScore: number
+  studentText: string
+  instructions?: string
+  referenceSentences?: ReferenceSentence[]
+}
+
+export interface GradeWritingResult {
+  judgeModel: string
+  judge: JudgeResult
+}
+
+// Grade written text against a rubric — the writing path (自由文本 / 默写). No perception
+// stage: one judge call. Throws a readable error if the model can't judge.
+export async function gradeWriting(req: GradeWritingRequest): Promise<GradeWritingResult> {
+  const judgeModel = getModel(req.judgeModelId)
+  if (!judgeModel) throw new Error(`未知的评分模型: ${req.judgeModelId}`)
+  if (!judgeModel.capabilities.includes('judge')) {
+    throw new Error(`模型 ${judgeModel.label} 不能用于评分阶段`)
+  }
+  const judgeProvider = getJudgeProvider(judgeModel.provider)
+  if (!judgeProvider) throw unavailable(`评分 provider 未实现: ${judgeModel.provider}`)
+
+  const judge = await judgeProvider.judgeText(
+    {
+      studentText: req.studentText,
+      rubric: req.rubric,
+      maxScore: req.maxScore,
+      instructions: req.instructions,
+      referenceSentences: req.referenceSentences,
+    },
+    judgeModel.id,
+  )
+  return { judgeModel: judgeModel.id, judge }
+}
