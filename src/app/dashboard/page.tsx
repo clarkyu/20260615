@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library, Gauge } from 'lucide-react'
+import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library, Gauge, Coins } from 'lucide-react'
 import { requireStaff, availablePanels } from '@/lib/auth'
 import { parseTzOffset } from '@/lib/time'
 import { getDb } from '@/lib/db'
@@ -201,6 +201,14 @@ export default async function DashboardPage() {
             </Card>
           </Link>
         ) : null}
+        <Link href="/dashboard/usage">
+          <Card className="tap h-full hover:shadow-card">
+            <CardContent className="flex flex-col gap-1.5 p-4">
+              <Coins className="h-5 w-5 text-accent-foreground" />
+              <p className="text-sm font-semibold">{t('usage.title')}</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Needs-grading board */}
