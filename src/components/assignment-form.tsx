@@ -696,23 +696,30 @@ function PhaseCard({
         <span>{t('asg.formalTest')}<span className="block text-xs text-muted-foreground">{t('asg.formalTestHint')}</span></span>
       </label>
 
-      {/* 每环节批阅配置（仅音/视频环节走 AI 评阅时有意义）：评分标准 + 感知/评分模型。
-          留空 = 跟随作业/平台默认；评阅时也可在评分页再改。 */}
-      {phase.requireVideo || phase.requireAudio ? (
+      {/* 每环节 AI 评阅配置：口语（音/视频）走「感知 + 评分」；写作（自由文本 / 默写）走
+          「文本评分」，无感知阶段故不显示感知模型。都可设评分标准 + 评分模型；留空 = 跟随
+          作业/平台默认。客观题 / 手写不走 AI，故不显示。 */}
+      {(() => {
+        const isSpeech = phase.requireVideo || phase.requireAudio
+        const isWriting = !isSpeech && (phase.requireFreeText || phase.requireText)
+        if (!isSpeech && !isWriting) return null
+        return (
         <details className="rounded-xl border border-input">
           <summary className="tap flex cursor-pointer items-center gap-1.5 p-3 text-sm font-medium">
             <Sparkles className="h-4 w-4 text-primary" />{t('asg.gradeCfg')}
             <span className="text-xs font-normal text-muted-foreground">{t('asg.gradeCfgHint')}</span>
           </summary>
           <div className="space-y-3 border-t border-border/60 p-3">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>{t('grade.perceptionModel')}</Label>
-                <Select value={phase.perceptionModel} onChange={(e) => onPatch({ perceptionModel: e.target.value })} aria-label={t('grade.perceptionModel')}>
-                  <option value="">{t('asg.modelDefault')}</option>
-                  {PERCEPTION_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </Select>
-              </div>
+            <div className={isSpeech ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : ''}>
+              {isSpeech ? (
+                <div className="space-y-1.5">
+                  <Label>{t('grade.perceptionModel')}</Label>
+                  <Select value={phase.perceptionModel} onChange={(e) => onPatch({ perceptionModel: e.target.value })} aria-label={t('grade.perceptionModel')}>
+                    <option value="">{t('asg.modelDefault')}</option>
+                    {PERCEPTION_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  </Select>
+                </div>
+              ) : null}
               <div className="space-y-1.5">
                 <Label>{t('grade.judgeModel')}</Label>
                 <Select value={phase.judgeModel} onChange={(e) => onPatch({ judgeModel: e.target.value })} aria-label={t('grade.judgeModel')}>
@@ -723,11 +730,12 @@ function PhaseCard({
             </div>
             <div className="space-y-1.5">
               <Label>{t('grade.rubric')}</Label>
-              <Textarea value={phase.rubric} onChange={(e) => onPatch({ rubric: e.target.value })} rows={3} placeholder={t('grade.rubricPh')} />
+              <Textarea value={phase.rubric} onChange={(e) => onPatch({ rubric: e.target.value })} rows={3} placeholder={isWriting ? t('grade.rubricPhWriting') : t('grade.rubricPh')} />
             </div>
           </div>
         </details>
-      ) : null}
+        )
+      })()}
         </div>
       </details>
       </div>
