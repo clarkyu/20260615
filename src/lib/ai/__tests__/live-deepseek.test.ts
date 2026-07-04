@@ -25,7 +25,7 @@ describe.skipIf(!KEY)('DeepSeek judge — live', () => {
         rubric: '完整度 50 分、准确度 30 分、发音 20 分。',
         maxScore: 100,
       },
-      'deepseek-chat',
+      'deepseek-v4-flash',
     )
     expect(result.score).toBeGreaterThanOrEqual(0)
     expect(result.score).toBeLessThanOrEqual(100)
