@@ -28,4 +28,7 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm test
-      - run: npm run build
+      # Build the actual Workers bundle (OpenNext) — not just `next build`. This is what
+      # `deploy.yml` runs, so a Workers-bundle regression (e.g. an unhoisted esbuild the
+      # plain `next build` never touches) fails CI here instead of silently at deploy time.
+      - run: npx opennextjs-cloudflare build
