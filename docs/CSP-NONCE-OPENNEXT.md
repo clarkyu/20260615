@@ -71,6 +71,30 @@ const nonce = typeof csp === 'string' ? getScriptNonceFromHeader(csp) : undefine
 届时把 `src/middleware.ts` 的响应头从 `-report-only` 改成 `content-security-policy`（强制），
 并删掉 `next.config.mjs` 里带 unsafe-inline 的静态 CSP（middleware 策略是其严格超集）。
 
+## 上游修法分析（给维护者/将来参考）
+
+核心原理：**那个 CSP 值在「普通对象/自定义头」上活得好好的，一旦被放进 workerd 的 `Request`
+对象就被剥。** 所以修法本质都是——**别让它经过 workerd 的 `Request`，或在最后一次 `Request`
+重建之后、喂给 Next 渲染之前，再把它落回普通请求头。** 三个可下手处：
+
+**1) OpenNext 侧（最可能、最该他们修，不碰 runtime/Next）。**
+链路：middleware（独立函数）→ 转发 `Request` → server 函数 → 建 `IncomingMessage` → Next 渲染。
+已精确定位第一道剔头是 `overrides/converters/edge.js` 的 `convertTo`（`new Request(url,{headers})`）；
+且已证明**在 `convertFrom` 里恢复无效**——到 `app-render` 前还有第二道边界再剥（诊断部署把恢复值
+编码进 nonce、线上收不到，即由此测出）。真正该做的：用 workerd 不剥的载体（如自定义头 `x-nonce`
+或内部字段）把 nonce/CSP 一路带过去，在**建 `IncomingMessage`（喂给 NextServer 的普通 Node 风格
+headers，不是 workerd `Request`）时再写回 `content-security-policy`**——之后无 `Request` 重建，能活到
+`app-render`。大概率落在 `core/requestHandler`/`core/routing/util` 建请求那一层。
+
+**2) workerd/Cloudflare 侧（治本，但更大）。** 让 workerd 别在 `new Request()` 时剥
+`content-security-policy` 请求头（Node/undici 都不剥）。一劳永逸，但动 runtime、推进慢。
+
+**3) Next 侧（feature，绕开该头）。** Next 现写死只从 `content-security-policy`/`-report-only`
+请求头读 nonce。若 Next 支持**配置读哪个头**（或从稳定通道拿 nonce），OpenNext 把 nonce 塞进
+workerd 不剥的头即可，彻底绕过。属给 Next 的 feature request。
+
+**最现实是 #1**——在 OpenNext 里改。上游任一落地后，按上一节「一行翻转」收。
+
 ## 上游 Issue 文案（opennextjs/cloudflare）
 
 > 已提交：**https://github.com/opennextjs/opennextjs-cloudflare/issues/1302**（下为原文，留档）。
