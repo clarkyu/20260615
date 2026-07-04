@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import './globals.css'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
@@ -47,8 +47,11 @@ const themeInit = `(function(){try{var m=document.cookie.match(/(?:^|; )theme=([
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // One-time redacted config check so a misconfigured deploy is visible in logs.
   validateConfigOnce()
-  const [locale, user, cookieStore] = await Promise.all([getLocale(), getCurrentUser(), cookies()])
+  const [locale, user, cookieStore, hdrs] = await Promise.all([getLocale(), getCurrentUser(), cookies(), headers()])
   const tzo = parseTzOffset(cookieStore.get('tzo')?.value)
+  // Per-request CSP nonce (set by middleware). Stamped on our inline theme script so it
+  // satisfies the strict Report-Only policy; undefined locally / if middleware didn't run.
+  const nonce = hdrs.get('x-nonce') ?? undefined
 
   // 站内未读提示：学生有「比上次看过更晚批阅」的成绩时，底部导航「作业」上点红点。
   let newScores = false
@@ -61,7 +64,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale === 'zh' ? 'zh-CN' : locale} className={inter.variable} suppressHydrationWarning>
       <body>
-        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInit }} />
         {/* 自动更新闸：发现线上已发新版就整页刷新，避免长期挂着的安装版一直跑旧程序。 */}
         <VersionGate currentVersion={APP_VERSION_SHORT} />
         {/* Ambient backdrop only on the logged-out / auth surfaces (login, register,
