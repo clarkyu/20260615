@@ -311,6 +311,10 @@ export interface ShadowResult {
   finalScore: number
   confidence: number
   feedback: string
+  // Real usage/cost of this shadow grade (null when the provider didn't report usage).
+  inputTokens: number | null
+  outputTokens: number | null
+  costUsd: number | null
 }
 
 export function applyShadowResult(prisma: PrismaClient, id: number, data: ShadowResult) {

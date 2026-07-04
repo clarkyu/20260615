@@ -22,6 +22,7 @@ import { autoGradeById } from '@/lib/domain/grading'
 import { gradeSubmission } from '@/lib/ai/grade'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as practiceRepo from '@/lib/repo/practice'
 import * as userRepo from '@/lib/repo/users'
 
 const PW = 'secret-123'
@@ -130,6 +131,20 @@ describe('main flow (login → submit → grade) against real SQL', () => {
     // …but the representative the UI shows is the graded attempt, not 未提交.
     const rep = representativeSubmission(phase.submissions)
     expect(rep).toMatchObject({ status: 'GRADED', finalScore: 88 })
+  })
+
+  it('⑥ practice round persists real AI usage/cost (H1-c columns)', async () => {
+    const p = db.prisma
+    const d = await seed(p)
+    const row = await practiceRepo.createAttempt(p, {
+      assignmentId: d.assignment.id, phaseId: d.phase.id, studentId: d.student.id,
+      kind: 'audio', mediaKey: null, recitedText: null,
+      aiScore: 88, confidence: 0.9, feedback: 'ok', feedbackJson: '{}',
+      inputTokens: 15800, outputTokens: 400, costUsd: 0.031,
+    })
+    const back = await p.practiceAttempt.findUnique({ where: { id: row.id } })
+    expect(back).toMatchObject({ inputTokens: 15800, outputTokens: 400 })
+    expect(back?.costUsd).toBeCloseTo(0.031, 5)
   })
 })
 
