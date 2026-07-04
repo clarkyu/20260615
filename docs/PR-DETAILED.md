@@ -214,7 +214,7 @@
 
 **#93 · 官方题库扩到 B1/B2/C1（增量⑧）** `[06-16 20:15]` 口语线原只 Pre-A1→A2(偏初级),手编 9 套补到 C1,重点从音段转向超音段(重音/节奏/语调/连读)+职场/学术语域。SEED_ITEMS 7→16,沿用两种载体零架构改动;超管点一次「导入官方样题包」并入全局池(幂等)。
 
-**#94 · 题库：导入 English Flow 2000 日常口语 chunk（增量⑨）** `[06-16 20:39]` 把《2000 Essential English Chunks》整本接入,每条 phrase/Means/Example 1:1 落三段式。`english-flow.ts`(2000 条,**仅服务端、不进客户端包**);`englishFlowSets()` 切 40 套×50;`importEnglishFlow`(超管、全局官方、按 source 去重、超时再点接着导)。134 通过。中文先留空待后续回填。
+**#94 · 题库：导入 Native English 2000 日常口语 chunk（增量⑨）** `[06-16 20:39]` 把《2000 Essential English Chunks》整本接入,每条 phrase/Means/Example 1:1 落三段式。`english-flow.ts`(2000 条,**仅服务端、不进客户端包**);`englishFlowSets()` 切 40 套×50;`importEnglishFlow`(超管、全局官方、按 source 去重、超时再点接着导)。134 通过。中文先留空待后续回填。
 
 **#95 · 题库：通用题包导入（增量⑩）** `[06-16 23:36]` 超管界面「导入题包」:粘贴整包三段式、起名、填分级,自动按每套句数拆套、导入全局官方——**不再每个包改代码**。`splitIntoSets`/`slugHash`(CJK 名生成稳定 ascii 键);`domain/bank.importPack`(导入循环从 action 抽到 domain,顺带修分层评审 LOW)。137 通过。
 

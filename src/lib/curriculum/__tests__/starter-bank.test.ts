@@ -41,7 +41,7 @@ describe('starter bank projection', () => {
   })
 })
 
-describe('English Flow 2000 projection', () => {
+describe('Native English 2000 projection', () => {
   let sets: StarterSet[]
   beforeAll(async () => { sets = await englishFlowSets() })
 
