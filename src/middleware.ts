@@ -2,12 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 const CANONICAL = 'www.hihomework.com'
 
-// The strict CSP we ultimately want to ENFORCE: no `script-src 'unsafe-inline'` — a
-// per-request nonce + `strict-dynamic` instead (the audit's one CSP finding). We ship it
-// as **Report-Only** first so it cannot break anything: browsers report what it *would*
-// block to /api/csp-report, and once production is quiet a one-line follow-up promotes it
-// to the enforced `Content-Security-Policy`. The enforced policy (next.config.mjs, with
-// `'unsafe-inline'`) is left untouched meanwhile, so scripts keep running.
+// The strict CSP we WANT to enforce: no `script-src 'unsafe-inline'` — a per-request nonce +
+// `strict-dynamic` instead (the audit's one CSP finding). It ships as **Report-Only** and
+// cannot yet be promoted to enforced: OpenNext-on-Cloudflare (workerd) strips the request
+// header Next needs to nonce its OWN scripts, so under enforcement those scripts would be
+// blocked and white-screen the app (see the detailed note in `middleware()` below, and the
+// upstream issue). Meanwhile Report-Only reports would-be violations to /api/csp-report, and
+// the enforced policy in next.config.mjs (with `'unsafe-inline'`) keeps scripts running.
 // style-src keeps `'unsafe-inline'` — the framework injects inline styles and the finding
 // was specifically about scripts.
 function strictCsp(nonce: string): string {
@@ -39,22 +40,23 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url, 308)
   }
 
-  // Per-request nonce. Setting it on the REQUEST headers lets Next stamp its own inline
-  // scripts with it (and our theme script reads it via headers().get('x-nonce')); the
-  // strict policy is published only as Report-Only on the RESPONSE, so nothing is enforced.
+  // Per-request nonce. On the REQUEST headers so Next stamps its own scripts with it under
+  // `next dev` (and our theme script reads it via headers().get('x-nonce')); the strict policy
+  // ships only as Report-Only on the RESPONSE, so nothing is enforced.
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
   const csp = strictCsp(nonce)
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
-  // Next reads the nonce for its OWN scripts from the `content-security-policy` (or the
-  // `-report-only`) REQUEST header — see app-render `parseRequestHeaders`. Under `next dev`
-  // this makes Next stamp every script; but OpenNext-on-Cloudflare drops the plain
-  // `content-security-policy` request-header override (our custom `x-nonce` survives, so the
-  // theme script is nonced, but Next's 18 framework scripts are NOT — verified in prod).
-  // Next also accepts the `-report-only` name as the nonce source, and that one survives
-  // OpenNext's handling — so set both; whichever reaches app-render nonces the scripts.
+  // Next's app-render reads the nonce for its OWN (framework) scripts ONLY from the
+  // `content-security-policy` request header (see `parseRequestHeaders`). This works under
+  // `next dev` (30/30 scripts nonced) but NOT in production: Cloudflare's workerd strips
+  // `content-security-policy` (and `-report-only`) from request headers when OpenNext's edge
+  // converter rebuilds the forwarded `Request` — our custom `x-nonce` survives, so only the
+  // theme script gets a nonce (verified in prod: 1/19). That's why the policy stays
+  // Report-Only: enforcing it would block Next's un-nonced scripts and white-screen the app.
+  // This line is a no-op in prod today but is kept so the enforce-flip is a one-liner the
+  // moment OpenNext/workerd stops stripping the header (tracked upstream).
   requestHeaders.set('content-security-policy', csp)
-  requestHeaders.set('content-security-policy-report-only', csp)
   const response = NextResponse.next({ request: { headers: requestHeaders } })
   response.headers.set('content-security-policy-report-only', csp)
   return response
