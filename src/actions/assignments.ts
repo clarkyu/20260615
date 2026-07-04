@@ -6,6 +6,7 @@ import { staffContext, staffSchoolContext } from '@/lib/action-context'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as offeringRepo from '@/lib/repo/offerings'
 import * as templateRepo from '@/lib/repo/templates'
+import { buildTemplatePayload } from '@/lib/assignment-template'
 import {
   createAssignments,
   updateAssignment as updateAssignmentService,
@@ -119,30 +120,7 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   // Optionally save this publish config as a reusable template (school-shared).
   const templateName = String(formData.get('templateName') ?? '').trim()
   if (formData.get('saveTemplate') && templateName) {
-    const payload = {
-      title: fr.data.meta.title,
-      monthLabel: fr.data.meta.monthLabel ?? '',
-      chunkSetId,
-      phases: fr.data.phases.map((p) => ({
-        title: p.title ?? '',
-        category: p.category ?? '',
-        instructions: p.instructions ?? '',
-        useBankSet: p.useBankSet,
-        sentences: p.typedSentences.join('\n'),
-        requireEyesClosed: p.requireEyesClosed,
-        requireText: p.requireText,
-        requireAudio: p.requireAudio,
-        requireVideo: p.requireVideo,
-        requireHandwriting: p.requireHandwriting,
-        rubric: p.rubric ?? null,
-        perceptionModel: p.perceptionModel ?? null,
-        judgeModel: p.judgeModel ?? null,
-        graded: p.graded,
-        maxAttempts: p.maxAttempts,
-        isFormalTest: p.isFormalTest,
-        freePractice: p.freePractice,
-      })),
-    }
+    const payload = buildTemplatePayload(fr.data.meta, fr.data.phases, chunkSetId)
     await templateRepo.create(cx.prisma, { schoolId: cx.schoolId, name: templateName.slice(0, 100), createdById: cx.user.userId, payload: JSON.stringify(payload) })
   }
 

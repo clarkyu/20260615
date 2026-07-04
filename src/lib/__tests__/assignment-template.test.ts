@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseTemplatePayload } from '../assignment-template'
+import { parseTemplatePayload, buildTemplatePayload, type TemplateSourcePhase } from '../assignment-template'
 
 // parseTemplatePayload reads stored template JSON back into a publish config. It is the
 // trust boundary for "save as template → publish from template", so it must apply schema
@@ -69,5 +69,42 @@ describe('parseTemplatePayload', () => {
   it('returns null when maxAttempts is out of the 1..99 range', () => {
     expect(parseTemplatePayload(JSON.stringify(onePhase({ maxAttempts: 0 })))).toBeNull()
     expect(parseTemplatePayload(JSON.stringify(onePhase({ maxAttempts: 100 })))).toBeNull()
+  })
+})
+
+// The write side. The bug this guards: the payload build used to omit the 单选/自由文本
+// fields, so saving a choice/free-text phase as a template silently dropped its type.
+const srcPhase = (over: Partial<TemplateSourcePhase> = {}): TemplateSourcePhase => ({
+  title: null, category: null, instructions: null, useBankSet: false, typedSentences: [],
+  requireEyesClosed: false, requireText: false, requireAudio: false, requireVideo: false,
+  requireHandwriting: false, graded: true, maxAttempts: 1, isFormalTest: false, freePractice: false,
+  ...over,
+})
+
+describe('buildTemplatePayload', () => {
+  it('preserves choice + free-text fields (regression: they were dropped before)', () => {
+    const payload = buildTemplatePayload({ title: 'T', monthLabel: null }, [
+      srcPhase({ requireChoice: true, choicesJson: JSON.stringify(['A', 'B']), correctChoice: 'A' }),
+      srcPhase({ requireFreeText: true }),
+    ], null)
+    expect(payload.phases[0]).toMatchObject({ requireChoice: true, choicesJson: JSON.stringify(['A', 'B']), correctChoice: 'A' })
+    expect(payload.phases[1]).toMatchObject({ requireFreeText: true })
+  })
+
+  it('round-trips losslessly through parseTemplatePayload (write → read)', () => {
+    const payload = buildTemplatePayload({ title: 'Unit 3', monthLabel: '九月' }, [
+      srcPhase({ requireChoice: true, choicesJson: JSON.stringify(['猫', '狗']), correctChoice: '狗', graded: false }),
+      srcPhase({ requireFreeText: true, rubric: '内容 60 结构 40' }),
+    ], 12)
+    const parsed = parseTemplatePayload(JSON.stringify(payload))!
+    expect(parsed.chunkSetId).toBe(12)
+    expect(parsed.phases[0]).toMatchObject({ requireChoice: true, correctChoice: '狗', choicesJson: JSON.stringify(['猫', '狗']), graded: false })
+    expect(parsed.phases[1]).toMatchObject({ requireFreeText: true, rubric: '内容 60 结构 40' })
+  })
+
+  it('joins typed sentences with newlines and carries chunkSetId', () => {
+    const payload = buildTemplatePayload({ title: 'T', monthLabel: null }, [srcPhase({ typedSentences: ['a', 'b'], requireText: true })], 7)
+    expect(payload.chunkSetId).toBe(7)
+    expect(payload.phases[0].sentences).toBe('a\nb')
   })
 })
