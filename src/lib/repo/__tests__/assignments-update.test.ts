@@ -32,7 +32,7 @@ function fakePrisma(existingPhaseIds: number[]) {
 describe('updateWithPhases — reconcile by id (no data loss on edit)', () => {
   it('updates every kept phase in place and deletes none', async () => {
     const { prisma, calls } = fakePrisma([10, 11])
-    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 }), phase({ id: 11, order: 2 })])
+    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 }), phase({ id: 11, order: 2 })], [10, 11])
     expect(calls.phaseUpdate.sort()).toEqual([10, 11])
     expect(calls.phaseCreate).toBe(0)
     expect(calls.phaseDeleteMany).toEqual([]) // nothing removed → no cascade delete
@@ -40,17 +40,31 @@ describe('updateWithPhases — reconcile by id (no data loss on edit)', () => {
 
   it('creates a newly-added phase and deletes only the removed one', async () => {
     const { prisma, calls } = fakePrisma([10, 11])
-    // keep 10, drop 11, add a brand-new phase (id null)
-    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 }), phase({ id: null, order: 2 })])
+    // keep 10, drop 11 (both were loaded), add a brand-new phase (id null)
+    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 }), phase({ id: null, order: 2 })], [10, 11])
     expect(calls.phaseUpdate).toEqual([10])
     expect(calls.phaseCreate).toBe(1)
-    expect(calls.phaseDeleteMany).toEqual([[11]]) // only the removed phase cascades
+    expect(calls.phaseDeleteMany).toEqual([[11]]) // only the loaded-then-removed phase cascades
   })
 
   it('a no-op save (all ids kept) deletes nothing', async () => {
     const { prisma, calls } = fakePrisma([10])
-    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 })])
+    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 })], [10])
     expect(calls.phaseDeleteMany).toEqual([])
     expect(calls.phaseUpdate).toEqual([10])
+  })
+
+  it('never deletes a phase added concurrently (not in knownPhaseIds) — a stale save keeps its submissions (audit P2-9)', async () => {
+    const { prisma, calls } = fakePrisma([10, 11]) // phase 11 was added after the form loaded
+    // The form only ever loaded phase 10; it keeps 10 and knows nothing about 11.
+    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 })], [10])
+    expect(calls.phaseUpdate).toEqual([10])
+    expect(calls.phaseDeleteMany).toEqual([]) // phase 11 preserved, NOT cascade-deleted
+  })
+
+  it('with no known ids, deletes nothing (fail-safe — never destroy submissions on a malformed save)', async () => {
+    const { prisma, calls } = fakePrisma([10, 11])
+    await updateWithPhases(prisma, 1, meta, [phase({ id: 10 })], [])
+    expect(calls.phaseDeleteMany).toEqual([])
   })
 })

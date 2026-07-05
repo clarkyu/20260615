@@ -178,6 +178,10 @@ export async function updateAssignment(
   meta: AssignmentMeta,
   phaseDrafts: PhaseDraft[],
   chunkSetId: number | null,
+  // The phase ids the edit form ORIGINALLY loaded. Used to reconcile deletions safely: a
+  // phase added concurrently (not in this set) is preserved, never cascade-deleted by a
+  // stale save. See repo.updateWithPhases (audit P2-9).
+  knownPhaseIds: readonly number[],
 ): Promise<UpdateResult> {
   const existing = await assignments.findForSchool(prisma, assignmentId, schoolId, userId, role)
   if (!existing) return { ok: false, error: 'err.assignNotFound' }
@@ -185,7 +189,7 @@ export async function updateAssignment(
   const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)
   if (!resolved.ok) return { ok: false, error: resolved.error }
 
-  await assignments.updateWithPhases(prisma, assignmentId, meta, resolved.phases)
+  await assignments.updateWithPhases(prisma, assignmentId, meta, resolved.phases, knownPhaseIds)
   return { ok: true }
 }
 

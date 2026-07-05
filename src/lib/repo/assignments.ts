@@ -208,10 +208,14 @@ export async function offeringsWithBatch(prisma: PrismaClient, batchId: string, 
 // every student's graded work. So: update kept phases in place (replacing only their
 // sentences), create newly-added phases, and delete only phases the teacher removed
 // (which intentionally drops that phase's submissions).
-export async function updateWithPhases(prisma: PrismaClient, id: number, meta: AssignmentMeta, phases: PhaseInput[]) {
+export async function updateWithPhases(prisma: PrismaClient, id: number, meta: AssignmentMeta, phases: PhaseInput[], knownPhaseIds: readonly number[]) {
   const existing = await prisma.phase.findMany({ where: { assignmentId: id }, select: { id: true } })
   const existingIds = new Set(existing.map((p) => p.id))
   const keptIds = new Set(phases.map((p) => p.id).filter((x): x is number => x != null && existingIds.has(x)))
+  // The phases this edit actually LOADED. A phase now in the DB but NOT here was added
+  // concurrently (another tab, the 复习作业 builder) after the form loaded — it must never be
+  // counted as "removed", or a stale save would cascade-delete its student submissions.
+  const known = new Set(knownPhaseIds)
 
   await prisma.assignment.update({ where: { id }, data: { ...meta, ...legacyColumnsFromPrimary(phases[0]) } })
 
@@ -228,8 +232,10 @@ export async function updateWithPhases(prisma: PrismaClient, id: number, meta: A
     }
   }
 
-  // Phases the teacher removed — only these cascade-delete their submissions.
-  const removed = existing.filter((p) => !keptIds.has(p.id)).map((p) => p.id)
+  // Delete only phases the edit LOADED and the teacher then dropped — never a phase added
+  // concurrently that the form never saw (audit P2-9: a stale save must not destroy the
+  // submissions of a phase it didn't know about). Fail-safe: with no known ids, delete none.
+  const removed = existing.filter((p) => known.has(p.id) && !keptIds.has(p.id)).map((p) => p.id)
   if (removed.length > 0) await prisma.phase.deleteMany({ where: { id: { in: removed } } })
 }
 
