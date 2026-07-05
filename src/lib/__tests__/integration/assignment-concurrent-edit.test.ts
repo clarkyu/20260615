@@ -43,7 +43,9 @@ describe('assignment concurrent edit (audit P2-9)', () => {
     const sub = await p.submission.create({ data: { assignmentId: d.assignment.id, phaseId: phaseB.id, studentId: d.student.id, attempt: 1, status: 'GRADED', finalScore: 90, videoKey: 'v' } })
 
     // The teacher saves their STALE form: it knows only phase A (keeps it), nothing about B.
-    const res = await updateAssignment(p, d.school.id, d.teacher.id, 'TEACHER', d.assignment.id, { title: 'A (edited)', monthLabel: null }, [draft({ id: d.phaseA.id })], null, known)
+    // Adding phase B directly didn't bump the assignment version, so the version fence passes
+    // (still 0) — the known-ids safety net is what preserves phase B here.
+    const res = await updateAssignment(p, d.school.id, d.teacher.id, 'TEACHER', d.assignment.id, { title: 'A (edited)', monthLabel: null }, [draft({ id: d.phaseA.id })], null, known, 0)
     expect(res).toEqual({ ok: true })
 
     // Phase B and its graded submission MUST survive — not cascade-deleted by the stale save.
@@ -61,10 +63,27 @@ describe('assignment concurrent edit (audit P2-9)', () => {
     // The form loaded BOTH phases, and the teacher removed B on purpose.
     const known = [d.phaseA.id, phaseB.id]
 
-    const res = await updateAssignment(p, d.school.id, d.teacher.id, 'TEACHER', d.assignment.id, { title: 'A', monthLabel: null }, [draft({ id: d.phaseA.id })], null, known)
+    const res = await updateAssignment(p, d.school.id, d.teacher.id, 'TEACHER', d.assignment.id, { title: 'A', monthLabel: null }, [draft({ id: d.phaseA.id })], null, known, 0)
     expect(res).toEqual({ ok: true })
 
     expect(await p.phase.findUnique({ where: { id: phaseB.id } })).toBeNull() // intentionally removed
     expect(await p.phase.findUnique({ where: { id: d.phaseA.id } })).not.toBeNull()
+  })
+
+  it('rejects a stale second save via the version fence — first edit stands, no overwrite (reject-on-conflict)', async () => {
+    const p = db.prisma
+    const d = await seed(p)
+    const known = [d.phaseA.id]
+
+    // First save loaded version 0 → succeeds and bumps the version to 1.
+    const r1 = await updateAssignment(p, d.school.id, d.teacher.id, 'TEACHER', d.assignment.id, { title: 'First', monthLabel: null }, [draft({ id: d.phaseA.id })], null, known, 0)
+    expect(r1).toEqual({ ok: true })
+    expect((await p.assignment.findUniqueOrThrow({ where: { id: d.assignment.id } })).version).toBe(1)
+
+    // A second save from a stale tab that also loaded version 0 is rejected wholesale.
+    const r2 = await updateAssignment(p, d.school.id, d.teacher.id, 'TEACHER', d.assignment.id, { title: 'Second', monthLabel: null }, [draft({ id: d.phaseA.id })], null, known, 0)
+    expect(r2).toEqual({ ok: false, error: 'err.assignmentChanged' })
+    // The first edit stands; the stale save did not overwrite the title.
+    expect((await p.assignment.findUniqueOrThrow({ where: { id: d.assignment.id } })).title).toBe('First')
   })
 })

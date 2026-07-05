@@ -208,16 +208,34 @@ export async function offeringsWithBatch(prisma: PrismaClient, batchId: string, 
 // every student's graded work. So: update kept phases in place (replacing only their
 // sentences), create newly-added phases, and delete only phases the teacher removed
 // (which intentionally drops that phase's submissions).
-export async function updateWithPhases(prisma: PrismaClient, id: number, meta: AssignmentMeta, phases: PhaseInput[], knownPhaseIds: readonly number[]) {
+export type UpdateOutcome = { ok: true } | { ok: false; conflict: true }
+
+export async function updateWithPhases(
+  prisma: PrismaClient,
+  id: number,
+  meta: AssignmentMeta,
+  phases: PhaseInput[],
+  knownPhaseIds: readonly number[],
+  expectedVersion: number,
+): Promise<UpdateOutcome> {
+  // Optimistic-lock fence: atomically claim the version. If the assignment was edited by
+  // someone else since this form loaded (version moved), count === 0 → bail BEFORE touching
+  // any phase, so a stale save can't overwrite their edit or cascade-delete submissions. The
+  // meta write + version bump ride the same statement so the claim is a single atomic act.
+  const claimed = await prisma.assignment.updateMany({
+    where: { id, version: expectedVersion },
+    data: { ...meta, ...legacyColumnsFromPrimary(phases[0]), version: { increment: 1 } },
+  })
+  if (claimed.count === 0) return { ok: false, conflict: true }
+
   const existing = await prisma.phase.findMany({ where: { assignmentId: id }, select: { id: true } })
   const existingIds = new Set(existing.map((p) => p.id))
   const keptIds = new Set(phases.map((p) => p.id).filter((x): x is number => x != null && existingIds.has(x)))
   // The phases this edit actually LOADED. A phase now in the DB but NOT here was added
   // concurrently (another tab, the 复习作业 builder) after the form loaded — it must never be
-  // counted as "removed", or a stale save would cascade-delete its student submissions.
+  // counted as "removed", or a stale save would cascade-delete its student submissions. This
+  // stays as a safety net for any phase-add path that doesn't bump the version.
   const known = new Set(knownPhaseIds)
-
-  await prisma.assignment.update({ where: { id }, data: { ...meta, ...legacyColumnsFromPrimary(phases[0]) } })
 
   for (const p of phases) {
     if (p.id != null && existingIds.has(p.id)) {
@@ -237,6 +255,7 @@ export async function updateWithPhases(prisma: PrismaClient, id: number, meta: A
   // submissions of a phase it didn't know about). Fail-safe: with no known ids, delete none.
   const removed = existing.filter((p) => known.has(p.id) && !keptIds.has(p.id)).map((p) => p.id)
   if (removed.length > 0) await prisma.phase.deleteMany({ where: { id: { in: removed } } })
+  return { ok: true }
 }
 
 // The edit screen: assignment + its ordered phases, each with sentences + chunk-set name.

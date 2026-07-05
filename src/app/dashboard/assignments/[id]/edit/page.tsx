@@ -27,6 +27,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
 
   const initial: AssignmentInitial = {
     id: a.id,
+    version: a.version,
     title: a.title,
     monthLabel: a.monthLabel ?? '',
     chunkSetId: bank?.id ?? null,

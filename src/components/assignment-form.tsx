@@ -61,6 +61,7 @@ export interface PhaseInitial {
 
 export interface AssignmentInitial {
   id?: number // present when editing; absent when prefilling a new publish from a template
+  version?: number // optimistic-lock token loaded with the assignment (edit mode)
   title: string
   monthLabel: string
   chunkSetId: number | null
@@ -372,6 +373,7 @@ export function AssignmentForm({
           <form action={action} className="space-y-4">
             {editing ? <input type="hidden" name="assignmentId" value={initial!.id ?? ""} /> : <input type="hidden" name="primaryOfferingId" value={singleOfferingId ?? ''} />}
             {editing ? <input type="hidden" name="knownPhaseIds" value={knownPhaseIds.join(',')} /> : null}
+            {editing ? <input type="hidden" name="version" value={initial?.version ?? 0} /> : null}
             {!editing ? <input type="hidden" name="batchId" value={publishBatchId} /> : null}
             {!editing && !multi ? <input type="hidden" name="offeringId" value={singleOfferingId ?? ''} /> : null}
             {bankInfo ? <input type="hidden" name="chunkSetId" value={bankInfo.id} /> : null}

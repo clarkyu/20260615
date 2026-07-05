@@ -182,6 +182,9 @@ export async function updateAssignment(
   // phase added concurrently (not in this set) is preserved, never cascade-deleted by a
   // stale save. See repo.updateWithPhases (audit P2-9).
   knownPhaseIds: readonly number[],
+  // The assignment.version the form loaded — the optimistic-lock token. If the assignment was
+  // edited by someone else since, the save is rejected wholesale (audit P2-9).
+  expectedVersion: number,
 ): Promise<UpdateResult> {
   const existing = await assignments.findForSchool(prisma, assignmentId, schoolId, userId, role)
   if (!existing) return { ok: false, error: 'err.assignNotFound' }
@@ -189,7 +192,8 @@ export async function updateAssignment(
   const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)
   if (!resolved.ok) return { ok: false, error: resolved.error }
 
-  await assignments.updateWithPhases(prisma, assignmentId, meta, resolved.phases, knownPhaseIds)
+  const outcome = await assignments.updateWithPhases(prisma, assignmentId, meta, resolved.phases, knownPhaseIds, expectedVersion)
+  if (!outcome.ok) return { ok: false, error: 'err.assignmentChanged' }
   return { ok: true }
 }
 

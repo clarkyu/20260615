@@ -17,7 +17,7 @@ vi.mock('@/lib/repo/bank', () => ({
 }))
 vi.mock('@/lib/repo/assignments', () => ({
   createWithPhases: vi.fn(async () => ({ id: 1 })),
-  updateWithPhases: vi.fn(async () => undefined),
+  updateWithPhases: vi.fn(async () => ({ ok: true })),
   findForSchool: vi.fn(async () => ({ id: 1 })),
 }))
 
@@ -117,12 +117,19 @@ describe('createAssignments — phase resolution', () => {
 
 describe('updateAssignment — phase resolution', () => {
   it('replaces phases via updateWithPhases', async () => {
-    const res = await updateAssignment(prisma, 1, 9, 'SCHOOL_ADMIN', 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null, [7, 8])
+    const res = await updateAssignment(prisma, 1, 9, 'SCHOOL_ADMIN', 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null, [7, 8], 5)
     expect(res).toEqual({ ok: true })
     expect(assignmentsRepo.updateWithPhases as Mock).toHaveBeenCalledTimes(1)
     const call = (assignmentsRepo.updateWithPhases as Mock).mock.calls[0]
     expect(call[1]).toBe(42)
     expect(call[3][0]).toMatchObject({ order: 1, requireVideo: true })
     expect(call[4]).toEqual([7, 8]) // knownPhaseIds forwarded to the repo (audit P2-9)
+    expect(call[5]).toBe(5) // expectedVersion (optimistic-lock token) forwarded
+  })
+
+  it('surfaces a version conflict as err.assignmentChanged (stale edit rejected)', async () => {
+    ;(assignmentsRepo.updateWithPhases as Mock).mockResolvedValueOnce({ ok: false, conflict: true })
+    const res = await updateAssignment(prisma, 1, 9, 'SCHOOL_ADMIN', 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null, [7, 8], 1)
+    expect(res).toEqual({ ok: false, error: 'err.assignmentChanged' })
   })
 })
