@@ -52,6 +52,9 @@ export interface PhaseInitial {
   maxAttempts: number
   isFormalTest: boolean
   freePractice: boolean
+  // 该环节现有的（非草稿）学生提交数——仅编辑已发布作业时由服务端带入；删除有提交的
+  // 环节会连带删除这些提交，故删除前二次确认。新建/新环节为 0。
+  submissionCount?: number
 }
 
 export interface AssignmentInitial {
@@ -124,6 +127,9 @@ interface PhaseState {
   maxAttempts: number
   isFormalTest: boolean
   freePractice: boolean
+  // 该环节现有的（非草稿）学生提交数——仅编辑已发布作业时由服务端带入；删除有提交的
+  // 环节会连带删除这些提交，故删除前二次确认。新建/新环节为 0。
+  submissionCount?: number
 }
 
 // A fresh phase. `bank` = there's a published set this phase can draw from. `recite`
@@ -211,7 +217,11 @@ export function AssignmentForm({
     setPhases((prev) => [...prev, newPhase(hasBank, hasBank && prev.length === 1)])
     setOpenPhase(phases.length) // expand the newly added phase
   }
-  function removePhase(i: number) {
+  async function removePhase(i: number) {
+    if (phases.length <= 1) return
+    // 删除一个已有（非草稿）提交的环节会连带删除这些提交（外键级联）——删除前二次确认。
+    const n = phases[i]?.submissionCount ?? 0
+    if (n > 0 && !(await confirm({ body: t('asg.removePhaseConfirm', { n }), danger: true, okLabel: t('asg.removePhase') }))) return
     setPhases((prev) => (prev.length <= 1 ? prev : prev.filter((_, j) => j !== i)))
     setOpenPhase((o) => (o >= i ? Math.max(0, o - 1) : o))
   }
@@ -432,7 +442,7 @@ export function AssignmentForm({
                   onToggle={() => setOpenPhase(openPhase === i ? -1 : i)}
                   onPatch={(patch) => patchPhase(i, patch)}
                   onMove={(dir) => movePhase(i, dir)}
-                  onRemove={() => removePhase(i)}
+                  onRemove={() => void removePhase(i)}
                 />
               ))}
               <Button type="button" variant="outline" className="w-full" onClick={addPhase}>

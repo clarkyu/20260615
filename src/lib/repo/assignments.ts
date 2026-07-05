@@ -334,6 +334,21 @@ export async function pendingReviewByAssignment(prisma: PrismaClient, schoolId: 
   return new Map(groups.map((g) => [g.assignmentId, g._count._all]))
 }
 
+// Non-DRAFT submission count per PHASE of one assignment — the edit form uses it to
+// warn before removing a phase that already has student submissions (removing it
+// cascade-deletes those). System-scoped by assignmentId (the caller already scoped the
+// assignment to the staff member).
+export async function submittedCountByPhase(prisma: PrismaClient, assignmentId: number): Promise<Map<number, number>> {
+  const groups = await prisma.submission.groupBy({
+    by: ['phaseId'],
+    where: { assignmentId, status: { not: 'DRAFT' } },
+    _count: { _all: true },
+  })
+  const m = new Map<number, number>()
+  for (const g of groups) if (g.phaseId != null) m.set(g.phaseId, g._count._all)
+  return m
+}
+
 // Each assignment's sentences {phaseId, order, text} — the insights weak-line map
 // (keyed per phase, since orders repeat across phases).
 export function listForOfferingTitled(prisma: PrismaClient, offeringId: number) {
