@@ -37,7 +37,7 @@ vi.mock('next/navigation', () => ({
 
 import type { PrismaClient } from '@prisma/client'
 import { login } from '@/actions/auth'
-import { finishSubmission, submitChoice, submitFreeText } from '@/actions/submissions'
+import { finishSubmission, submitChoice, submitFreeText, submitMultiChoice } from '@/actions/submissions'
 import { batchOverride } from '@/actions/grading'
 import { getCurrentUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
@@ -156,6 +156,48 @@ describe('server actions E2E (real iron-session + real SQL)', () => {
 
     expect(await batchOverride(d.assignment.id, [sub.id], 50, 'x')).toMatchObject({ updated: 0 }) // scoped away
     expect((await db.prisma.submission.findUnique({ where: { id: sub.id } }))?.status).toBe('UPLOADED') // untouched
+  })
+
+  it('graded multi-select scores all-or-nothing: exact set→100, missing/extra→0, both GRADED & no review', async () => {
+    const d = await seed(db.prisma)
+    const quiz = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, multiChoice: true, choicesJson: JSON.stringify(['A', 'B', 'C', 'D']), correctChoices: JSON.stringify(['A', 'C']), graded: true, maxAttempts: 5 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+
+    // Exact correct set (order-insensitive) → 100.
+    expect(await submitMultiChoice(quiz.id, ['C', 'A'])).toEqual({ success: true })
+    expect(await finishSubmission(quiz.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: quiz.id, attempt: 1 } })).toMatchObject({ status: 'GRADED', finalScore: 100, needsReview: false })
+
+    // Missing one correct → 0.
+    expect(await submitMultiChoice(quiz.id, ['A'])).toEqual({ success: true })
+    expect(await finishSubmission(quiz.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: quiz.id, attempt: 2 } })).toMatchObject({ status: 'GRADED', finalScore: 0, needsReview: false })
+
+    // Extra (superset) → 0.
+    expect(await submitMultiChoice(quiz.id, ['A', 'C', 'B'])).toEqual({ success: true })
+    expect(await finishSubmission(quiz.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: quiz.id, attempt: 3 } })).toMatchObject({ status: 'GRADED', finalScore: 0, needsReview: false })
+  })
+
+  it('multi-select poll (no correct answers) records the picks without scoring or review', async () => {
+    const d = await seed(db.prisma)
+    const poll = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, multiChoice: true, choicesJson: JSON.stringify(['猫', '狗', '兔']), graded: false, maxAttempts: 1 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+
+    expect(await submitMultiChoice(poll.id, ['狗', '兔'])).toEqual({ success: true })
+    expect(await finishSubmission(poll.id)).toEqual({ success: true })
+    const sub = await db.prisma.submission.findFirst({ where: { phaseId: poll.id, attempt: 1 } })
+    expect(sub).toMatchObject({ status: 'UPLOADED', needsReview: false })
+    expect(sub?.finalScore).toBeNull()
+    // Stored as a JSON array in the phase's option order (stable for judging/aggregation).
+    expect(sub?.recitedText).toBe(JSON.stringify(['狗', '兔']))
+  })
+
+  it('rejects a multi-select pick that is not among the configured options', async () => {
+    const d = await seed(db.prisma)
+    const poll = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, multiChoice: true, choicesJson: JSON.stringify(['A', 'B']), graded: false, maxAttempts: 1 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+    expect(await submitMultiChoice(poll.id, ['A', 'Z'])).toHaveProperty('error')
   })
 
   it('free-text submit routes to the durable WRITING grader (not speech), pending review', async () => {

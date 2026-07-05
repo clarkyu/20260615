@@ -111,6 +111,8 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       requireChoice={phase.requireChoice}
       choices={parseChoices(phase.choicesJson)}
       correctChoice={phase.correctChoice}
+      multiChoice={phase.multiChoice}
+      correctChoices={parseChoices(phase.correctChoices)}
       requireFreeText={phase.requireFreeText}
       attemptsLeft={attemptsLeft}
       windowState={windowState}

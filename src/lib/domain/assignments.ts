@@ -29,10 +29,12 @@ export interface PhaseDraft {
   requireAudio: boolean
   requireVideo: boolean
   requireHandwriting: boolean
-  // 新提交类型（可选，旧 draft 省略即 false/null）：单选投票 / 自由文本。
+  // 新提交类型（可选，旧 draft 省略即 false/null）：单选投票 / 多选 / 自由文本。
   requireChoice?: boolean
   choicesJson?: string | null
   correctChoice?: string | null
+  multiChoice?: boolean
+  correctChoices?: string | null
   requireFreeText?: boolean
   // 每环节批阅配置（可选，空=跟随作业/平台默认）。
   rubric?: string | null
@@ -96,6 +98,8 @@ async function resolvePhases(
       requireChoice: d.requireChoice ?? false,
       choicesJson: d.choicesJson ?? null,
       correctChoice: d.correctChoice ?? null,
+      multiChoice: d.multiChoice ?? false,
+      correctChoices: d.correctChoices ?? null,
       requireFreeText: d.requireFreeText ?? false,
       rubric: d.rubric ?? null,
       perceptionModel: d.perceptionModel ?? null,

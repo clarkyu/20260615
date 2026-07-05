@@ -292,8 +292,8 @@ export function GradingClient(props: {
             </CardTitle>
             <CardDescription>
               {t('grade.pollTotal', { n: poll.total })}
-              {poll.correctChoice != null
-                ? ` · ${t('grade.correctRate', { pct: poll.total > 0 ? Math.round(((poll.correctCount ?? 0) / poll.total) * 100) : 0 })}`
+              {poll.correctCount != null
+                ? ` · ${t('grade.correctRate', { pct: poll.total > 0 ? Math.round((poll.correctCount / poll.total) * 100) : 0 })}`
                 : ''}
             </CardDescription>
           </CardHeader>

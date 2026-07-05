@@ -10,3 +10,15 @@ export function parseChoices(json: string | null | undefined): string[] {
     return []
   }
 }
+
+// Compare two option-text lists as SETS — order- and duplicate-insensitive, trimmed,
+// empties dropped. The multi-select (多选题) judge is all-or-nothing: full marks iff the
+// student's selected set equals the correct set. Used by the objective grading branch.
+export function sameChoiceSet(a: string[], b: string[]): boolean {
+  const norm = (xs: string[]) => new Set(xs.map((x) => x.trim()).filter(Boolean))
+  const sa = norm(a)
+  const sb = norm(b)
+  if (sa.size !== sb.size) return false
+  for (const x of sa) if (!sb.has(x)) return false
+  return true
+}
