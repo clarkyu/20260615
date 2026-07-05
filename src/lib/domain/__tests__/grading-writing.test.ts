@@ -17,7 +17,7 @@ const { gradeWriting, repo } = vi.hoisted(() => ({
 vi.mock('@/lib/ai/grade', () => ({ gradeWriting }))
 vi.mock('@/lib/ai/teacher-keys', () => ({ resolveTeacherKeys: vi.fn(async () => ({})) }))
 vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: (_k: unknown, fn: () => unknown) => fn() }))
-vi.mock('@/lib/ai/cost', () => ({ costUsd: () => 0.0012 }))
+vi.mock('@/lib/ai/cost', () => ({ costUsd: () => 0.0012, costMicroUsd: () => 1200 }))
 vi.mock('@/lib/repo/submissions', () => repo)
 vi.mock('@/lib/repo/assignments', () => ({
   offeringTeacher: vi.fn(async () => ({ teacherId: 1, defaultPerceptionModel: null, defaultJudgeModel: null })),

@@ -18,6 +18,7 @@ export interface NewPracticeAttempt {
   inputTokens: number | null
   outputTokens: number | null
   costUsd: number | null
+  costMicroUsd: number | null // integer µUSD — the bill-grade cost column (usage aggregates on this)
 }
 
 export function createAttempt(prisma: PrismaClient, data: NewPracticeAttempt) {

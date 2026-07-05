@@ -137,6 +137,14 @@ export function costUsd(modelId: string, inputTokens: number, outputTokens: numb
   return r.currency === 'CNY' ? raw / CNY_PER_USD : raw
 }
 
+// 同一口径下的【整数微美元】成本(1 USD = 1_000_000 µUSD)。金额落库/累加务必用整数——把
+// 成百上千条零点几美分的成本先各自 round 到最近的 µUSD，再按整数求和，结果精确无浮点漂移
+// (Float 直接累加会在小额多行时丢精度，达不到计费级)。单条 round 到 µUSD 远细于任何计费
+// 需要(1 µUSD = 1e-4 分)。口径与 costUsd 完全一致(未知模型/whisper 同样得 0)。
+export function costMicroUsd(modelId: string, inputTokens: number, outputTokens: number): number {
+  return Math.round(costUsd(modelId, inputTokens, outputTokens) * 1_000_000)
+}
+
 // 紧凑展示 token 数（语言中立，避免在 en/es 里出现中文「万」）：≥1M → X.XM，≥1k → Xk。
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

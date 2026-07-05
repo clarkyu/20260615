@@ -10,7 +10,7 @@ import type { TokenUsage } from '@/lib/ai/types'
 import { logError } from '../log'
 import { config } from '@/lib/config'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
-import { costUsd } from '@/lib/ai/cost'
+import { costUsd, costMicroUsd } from '@/lib/ai/cost'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { withAiKeys } from '@/lib/ai/key-context'
@@ -170,6 +170,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       inputTokens: gotUsage ? usedIn : null,
       outputTokens: gotUsage ? usedOut : null,
       costUsd: gotUsage ? costUsd(perceptionModel, usedIn, usedOut) : null,
+      costMicroUsd: gotUsage ? costMicroUsd(perceptionModel, usedIn, usedOut) : null,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''

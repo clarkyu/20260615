@@ -6,7 +6,7 @@ import type { PrismaClient } from '@prisma/client'
 // the whole school. Aggregation is pure and lives in domain/usage.ts.
 
 export interface UsageRow {
-  costUsd: number
+  costMicroUsd: number // integer µUSD (1 USD = 1e6) — summed exactly, no Float drift
   inputTokens: number
   outputTokens: number
   at: Date
@@ -26,21 +26,23 @@ export async function listUsageForSchool(
   const offering = { schoolId: schoolId ?? -1, ...(teacherId ? { teacherId } : {}) }
   const ownerSelect = { offering: { select: { teacherId: true, teacher: { select: { name: true } } } } }
 
+  // Aggregate on costMicroUsd (integer µUSD) — the bill-grade column. Historical rows
+  // were backfilled from the legacy REAL costUsd, so both old and new rows carry it.
   const [subs, practice] = await Promise.all([
     prisma.submission.findMany({
-      where: { costUsd: { not: null }, assignment: { offering } },
-      select: { costUsd: true, inputTokens: true, outputTokens: true, gradedAt: true, createdAt: true, assignment: { select: ownerSelect } },
+      where: { costMicroUsd: { not: null }, assignment: { offering } },
+      select: { costMicroUsd: true, inputTokens: true, outputTokens: true, gradedAt: true, createdAt: true, assignment: { select: ownerSelect } },
     }),
     prisma.practiceAttempt.findMany({
-      where: { costUsd: { not: null }, assignment: { offering } },
-      select: { costUsd: true, inputTokens: true, outputTokens: true, createdAt: true, assignment: { select: ownerSelect } },
+      where: { costMicroUsd: { not: null }, assignment: { offering } },
+      select: { costMicroUsd: true, inputTokens: true, outputTokens: true, createdAt: true, assignment: { select: ownerSelect } },
     }),
   ])
 
   const rows: UsageRow[] = []
   for (const s of subs) {
     rows.push({
-      costUsd: s.costUsd ?? 0,
+      costMicroUsd: s.costMicroUsd ?? 0,
       inputTokens: s.inputTokens ?? 0,
       outputTokens: s.outputTokens ?? 0,
       at: s.gradedAt ?? s.createdAt,
@@ -51,7 +53,7 @@ export async function listUsageForSchool(
   }
   for (const a of practice) {
     rows.push({
-      costUsd: a.costUsd ?? 0,
+      costMicroUsd: a.costMicroUsd ?? 0,
       inputTokens: a.inputTokens ?? 0,
       outputTokens: a.outputTokens ?? 0,
       at: a.createdAt,

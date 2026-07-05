@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { estimateGrading, formatTokens, MODEL_RATES, costUsd } from '../cost'
+import { estimateGrading, formatTokens, MODEL_RATES, costUsd, costMicroUsd } from '../cost'
 import { PRESETS, DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '../registry'
 
 const sub = (over: Partial<{ hasVideo: boolean; hasAudio: boolean; hasImage: boolean; durationSec: number; recitedLen: number }> = {}) => ({
@@ -77,6 +77,26 @@ describe('costUsd (real usage → USD)', () => {
 
   it('never goes negative on junk input', () => {
     expect(costUsd('gemini-3.5-flash', -100, -100)).toBe(0)
+  })
+})
+
+describe('costMicroUsd (real usage → integer µUSD)', () => {
+  it('is the same price as costUsd, rounded to an integer micro-USD (1 USD = 1e6 µUSD)', () => {
+    // gemini-3.5-flash: 1e6 in + 1e6 out = $10.5 → 10_500_000 µUSD.
+    expect(costMicroUsd('gemini-3.5-flash', 1_000_000, 1_000_000)).toBe(10_500_000)
+    // MiniMax (CNY): ¥9 → /7.2 = $1.25 → 1_250_000 µUSD.
+    expect(costMicroUsd('MiniMax-Text-01', 1_000_000, 1_000_000)).toBe(1_250_000)
+  })
+
+  it('always returns an integer (money is stored/summed as integer minor units)', () => {
+    const v = costMicroUsd('gemini-2.5-flash', 12_345, 6_789)
+    expect(Number.isInteger(v)).toBe(true)
+  })
+
+  it('is 0 for per-minute (whisper), unknown models, and junk input', () => {
+    expect(costMicroUsd('whisper-1', 5000, 5000)).toBe(0)
+    expect(costMicroUsd('nope', 1000, 1000)).toBe(0)
+    expect(costMicroUsd('gemini-3.5-flash', -100, -100)).toBe(0)
   })
 })
 

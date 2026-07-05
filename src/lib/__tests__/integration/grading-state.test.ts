@@ -27,7 +27,7 @@ async function seed(p: PrismaClient): Promise<{ subId: number; teacherId: number
 const gradeResult = (over: Partial<GradeResult> = {}): GradeResult => ({
   status: 'GRADED', needsReview: false, confidence: 0.9, perceptionModel: 'p', judgeModel: 'j',
   transcript: 't', aiResult: '{}', aiScore: 60, finalScore: 60, feedback: 'ok', gradedById: null,
-  inputTokens: null, outputTokens: null, costUsd: null, ...over,
+  inputTokens: null, outputTokens: null, costUsd: null, costMicroUsd: null, ...over,
 })
 
 describe('grading status state machine (real SQL)', () => {
@@ -93,7 +93,7 @@ describe('grading status state machine (real SQL)', () => {
   it('applyShadowResult is fenced to PROCESSING as well', async () => {
     const p = db.prisma
     const { subId } = await seed(p)
-    const shadow = { needsReview: false, aiScore: 80, finalScore: 80, confidence: 0.8, feedback: 'f', inputTokens: null, outputTokens: null, costUsd: null }
+    const shadow = { needsReview: false, aiScore: 80, finalScore: 80, confidence: 0.8, feedback: 'f', inputTokens: null, outputTokens: null, costUsd: null, costMicroUsd: null }
     // Not claimed → no-op.
     expect((await submissionRepo.applyShadowResult(p, subId, shadow)).count).toBe(0)
     // Claimed → finalizes.

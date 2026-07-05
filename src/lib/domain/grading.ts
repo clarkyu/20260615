@@ -10,7 +10,7 @@ import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
 import { config } from '@/lib/config'
 import { gradeSubmission } from '@/lib/ai/grade'
-import { costUsd } from '@/lib/ai/cost'
+import { costUsd, costMicroUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { presignDownload, storageConfigured } from '@/lib/storage'
@@ -194,6 +194,10 @@ export async function autoGradeSubmission(
     const cost =
       costUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
       costUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    // Bill-grade: two integer µUSD costs sum exactly (no Float accumulation drift).
+    const costMicro =
+      costMicroUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+      costMicroUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     const hasUsage = Boolean(pu || ju)
 
     await submissionRepo.applyGradeResult(prisma, submission.id, {
@@ -212,6 +216,7 @@ export async function autoGradeSubmission(
       inputTokens: hasUsage ? inputTokens : null,
       outputTokens: hasUsage ? outputTokens : null,
       costUsd: hasUsage ? cost : null,
+      costMicroUsd: hasUsage ? costMicro : null,
     })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
