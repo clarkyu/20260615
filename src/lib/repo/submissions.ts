@@ -235,9 +235,13 @@ export function listExpiredMedia(prisma: PrismaClient, cutoff: Date, limit: numb
   })
 }
 
-// Null the media keys once the objects are deleted, so nothing points at a gone file.
-export function clearMedia(prisma: PrismaClient, id: number) {
-  return prisma.submission.update({ where: { id }, data: { videoKey: null, audioKey: null, imageKey: null } })
+// Null the named media pointers once their objects are deleted, so nothing points at a gone
+// file. The retention sweep clears only the keys whose R2 object it actually removed, so one
+// key whose delete keeps failing can't re-block clearing the siblings that are already gone.
+export function clearMediaKeys(prisma: PrismaClient, id: number, cols: readonly ('videoKey' | 'audioKey' | 'imageKey')[]) {
+  const data: { videoKey?: null; audioKey?: null; imageKey?: null } = {}
+  for (const c of cols) data[c] = null
+  return prisma.submission.update({ where: { id }, data })
 }
 
 // Per-sentence shadow-take recordings older than `cutoff`. The retention sweep deletes
