@@ -44,6 +44,8 @@ export interface PhaseDraft {
   judgeModel?: string | null
   graded: boolean
   maxAttempts: number
+  // 该环节在作业总分里的相对权重（≥1）；默认 1 = 等权。
+  weight: number
   isFormalTest: boolean
   freePractice: boolean
 }
@@ -110,6 +112,7 @@ async function resolvePhases(
       judgeModel: d.judgeModel ?? null,
       graded: d.graded,
       maxAttempts: d.maxAttempts,
+      weight: Math.max(1, Math.round(d.weight || 1)),
       isFormalTest: d.isFormalTest,
       // 自由练习只在「仅练习不计分」时成立——计分环节不能放任不限次数/不批阅。
       freePractice: d.freePractice && !d.graded,

@@ -62,6 +62,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       judgeModel: p.defaultJudgeModel ?? '',
       graded: p.graded,
       maxAttempts: p.maxAttempts,
+      weight: p.weight,
       isFormalTest: p.isFormalTest,
       freePractice: p.freePractice,
       submissionCount: submissionCounts.get(p.id) ?? 0,

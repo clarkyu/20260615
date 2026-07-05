@@ -360,6 +360,9 @@ model Phase {
   // 自由文本：开放式提交，老师评阅时按自己的标准人工打分（不走背诵 AI 评分）。
   requireFreeText Boolean @default(false)
   graded       Boolean @default(true)  // false → 仅练习、不计分
+  // 该环节在「作业总分」里的相对权重（仅对 graded 环节有意义）。总分 = Σ(环节分×权重)/Σ权重。
+  // 默认 1 → 各环节等权（与历史行为一致）；老师发布时可调，让长/重的环节占更大比重。
+  weight       Int      @default(1)
   maxAttempts  Int      @default(1)
   // 自由练习（仅当 graded=false 时有意义）：true → 不限提交次数、AI 评完即定稿不进
   // 老师待批队列。让发作业的老师自己决定练习环节是否打扰到批阅与次数限制。

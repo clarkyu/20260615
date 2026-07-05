@@ -115,7 +115,7 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
     // Uses the denormalized offeringId + @@index([offeringId, status]) — a single indexed
     // scan instead of a Submission→Assignment→CourseOffering join.
     where: { offeringId, status: { not: 'DRAFT' } },
-    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true, weight: true } } },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }
@@ -159,7 +159,7 @@ export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number |
 export function listForOfferingGradebook(prisma: PrismaClient, offeringId: number) {
   return prisma.submission.findMany({
     where: { offeringId, status: { not: 'DRAFT' } },
-    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, phase: { select: { graded: true } } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, phase: { select: { graded: true, weight: true } } },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }
@@ -196,7 +196,7 @@ export function countNewlyGraded(prisma: PrismaClient, studentId: number, since:
 export function listForStudentLatestFirst(prisma: PrismaClient, studentId: number) {
   return prisma.submission.findMany({
     where: { studentId, status: { not: 'DRAFT' } },
-    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } }, assignment: { select: { title: true } } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true, weight: true } }, assignment: { select: { title: true } } },
     orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }
@@ -206,7 +206,7 @@ export function listForStudentLatestFirst(prisma: PrismaClient, studentId: numbe
 export function listForStudentInOfferingLatestFirst(prisma: PrismaClient, offeringId: number, studentId: number) {
   return prisma.submission.findMany({
     where: { studentId, status: { not: 'DRAFT' }, offeringId },
-    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } }, assignment: { select: { title: true } } },
+    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true, weight: true } }, assignment: { select: { title: true } } },
     orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }

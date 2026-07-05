@@ -36,7 +36,7 @@ export interface RawPhaseRow {
   // Optional: the gradebook collapses phases and never needs per-sentence detail, so it
   // omits the (potentially large) aiResult JSON. Absent → perSentence is [].
   aiResult?: string | null
-  phase: { graded: boolean } | null
+  phase: { graded: boolean; weight: number } | null
 }
 
 // The latest non-DRAFT submission per (student, assignment, phase). `rows` arrive
@@ -46,6 +46,8 @@ export interface PhaseSubmission {
   assignmentId: number
   phaseId: number | null
   graded: boolean
+  // 该环节在作业总分里的相对权重（老师发布时设，默认 1 = 等权）。
+  weight: number
   status: string
   finalScore: number | null
   needsReview: boolean
@@ -64,6 +66,7 @@ export function latestPhaseSubmissions(rows: RawPhaseRow[]): PhaseSubmission[] {
       assignmentId: s.assignmentId,
       phaseId: s.phaseId ?? null,
       graded: s.phase?.graded ?? true,
+      weight: s.phase?.weight ?? 1,
       status: s.status,
       finalScore: s.finalScore,
       needsReview: s.needsReview,
@@ -74,9 +77,10 @@ export function latestPhaseSubmissions(rows: RawPhaseRow[]): PhaseSubmission[] {
 }
 
 // Collapse the per-phase submissions of an assignment into ONE analytics row per
-// (student, assignment): score = mean of the GRADED phases' final scores; submitted if
-// any phase is in; needsReview if any phase needs review. This is the single place that
-// defines "a multi-phase assignment's one score" — the mean of its graded phases.
+// (student, assignment): score = WEIGHTED mean of the GRADED phases' final scores (each
+// phase carries a teacher-set weight, default 1 = equal); submitted if any phase is in;
+// needsReview if any phase needs review. This is the single place that defines "a
+// multi-phase assignment's one score".
 export function collapsePhases(rows: PhaseSubmission[]): AnalyticsSubmission[] {
   const byPair = new Map<string, PhaseSubmission[]>()
   for (const r of rows) {
@@ -88,8 +92,12 @@ export function collapsePhases(rows: PhaseSubmission[]): AnalyticsSubmission[] {
   const out: AnalyticsSubmission[] = []
   for (const group of byPair.values()) {
     const submitted = group.filter((g) => isSubmitted(g.status))
-    const gradedScores = submitted.filter((g) => g.graded && g.finalScore != null).map((g) => g.finalScore as number)
-    const finalScore = gradedScores.length ? gradedScores.reduce((a, b) => a + b, 0) / gradedScores.length : null
+    // 加权平均：总分 = Σ(环节分 × 权重) / Σ权重。权重全为 1 时退化成等权（与历史一致）。
+    const graded = submitted.filter((g) => g.graded && g.finalScore != null)
+    const totalWeight = graded.reduce((a, g) => a + Math.max(1, g.weight), 0)
+    const finalScore = totalWeight > 0
+      ? graded.reduce((a, g) => a + (g.finalScore as number) * Math.max(1, g.weight), 0) / totalWeight
+      : null
     out.push({
       studentId: group[0].studentId,
       assignmentId: group[0].assignmentId,

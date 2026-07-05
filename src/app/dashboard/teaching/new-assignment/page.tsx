@@ -92,6 +92,7 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
           judgeModel: p.judgeModel ?? '',
           graded: p.graded,
           maxAttempts: p.maxAttempts,
+          weight: p.weight,
           isFormalTest: p.isFormalTest,
           freePractice: p.freePractice,
         })),

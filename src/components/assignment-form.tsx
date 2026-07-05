@@ -50,6 +50,8 @@ export interface PhaseInitial {
   judgeModel: string
   graded: boolean
   maxAttempts: number
+  // 该环节在作业总分里的相对权重（≥1），默认 1 = 等权。
+  weight: number
   isFormalTest: boolean
   freePractice: boolean
   // 该环节现有的（非草稿）学生提交数——仅编辑已发布作业时由服务端带入；删除有提交的
@@ -127,6 +129,8 @@ interface PhaseState {
   judgeModel: string
   graded: boolean
   maxAttempts: number
+  // 该环节在作业总分里的相对权重（≥1），默认 1 = 等权。
+  weight: number
   isFormalTest: boolean
   freePractice: boolean
   // 该环节现有的（非草稿）学生提交数——仅编辑已发布作业时由服务端带入；删除有提交的
@@ -164,6 +168,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     judgeModel: '',
     graded: true,
     maxAttempts: 3,
+    weight: 1,
     isFormalTest: false,
     freePractice: false,
   }
@@ -297,6 +302,7 @@ export function AssignmentForm({
       judgeModel: p.judgeModel || null,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
+      weight: p.weight,
       isFormalTest: p.isFormalTest,
       freePractice: p.freePractice,
     })),
@@ -795,6 +801,15 @@ function PhaseCard({
           <span>{t('asg.graded')}<span className="block text-xs text-muted-foreground">{t('asg.gradedHint')}</span></span>
         </label>
       </div>
+
+      {/* 环节权重（仅计分环节）：作业总分 = Σ(环节分×权重)/Σ权重 */}
+      {phase.graded ? (
+        <div className="space-y-1.5">
+          <Label>{t('asg.fWeight')}</Label>
+          <Input type="number" min={1} value={phase.weight} onChange={(e) => onPatch({ weight: Math.max(1, Number(e.target.value) || 1) })} aria-label={t('asg.fWeight')} />
+          <p className="text-xs text-muted-foreground">{t('asg.fWeightHint')}</p>
+        </div>
+      ) : null}
 
       {/* 自由练习（仅「不计分」时可选）：不限次数、不进待批 */}
       {!phase.graded ? (

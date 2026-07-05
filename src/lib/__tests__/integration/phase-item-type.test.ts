@@ -26,6 +26,7 @@ const phase = (over: Partial<PhaseInput>): PhaseInput => ({
   requireHandwriting: false,
   graded: true,
   maxAttempts: 1,
+  weight: 1,
   isFormalTest: false,
   freePractice: false,
   sentences: [],

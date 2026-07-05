@@ -52,6 +52,7 @@ export interface PhaseInput {
   judgeModel?: string | null
   graded: boolean
   maxAttempts: number
+  weight: number
   isFormalTest: boolean
   freePractice: boolean
   sentences: SentenceRow[]
@@ -159,6 +160,7 @@ function phaseData(p: PhaseInput) {
     defaultJudgeModel: p.judgeModel ?? null,
     graded: p.graded,
     maxAttempts: p.maxAttempts,
+    weight: p.weight,
     isFormalTest: p.isFormalTest,
     freePractice: p.freePractice,
   }
@@ -341,6 +343,7 @@ export function createReview(prisma: PrismaClient, offeringId: number, title: st
       requireHandwriting: false,
       graded: true,
       maxAttempts: 3,
+      weight: 1,
       isFormalTest: false,
       freePractice: false,
       sentences,

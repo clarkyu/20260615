@@ -27,6 +27,7 @@ export const templatePhaseSchema = z.object({
   judgeModel: z.string().nullable().default(null),
   graded: z.boolean().default(true),
   maxAttempts: z.coerce.number().int().min(1).max(99).default(1),
+  weight: z.coerce.number().int().min(1).max(99).default(1),
   isFormalTest: z.boolean().default(false),
   freePractice: z.boolean().default(false),
 })
@@ -76,6 +77,7 @@ export interface TemplateSourcePhase {
   judgeModel?: string | null
   graded: boolean
   maxAttempts: number
+  weight: number
   isFormalTest: boolean
   freePractice: boolean
 }
@@ -117,6 +119,7 @@ export function buildTemplatePayload(
       judgeModel: p.judgeModel ?? null,
       graded: p.graded,
       maxAttempts: p.maxAttempts,
+      weight: p.weight,
       isFormalTest: p.isFormalTest,
       freePractice: p.freePractice,
     })),

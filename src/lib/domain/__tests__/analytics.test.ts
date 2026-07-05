@@ -20,6 +20,7 @@ import {
 const phaseSub = (o: Partial<PhaseSubmission> & Pick<PhaseSubmission, 'studentId' | 'assignmentId'>): PhaseSubmission => ({
   phaseId: 1,
   graded: true,
+  weight: 1,
   status: 'GRADED',
   finalScore: null,
   needsReview: false,
@@ -183,7 +184,7 @@ describe('studentWeakPoints', () => {
 
 describe('latestPhaseSubmissions + collapsePhases', () => {
   const raw = (o: Partial<RawPhaseRow> & Pick<RawPhaseRow, 'studentId' | 'assignmentId' | 'phaseId'>): RawPhaseRow => ({
-    status: 'GRADED', finalScore: null, needsReview: false, aiResult: null, phase: { graded: true }, ...o,
+    status: 'GRADED', finalScore: null, needsReview: false, aiResult: null, phase: { graded: true, weight: 1 }, ...o,
   })
 
   it('keeps the latest attempt per (student, assignment, phase)', () => {
@@ -200,7 +201,7 @@ describe('latestPhaseSubmissions + collapsePhases', () => {
 
   it('treats a row with no aiResult (the gradebook’s lighter query) as empty per-sentence detail', () => {
     const phases = latestPhaseSubmissions([
-      { studentId: 1, assignmentId: 10, phaseId: 1, status: 'GRADED', finalScore: 88, needsReview: false, phase: { graded: true } },
+      { studentId: 1, assignmentId: 10, phaseId: 1, status: 'GRADED', finalScore: 88, needsReview: false, phase: { graded: true, weight: 1 } },
     ])
     expect(phases[0].perSentence).toEqual([])
     expect(phases[0].finalScore).toBe(88)
@@ -215,6 +216,15 @@ describe('latestPhaseSubmissions + collapsePhases', () => {
     const [row] = collapsePhases(phases)
     expect(row.finalScore).toBe(70) // mean(80, 60); the practice-only 10 is excluded
     expect(row.status).not.toBe('DRAFT') // submitted
+  })
+
+  it('collapses to the WEIGHTED mean of graded phases (teacher-set per-phase weight)', () => {
+    // phase 1 (weight 3, score 80) + phase 2 (weight 1, score 40): (80·3 + 40·1)/(3+1) = 70.
+    const phases: PhaseSubmission[] = [
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 1, graded: true, finalScore: 80, weight: 3 }),
+      phaseSub({ studentId: 1, assignmentId: 10, phaseId: 2, graded: true, finalScore: 40, weight: 1 }),
+    ]
+    expect(collapsePhases(phases)[0].finalScore).toBe(70) // equal-weight would be 60
   })
 
   it('feeds the existing analytics: a 2-phase assignment scores its mean', () => {

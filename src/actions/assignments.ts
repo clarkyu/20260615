@@ -63,6 +63,7 @@ const phaseJsonSchema = z.object({
   judgeModel: z.string().nullable().optional().default(null),
   graded: z.boolean().optional().default(true),
   maxAttempts: z.coerce.number().int().min(1).max(99).optional().default(1),
+  weight: z.coerce.number().int().min(1).max(99).optional().default(1),
   isFormalTest: z.boolean().optional().default(false),
   freePractice: z.boolean().optional().default(false),
 })
@@ -105,6 +106,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
     judgeModel: p.judgeModel ?? null,
     graded: p.graded,
     maxAttempts: p.maxAttempts,
+    weight: p.weight,
     isFormalTest: p.isFormalTest,
     freePractice: p.freePractice,
   }))
