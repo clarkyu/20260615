@@ -371,13 +371,16 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
 // students, not per-phase submission rows, so a multi-phase assignment isn't inflated
 // (20 students × 3 phases must read 20, not 60).
 export async function submittedCountByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<Map<number, number>> {
-  const rows = await prisma.submission.findMany({
+  // GROUP BY (assignmentId, studentId) dedups a student's multiple attempts/phases IN SQL
+  // and ships only the distinct pairs — whereas Prisma `distinct` on the D1 adapter fetches
+  // every matching row and dedups in the query engine (the 作业 menu re-scanned a teacher's
+  // whole submission history on each load). Then count distinct students per assignment.
+  const pairs = await prisma.submission.groupBy({
+    by: ['assignmentId', 'studentId'],
     where: { status: { not: 'DRAFT' }, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
-    select: { assignmentId: true, studentId: true },
-    distinct: ['assignmentId', 'studentId'],
   })
   const m = new Map<number, number>()
-  for (const r of rows) m.set(r.assignmentId, (m.get(r.assignmentId) ?? 0) + 1)
+  for (const p of pairs) m.set(p.assignmentId, (m.get(p.assignmentId) ?? 0) + 1)
   return m
 }
 
