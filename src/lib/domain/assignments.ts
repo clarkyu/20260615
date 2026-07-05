@@ -199,13 +199,13 @@ export async function updateAssignment(
 
 // 学情 → 行动：把一个授课里"最弱的句子"生成一份复习作业。Returns where to go next
 // (the new assignment's edit page, or insights when there's nothing weak yet).
-export async function buildReviewAssignment(prisma: PrismaClient, offeringId: number): Promise<{ redirectTo: string }> {
+export async function buildReviewAssignment(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<{ redirectTo: string }> {
   const list = await assignments.listWithSentencesForOffering(prisma, offeringId)
   // Keyed per (assignment, phase, order): sentence orders repeat across phases.
   const textByKey = new Map<string, { text: string; translation: string | null }>()
   for (const a of list) for (const s of a.sentences) textByKey.set(`${a.id}:${s.phaseId ?? 0}:${s.order}`, { text: s.text, translation: s.translation })
 
-  const phaseRows = latestPhaseSubmissions(await submissions.listForOfferingLatestFirst(prisma, offeringId))
+  const phaseRows = latestPhaseSubmissions(await submissions.listForOfferingLatestFirst(prisma, offeringId, schoolId, userId, role))
 
   const picked: SentenceRow[] = []
   const used = new Set<string>()

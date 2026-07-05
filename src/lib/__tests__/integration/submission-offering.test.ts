@@ -19,7 +19,7 @@ async function seed(p: PrismaClient) {
   const asgA = await p.assignment.create({ data: { offeringId: offA.id, title: 'A' } })
   const asgB = await p.assignment.create({ data: { offeringId: offB.id, title: 'B' } })
   const phaseA = await p.phase.create({ data: { assignmentId: asgA.id, order: 1, requireVideo: true, graded: true, maxAttempts: 3 } })
-  return { offA, offB, asgA, asgB, phaseA, student }
+  return { school, teacher, offA, offB, asgA, asgB, phaseA, student }
 }
 
 describe('Submission.offeringId denormalization (real SQL)', () => {
@@ -40,8 +40,25 @@ describe('Submission.offeringId denormalization (real SQL)', () => {
     await p.submission.create({ data: { assignmentId: d.asgB.id, offeringId: d.offB.id, phaseId: null, studentId: d.student.id, attempt: 1, status: 'GRADED', finalScore: 60 } }) // other offering
     await p.submission.create({ data: { assignmentId: d.asgA.id, offeringId: d.offA.id, phaseId: d.phaseA.id, studentId: d.student.id, attempt: 2, status: 'DRAFT' } }) // excluded
 
-    const rows = await submissionRepo.listForOfferingLatestFirst(p, d.offA.id)
+    const rows = await submissionRepo.listForOfferingLatestFirst(p, d.offA.id, d.school.id, d.teacher.id, 'TEACHER')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ assignmentId: d.asgA.id, finalScore: 80 })
+  })
+
+  it('the tenant fence blocks a valid offeringId under the wrong scope — safe by construction (audit P2-8)', async () => {
+    const d = await seed(db.prisma)
+    const p = db.prisma
+    await p.submission.create({ data: { assignmentId: d.asgA.id, offeringId: d.offA.id, phaseId: d.phaseA.id, studentId: d.student.id, attempt: 1, status: 'GRADED', finalScore: 80 } })
+
+    // A teacher in a DIFFERENT school passes offA's real id → gets nothing (the offeringId
+    // matches but the tenant fence doesn't). The read is scoped by construction, not just by caller.
+    const school2 = await p.school.create({ data: { name: 'S2', code: 'S2' } })
+    const other = await p.user.create({ data: { role: 'TEACHER', schoolId: school2.id, staffNo: 'X', passwordHash: 'x' } })
+    expect(await submissionRepo.listForOfferingLatestFirst(p, d.offA.id, school2.id, other.id, 'TEACHER')).toEqual([])
+    // A TEACHER in the right school but not the offering's teacher is also scoped out.
+    const sameSchoolOther = await p.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T2', passwordHash: 'x' } })
+    expect(await submissionRepo.listForOfferingLatestFirst(p, d.offA.id, d.school.id, sameSchoolOther.id, 'TEACHER')).toEqual([])
+    // A SCHOOL_ADMIN of the same school still sees it (whole-school scope).
+    expect(await submissionRepo.listForOfferingLatestFirst(p, d.offA.id, d.school.id, sameSchoolOther.id, 'SCHOOL_ADMIN')).toHaveLength(1)
   })
 })

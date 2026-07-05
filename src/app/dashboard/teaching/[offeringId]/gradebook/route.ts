@@ -23,8 +23,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ off
   const [students, assignments, rawSubs, rawPractice] = await Promise.all([
     userRepo.listClassRoster(prisma, user.schoolId, offering.classId),
     assignmentRepo.listForOfferingBrief(prisma, offeringId),
-    submissionRepo.listForOfferingGradebook(prisma, offeringId),
-    practiceRepo.listScoredForOffering(prisma, offeringId),
+    submissionRepo.listForOfferingGradebook(prisma, offeringId, user.schoolId, user.userId, user.role),
+    practiceRepo.listScoredForOffering(prisma, offeringId, user.schoolId, user.userId, user.role),
   ])
 
   const submissions = collapsePhases(latestPhaseSubmissions(rawSubs))
