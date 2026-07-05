@@ -10,6 +10,16 @@ import type { PrismaClient } from '@prisma/client'
 import { hashPassword, BULK_HASH_ITERATIONS } from '@/lib/password'
 import type { ParsedRoster } from '@/lib/roster'
 
+// Rows per createMany / statements per $transaction. D1 caps bound parameters and batch
+// statements per request, so a whole-school import (thousands of rows) must be chunked or
+// it throws. 100 rows keeps every batch well under those limits.
+const IMPORT_BATCH = 100
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
 export interface ImportResult {
   created: number
   updated: number
@@ -111,23 +121,26 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
         mustChangePassword: true,
       })),
     )
-    try {
-      created = (await prisma.user.createMany({ data })).count
-    } catch {
-      // A unique collision (concurrent/retried import, or a TOCTOU race on email)
-      // aborts the whole single-statement createMany on D1 — so fall back to
-      // per-row inserts. Drop a colliding email but keep the student; only a
-      // 学号 collision skips the row entirely.
-      for (const row of data) {
-        try {
-          await prisma.user.create({ data: row })
-          created++
-        } catch {
-          if (row.email) {
-            try {
-              await prisma.user.create({ data: { ...row, email: null } })
-              created++
-            } catch { /* 学号 collision — couldn't import; surfaced via `failed` below */ }
+    // Chunk so a large (whole-school) import stays under D1's per-request limits.
+    for (const batch of chunk(data, IMPORT_BATCH)) {
+      try {
+        created += (await prisma.user.createMany({ data: batch })).count
+      } catch {
+        // A unique collision (concurrent/retried import, or a TOCTOU race on email)
+        // aborts the whole single-statement createMany on D1 — so fall back to
+        // per-row inserts for THIS batch. Drop a colliding email but keep the student;
+        // only a 学号 collision skips the row entirely.
+        for (const row of batch) {
+          try {
+            await prisma.user.create({ data: row })
+            created++
+          } catch {
+            if (row.email) {
+              try {
+                await prisma.user.create({ data: { ...row, email: null } })
+                created++
+              } catch { /* 学号 collision — couldn't import; surfaced via `failed` below */ }
+            }
           }
         }
       }
@@ -141,14 +154,17 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
   //    membership now: the import only ever ADDS the named class (step 7), never
   //    moves a student out of classes they're also in.
   if (toUpdate.length > 0) {
-    await prisma.$transaction(
-      toUpdate.map((r) =>
-        prisma.user.update({
-          where: { id: idByNo.get(r.studentNo)! },
-          data: { name: r.name, ...(r.phone ? { phone: r.phone } : {}) },
-        }),
-      ),
-    )
+    // Chunk the update transaction so a large import stays under D1's batch-statement cap.
+    for (const batch of chunk(toUpdate, IMPORT_BATCH)) {
+      await prisma.$transaction(
+        batch.map((r) =>
+          prisma.user.update({
+            where: { id: idByNo.get(r.studentNo)! },
+            data: { name: r.name, ...(r.phone ? { phone: r.phone } : {}) },
+          }),
+        ),
+      )
+    }
   }
 
   // 7) Ensure every imported student is a member of the class named in their row.
@@ -175,13 +191,16 @@ export async function importRoster(prisma: PrismaClient, schoolId: number, parse
     const have = new Set(existingMems.map((m) => `${m.studentId}:${m.classId}`))
     const toAdd = wanted.filter((w) => !have.has(`${w.studentId}:${w.classId}`))
     if (toAdd.length > 0) {
-      try {
-        await prisma.studentClass.createMany({ data: toAdd })
-      } catch {
-        // A concurrent import may have inserted some pairs between our read and
-        // write; fall back to per-row inserts and ignore the ones that now exist.
-        for (const m of toAdd) {
-          try { await prisma.studentClass.create({ data: m }) } catch { /* already a member */ }
+      // Chunk so a large import's memberships stay under D1's per-request limits.
+      for (const batch of chunk(toAdd, IMPORT_BATCH)) {
+        try {
+          await prisma.studentClass.createMany({ data: batch })
+        } catch {
+          // A concurrent import may have inserted some pairs between our read and
+          // write; fall back to per-row inserts and ignore the ones that now exist.
+          for (const m of batch) {
+            try { await prisma.studentClass.create({ data: m }) } catch { /* already a member */ }
+          }
         }
       }
     }
