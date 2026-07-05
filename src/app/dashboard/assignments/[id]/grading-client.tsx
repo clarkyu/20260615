@@ -54,7 +54,7 @@ export function GradingClient(props: {
   rows: Row[]
   pollResults: PollResult[]
   phases: PhaseCfg[]
-  batchSiblings: { offeringId: number; className: string }[]
+  syncSiblings: { assignmentId: number; offeringId: number; className: string }[]
   notSubmitted: { name: string; studentNo: string }[]
   perceptionModels: ModelOpt[]
   judgeModels: ModelOpt[]
@@ -209,13 +209,13 @@ export function GradingClient(props: {
   }
 
   // 保存本环节批阅配置到该环节（之后自动评阅 / 重评都按此执行）。
-  // 同批次同步目标：勾选的兄弟班级 offeringId，默认全选。保存某环节配置时一并写到它们同序环节。
-  const [syncTargets, setSyncTargets] = useState<Set<number>>(() => new Set(props.batchSiblings.map((s) => s.offeringId)))
-  const toggleSync = (offeringId: number) =>
+  // 同步目标：勾选的兄弟作业 assignmentId（默认全选）。保存某环节配置时一并写到它们同序环节。
+  const [syncTargets, setSyncTargets] = useState<Set<number>>(() => new Set(props.syncSiblings.map((s) => s.assignmentId)))
+  const toggleSync = (assignmentId: number) =>
     setSyncTargets((prev) => {
       const next = new Set(prev)
-      if (next.has(offeringId)) next.delete(offeringId)
-      else next.add(offeringId)
+      if (next.has(assignmentId)) next.delete(assignmentId)
+      else next.add(assignmentId)
       return next
     })
 
@@ -365,13 +365,13 @@ export function GradingClient(props: {
             <CardDescription>{t('grade.cfgDesc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {props.batchSiblings.length > 0 ? (
+            {props.syncSiblings.length > 0 ? (
               <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
                 <div className="text-xs font-medium">{t('grade.syncBatchTitle')}</div>
                 <div className="flex flex-wrap gap-2">
-                  {props.batchSiblings.map((s) => (
-                    <label key={s.offeringId} className={'tap flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ' + (syncTargets.has(s.offeringId) ? 'border-primary bg-primary/10 font-medium' : 'border-input')}>
-                      <input type="checkbox" checked={syncTargets.has(s.offeringId)} onChange={() => toggleSync(s.offeringId)} className="h-3.5 w-3.5 accent-primary" />
+                  {props.syncSiblings.map((s) => (
+                    <label key={s.assignmentId} className={'tap flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ' + (syncTargets.has(s.assignmentId) ? 'border-primary bg-primary/10 font-medium' : 'border-input')}>
+                      <input type="checkbox" checked={syncTargets.has(s.assignmentId)} onChange={() => toggleSync(s.assignmentId)} className="h-3.5 w-3.5 accent-primary" />
                       {s.className}
                     </label>
                   ))}

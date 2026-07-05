@@ -72,8 +72,9 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
 }
 
 // 保存某环节的批阅配置（评分标准 + 感知/评分模型）。空串=清空，回退到作业/平台默认。
-// applyToOfferingIds：勾选的同批次班级——保存后把同一份配置同步到它们同序的环节。
-export async function savePhaseGradingConfig(assignmentId: number, phaseId: number, rubric: string, perceptionModel: string, judgeModel: string, applyToOfferingIds: number[] = []): Promise<ActionState> {
+// applyToAssignmentIds：勾选的兄弟作业（其它班的同名/同批次作业）——保存后把同一份配置
+// 同步到它们同序的环节。
+export async function savePhaseGradingConfig(assignmentId: number, phaseId: number, rubric: string, perceptionModel: string, judgeModel: string, applyToAssignmentIds: number[] = []): Promise<ActionState> {
   const { user, prisma, t } = await staffContext()
   if (!Number.isInteger(phaseId)) return { error: t('err.assignNotFound') }
   const data = {
@@ -83,10 +84,10 @@ export async function savePhaseGradingConfig(assignmentId: number, phaseId: numb
   }
   const res = await assignmentRepo.updatePhaseGradingConfig(prisma, phaseId, user.schoolId, user.userId, user.role, data)
   if (res.count === 0) return { error: t('err.subNoAccess') }
-  // 同步到勾选的同批次班级：写到各兄弟作业同序环节（repo 内按 batchId + 目标班 + 本人 scope）。
-  const targets = (Array.isArray(applyToOfferingIds) ? applyToOfferingIds : []).filter((n) => Number.isInteger(n))
+  // 同步到勾选的兄弟作业：写到各自同序环节（repo 内按 目标作业 id + 本人 offering scope）。
+  const targets = (Array.isArray(applyToAssignmentIds) ? applyToAssignmentIds : []).filter((n) => Number.isInteger(n))
   if (targets.length > 0) {
-    await assignmentRepo.applyPhaseConfigToBatch(prisma, phaseId, user.schoolId, user.userId, user.role, targets, data)
+    await assignmentRepo.applyPhaseConfigToSiblings(prisma, phaseId, user.schoolId, user.userId, user.role, targets, data)
   }
   if (Number.isInteger(assignmentId)) revalidatePath(`/dashboard/assignments/${assignmentId}`)
   return { success: true }
