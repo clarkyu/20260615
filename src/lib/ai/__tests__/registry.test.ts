@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getModel, modelsForCapability } from '../registry'
+import { getModel, modelsForCapability, DEFAULT_JUDGE_MODEL, DEFAULT_PERCEPTION_MODEL } from '../registry'
 
 describe('getModel + legacy aliases', () => {
   it('resolves the live DeepSeek V4 Flash id', () => {
@@ -23,5 +23,24 @@ describe('getModel + legacy aliases', () => {
     const judgeIds = modelsForCapability('judge').map((m) => m.id)
     expect(judgeIds).toContain('deepseek-v4-flash')
     expect(judgeIds).not.toContain('deepseek-chat')
+  })
+
+  it('DeepSeek V4 Pro is the reasoning judge model', () => {
+    const m = getModel('deepseek-v4-pro')
+    expect(m).toMatchObject({ provider: 'deepseek', reasoning: true })
+    expect(m?.capabilities).toContain('judge')
+    expect(modelsForCapability('judge').map((x) => x.id)).toContain('deepseek-v4-pro')
+  })
+})
+
+describe('system default models are valid + capability-correct', () => {
+  it('default judge = DeepSeek V4 Pro and can actually judge', () => {
+    expect(DEFAULT_JUDGE_MODEL).toBe('deepseek-v4-pro')
+    expect(getModel(DEFAULT_JUDGE_MODEL)?.capabilities).toContain('judge')
+  })
+  it('default perception model exists and can actually perceive (DeepSeek is text-only, so it stays a multimodal model)', () => {
+    const p = getModel(DEFAULT_PERCEPTION_MODEL)
+    expect(p?.capabilities).toContain('perception')
+    expect(p?.modalities).toContain('video')
   })
 })

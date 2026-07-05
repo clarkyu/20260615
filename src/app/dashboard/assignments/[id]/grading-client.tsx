@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
 import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig } from '@/actions/grading'
 import { estimateGrading, formatTokens } from '@/lib/ai/cost'
+import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -67,8 +68,11 @@ export function GradingClient(props: {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const defaultPerception = props.perceptionModels[0]?.id ?? ''
-  const defaultJudge = props.judgeModels[0]?.id ?? ''
+  // Seed from the SYSTEM defaults (DeepSeek V4 Pro judge / Gemini perception) so the UI
+  // reflects the same default the auto-grader uses; fall back to the first option only if
+  // a default somehow isn't offered.
+  const defaultPerception = (props.perceptionModels.some((m) => m.id === DEFAULT_PERCEPTION_MODEL) ? DEFAULT_PERCEPTION_MODEL : props.perceptionModels[0]?.id) ?? ''
+  const defaultJudge = (props.judgeModels.some((m) => m.id === DEFAULT_JUDGE_MODEL) ? DEFAULT_JUDGE_MODEL : props.judgeModels[0]?.id) ?? ''
   // 每环节一套批阅配置（评分标准 + 感知/评分模型）。初值取该环节已保存的，空则回退到
   // 默认模型 / 默认评分标准。逐条评阅、本环节全部评阅、聚焦评阅都按各自环节的这套配置走。
   const seedCfg = (p: PhaseCfg) => ({
