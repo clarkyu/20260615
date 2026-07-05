@@ -12,7 +12,7 @@ import type {
   TextJudgeInput,
   TokenUsage,
 } from '../types'
-import { buildAuthorPrompt, buildJudgePrompt, buildPerceptionPrompt, buildWritingJudgePrompt, normalizeAuthorDraft, normalizeJudge, stripCodeFence } from './gemini'
+import { buildAuthorPrompt, buildJudgePrompt, buildPerceptionPrompt, buildWritingJudgePrompt, normalizeAuthorDraft, normalizeJudge, normalizePerSentence, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
 import { config } from '@/lib/config'
@@ -161,7 +161,7 @@ export function makePerception(cfg: CompatConfig): PerceptionProvider {
       const json = data as PerceptionResult
       return {
         transcript: json.transcript ?? '',
-        perSentence: Array.isArray(json.perSentence) ? json.perSentence : [],
+        perSentence: normalizePerSentence(json.perSentence),
         pronunciationImpression: json.pronunciationImpression,
         observations: json.observations ?? {},
         usage,

@@ -4,6 +4,12 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+  // Explicit (this is Prisma's default for sqlite): referential actions (onDelete
+  // Cascade / SetNull) are enforced by the DATABASE's foreign keys, NOT emulated by
+  // Prisma. On Cloudflare D1 that's fine because D1 enforces FKs by default. If the
+  // datasource is ever pointed at a raw SQLite/libSQL/Turso endpoint that defaults
+  // foreign_keys OFF, every declared cascade silently becomes a no-op — see lib/db.ts.
+  relationMode = "foreignKeys"
 }
 
 enum Role {
@@ -612,4 +618,5 @@ model Feedback {
 
   @@index([userId])
   @@index([status])
+  @@index([schoolId])
 }
