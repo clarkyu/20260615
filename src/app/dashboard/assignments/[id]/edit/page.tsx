@@ -18,6 +18,10 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
   const a = await assignmentRepo.findForStaffWithPhases(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!a) notFound()
 
+  // Per-phase (non-DRAFT) submission counts — so the form can warn before removing a
+  // phase that already has student submissions (removing it cascade-deletes those).
+  const submissionCounts = await assignmentRepo.submittedCountByPhase(prisma, assignmentId)
+
   // The set this assignment draws from (any phase that uses one — all share it).
   const bank = a.phases.find((p) => p.chunkSet)?.chunkSet ?? null
 
@@ -60,6 +64,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       maxAttempts: p.maxAttempts,
       isFormalTest: p.isFormalTest,
       freePractice: p.freePractice,
+      submissionCount: submissionCounts.get(p.id) ?? 0,
     })),
   }
 
