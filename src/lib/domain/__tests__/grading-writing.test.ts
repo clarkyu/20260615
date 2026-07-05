@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { gradeWriting, repo } = vi.hoisted(() => ({
   gradeWriting: vi.fn(),
   repo: {
-    markProcessing: vi.fn(),
+    claimForProcessing: vi.fn(async () => ({ count: 1 })),
     markFailed: vi.fn(),
     revertToQueue: vi.fn(),
     applyGradeResult: vi.fn(),
@@ -44,7 +44,7 @@ describe('autoGradeWriting', () => {
   it('persists an AI grade and auto-approves a high-confidence result', async () => {
     gradeWriting.mockResolvedValue({ judgeModel: 'jm', judge: { score: 90, feedback: 'nice', confidence: 0.9, usage: { inputTokens: 10, outputTokens: 20 } } })
     const res = await autoGradeWriting(prisma, sub(), { judgeModel: 'jm', rubric: 'R' })
-    expect(repo.markProcessing).toHaveBeenCalledWith(prisma, 5)
+    expect(repo.claimForProcessing).toHaveBeenCalledWith(prisma, 5)
     expect(res).toEqual({ ok: true, needsReview: false })
     expect(repo.applyGradeResult).toHaveBeenCalledWith(prisma, 5, expect.objectContaining({
       status: 'GRADED', needsReview: false, aiScore: 90, finalScore: 90,
@@ -70,8 +70,16 @@ describe('autoGradeWriting', () => {
   it('settles without grading when there is no text (e.g. handwriting-only)', async () => {
     const res = await autoGradeWriting(prisma, sub({ recitedText: '   ' }), { judgeModel: 'jm', rubric: 'R' })
     expect(res.ok).toBe(false)
-    expect(repo.markProcessing).not.toHaveBeenCalled()
+    expect(repo.claimForProcessing).not.toHaveBeenCalled()
     expect(gradeWriting).not.toHaveBeenCalled()
+  })
+
+  it('bails (settles) without grading when the claim is lost to a teacher override (audit P1-1)', async () => {
+    repo.claimForProcessing.mockResolvedValueOnce({ count: 0 })
+    const res = await autoGradeWriting(prisma, sub(), { judgeModel: 'jm', rubric: 'R' })
+    expect(res).toEqual({ ok: true, needsReview: false })
+    expect(gradeWriting).not.toHaveBeenCalled()
+    expect(repo.applyGradeResult).not.toHaveBeenCalled()
   })
 
   it('reverts to the teacher queue when the model is unavailable', async () => {

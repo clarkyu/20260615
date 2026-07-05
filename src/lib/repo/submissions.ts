@@ -264,8 +264,23 @@ export function findGradableShadow(prisma: PrismaClient, id: number) {
   })
 }
 
+// Unconditional entry transition. Used ONLY by the manual, teacher-triggered grade
+// (runGrading) — an explicit human action that is authoritative and may re-grade a row
+// in any state.
 export function markProcessing(prisma: PrismaClient, id: number) {
   return prisma.submission.update({ where: { id }, data: { status: 'PROCESSING' } })
+}
+
+// GUARDED entry claim for BACKGROUND (durable-queue) runs. Only reopens a still-gradeable
+// submission (UPLOADED / FLAGGED); returns count 0 when a teacher (or another run) already
+// finalized it in the race window between the grader's status read and this claim. The
+// background run must bail on count 0 — otherwise an unconditional reopen (→ PROCESSING)
+// would let its later fenced applyGradeResult silently overwrite the teacher's manual grade.
+export function claimForProcessing(prisma: PrismaClient, id: number) {
+  return prisma.submission.updateMany({
+    where: { id, status: { in: ['UPLOADED', 'FLAGGED'] } },
+    data: { status: 'PROCESSING' },
+  })
 }
 
 // Terminal grading writes are FENCED to `status: 'PROCESSING'` (the state markProcessing

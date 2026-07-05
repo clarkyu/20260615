@@ -48,6 +48,19 @@ describe('grading status state machine (real SQL)', () => {
     })
   })
 
+  it('claimForProcessing claims a gradeable row but REFUSES to reopen a teacher-finalized one (entry fence — audit P1-1)', async () => {
+    const p = db.prisma
+    const { subId, teacherId } = await seed(p)
+    // A gradeable (UPLOADED) row is claimed by a background run → PROCESSING.
+    expect((await submissionRepo.claimForProcessing(p, subId)).count).toBe(1)
+    expect((await p.submission.findUnique({ where: { id: subId } }))!.status).toBe('PROCESSING')
+    // Teacher finalizes it (unconditional override → GRADED). A background run that reaches
+    // its claim AFTER this must match ZERO rows — it can't reopen and later clobber the grade.
+    await submissionRepo.applyTeacherOverride(p, subId, { teacherScore: 95, finalScore: 95, feedback: 'teacher', gradedById: teacherId })
+    expect((await submissionRepo.claimForProcessing(p, subId)).count).toBe(0)
+    expect((await p.submission.findUnique({ where: { id: subId } }))!.status).toBe('GRADED')
+  })
+
   it('a teacher override that wins the race is NOT clobbered by a late AI grade (the fence)', async () => {
     const p = db.prisma
     const { subId, teacherId } = await seed(p)

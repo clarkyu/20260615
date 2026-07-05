@@ -64,7 +64,10 @@ export async function autoGradeWriting(
   // enqueued) — settle instead of failing, matching autoGradeById's "nothing to grade".
   if (!text) return { ok: false, error: 'err.nothingToGrade' }
 
-  await submissionRepo.markProcessing(prisma, submission.id)
+  // Writing grading is durable-queue only. Guarded claim: bail if a teacher (or another
+  // run) finalized it in the race window, so a fenced write below can't overwrite them.
+  const claimed = await submissionRepo.claimForProcessing(prisma, submission.id)
+  if (claimed.count === 0) return { ok: true, needsReview: false }
 
   // Grade on the assignment-owning teacher's own API keys (BYOK); empty → platform key.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)

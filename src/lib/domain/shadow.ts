@@ -89,7 +89,10 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
 
   const revert = () => submissionRepo.revertToQueue(prisma, submissionId, 'UPLOADED')
 
-  await submissionRepo.markProcessing(prisma, submissionId)
+  // Guarded claim (durable-queue only): bail if a teacher (or another run) finalized it in
+  // the race window, so a fenced write below can't overwrite them.
+  const claimed = await submissionRepo.claimForProcessing(prisma, submissionId)
+  if (claimed.count === 0) return
   // Grade on the assignment-owning teacher's own API key (BYOK); empty → platform key.
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
   await withAiKeys(keys, async () => {
