@@ -50,6 +50,13 @@ describe('summarizeShadow', () => {
     expect(s.weakestOrder).toBe(2)
     expect(s.weakestScore).toBe(62)
   })
+
+  it('honours injected auto-pass thresholds (the operator-tunable calibration dials)', () => {
+    // overall 80 / min 80: fails the default (85/60) but passes a looser 75/50 gate…
+    expect(summarizeShadow(m([[1, 80], [2, 80], [3, 80]]), 75, 50)!.needsReview).toBe(false)
+    // …and a strict 90/85 gate rejects an otherwise-passing 88/85 set.
+    expect(summarizeShadow(m([[1, 90], [2, 85], [3, 88]]), 90, 85)!.needsReview).toBe(true)
+  })
 })
 
 describe('gradeShadowTake — per-sentence scoring', () => {

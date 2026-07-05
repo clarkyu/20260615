@@ -6,6 +6,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
+import { config } from '@/lib/config'
 import { gradeWriting } from '@/lib/ai/grade'
 import { costUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
@@ -83,7 +84,7 @@ export async function autoGradeWriting(
       confidence: result.judge.confidence,
       hasViolation: hasAntiCheatViolation(submission.violations),
       freePractice: submission.phase?.freePractice ?? false,
-    })
+    }, config.calibration().reviewConfidenceThreshold)
 
     // Real usage/cost from the judge (absent → persist null, not a fake 0).
     const ju = result.judge.usage

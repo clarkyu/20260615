@@ -12,6 +12,20 @@ function env(key: string): string | undefined {
   return v && v.trim() ? v : undefined
 }
 
+// Parse an env var as a finite number, or undefined (unset / non-numeric).
+function numEnv(key: string): number | undefined {
+  const v = env(key)
+  if (v === undefined) return undefined
+  const n = Number(v)
+  return Number.isFinite(n) ? n : undefined
+}
+
+// Clamp an optional value into [lo, hi], falling back to `def` when unset. A bad env
+// value can only ever land inside the safe range — never break grading.
+function clampNum(n: number | undefined, def: number, lo: number, hi: number): number {
+  return n === undefined ? Math.max(lo, Math.min(hi, def)) : Math.max(lo, Math.min(hi, n))
+}
+
 export const config = {
   appName: (): string => env('APP_NAME') ?? '你好！作业 Hi, Homework',
   appUrl: (): string | undefined => env('APP_URL'),
@@ -39,6 +53,23 @@ export const config = {
   // Generic read for dynamically-named provider vars (per-provider apiKey /
   // baseUrl / groupId env names), so config stays the single source of truth.
   env: (name: string): string | undefined => env(name),
+  // AI grading calibration dials. These were empirical constants written into the
+  // grading code ("AI-first, teacher by exception"); surfaced here so an operator can
+  // tune them against the calibration signals (teacher overrides) without a redeploy.
+  // Each is optional (falls back to the shipped default) and clamped to a safe range so
+  // a bad value can never break grading. See docs/OPERATIONS.md.
+  calibration: () => ({
+    // AI self-confidence at/above which a clean (no anti-cheat flag) submission skips the
+    // teacher queue and auto-approves. Higher = more caution (more goes to teachers).
+    reviewConfidenceThreshold: clampNum(numEnv('REVIEW_CONFIDENCE_THRESHOLD'), 0.85, 0, 1),
+    // Per-sentence shadow (逐句跟读) score = accuracy·w + completeness·(1−w). Weight on
+    // accuracy; completeness takes the remainder, so the two always sum to 1.
+    shadowAccuracyWeight: clampNum(numEnv('SHADOW_ACCURACY_WEIGHT'), 0.7, 0, 1),
+    // A shadow submission auto-passes (skips the teacher) only if its overall score ≥
+    // this AND its weakest sentence ≥ the min below. Both are 0..100.
+    shadowAutoPassOverall: clampNum(numEnv('SHADOW_AUTOPASS_OVERALL'), 85, 0, 100),
+    shadowAutoPassMin: clampNum(numEnv('SHADOW_AUTOPASS_MIN'), 60, 0, 100),
+  }),
 }
 
 // Build stamp, baked in at `next build`. Deploy sets NEXT_PUBLIC_APP_VERSION to the
