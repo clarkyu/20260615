@@ -129,6 +129,10 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
 
   const sem = assignment.offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')
 
+  // Other classes this assignment was published to in the same batch — the grading
+  // screen offers to sync a phase's 评阅配置 to them (发布后改一次标准 → 同步同批次).
+  const batchSiblings = await assignmentRepo.findBatchSiblings(prisma, assignment.id, user.schoolId, user.userId, user.role)
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -150,6 +154,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
         rows={rows}
         pollResults={pollResults}
         phases={phases}
+        batchSiblings={batchSiblings}
         notSubmitted={notSubmitted}
         perceptionModels={modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))}
         judgeModels={modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))}

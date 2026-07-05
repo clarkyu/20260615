@@ -144,8 +144,11 @@ export async function createAssignments(
 
   // One standalone create per offering (no $transaction: D1 can't resolve the new
   // assignment's auto-increment id for its nested phase/sentence inserts in a batch).
+  // All classes published together share one batchId, so a later per-phase 评阅配置
+  // change can be synced to the whole batch (发布后改一次评分标准 → 同步到同批次班级).
+  const batchId = crypto.randomUUID()
   for (const offeringId of validIds) {
-    await assignments.createWithPhases(prisma, offeringId, meta, resolved.phases)
+    await assignments.createWithPhases(prisma, offeringId, meta, resolved.phases, batchId)
   }
 
   // Return to the offering the teacher started from, if it was among the targets.

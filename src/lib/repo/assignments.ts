@@ -181,9 +181,9 @@ async function createPhases(prisma: PrismaClient, assignmentId: number, phases: 
 
 // One create per offering. Writes the assignment (legacy columns mirror phase 1) and
 // its ordered phases. `phases` must be non-empty with `order` 1..n.
-export async function createWithPhases(prisma: PrismaClient, offeringId: number, meta: AssignmentMeta, phases: PhaseInput[]) {
+export async function createWithPhases(prisma: PrismaClient, offeringId: number, meta: AssignmentMeta, phases: PhaseInput[], batchId: string | null = null) {
   const assignment = await prisma.assignment.create({
-    data: { offeringId, ...meta, ...legacyColumnsFromPrimary(phases[0]) },
+    data: { offeringId, batchId, ...meta, ...legacyColumnsFromPrimary(phases[0]) },
   })
   await createPhases(prisma, assignment.id, phases)
   return assignment
@@ -235,6 +235,56 @@ export function updatePhaseGradingConfig(
     where: { id: phaseId, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
     data,
   })
+}
+
+// The OTHER classes in this assignment's publish batch (same batchId), scoped to the
+// teacher — so the grading screen can offer "sync this 评阅配置 to these classes".
+// Empty when the assignment has no batch (null batchId) or no siblings.
+export async function findBatchSiblings(prisma: PrismaClient, assignmentId: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<{ offeringId: number; className: string }[]> {
+  const self = await prisma.assignment.findFirst({
+    where: { id: assignmentId, offering: offeringScopeFor(schoolId, userId, role) },
+    select: { batchId: true },
+  })
+  if (!self?.batchId) return []
+  const rows = await prisma.assignment.findMany({
+    where: { batchId: self.batchId, id: { not: assignmentId }, offering: offeringScopeFor(schoolId, userId, role) },
+    select: { offeringId: true, offering: { select: { class: { select: { name: true } } } } },
+    orderBy: { offeringId: 'asc' },
+  })
+  return rows.map((r) => ({ offeringId: r.offeringId, className: r.offering.class.name }))
+}
+
+// Apply a phase's 评阅配置 to the SAME-ORDER phases of its batch siblings in the given
+// offerings. Scoped three ways: same batchId as the source phase's assignment, only the
+// target offerings, only the teacher's own offerings — so a teacher can't reach another
+// class/teacher's phases. Returns the number of sibling phases updated.
+export async function applyPhaseConfigToBatch(
+  prisma: PrismaClient,
+  phaseId: number,
+  schoolId: number | null | undefined,
+  userId: number,
+  role: Role,
+  targetOfferingIds: number[],
+  data: { rubric: string | null; defaultPerceptionModel: string | null; defaultJudgeModel: string | null },
+): Promise<number> {
+  if (targetOfferingIds.length === 0) return 0
+  const src = await prisma.phase.findFirst({
+    where: { id: phaseId, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
+    select: { order: true, assignment: { select: { batchId: true } } },
+  })
+  if (!src?.assignment.batchId) return 0
+  const res = await prisma.phase.updateMany({
+    where: {
+      order: src.order,
+      assignment: {
+        batchId: src.assignment.batchId,
+        offeringId: { in: targetOfferingIds },
+        offering: offeringScopeFor(schoolId, userId, role),
+      },
+    },
+    data,
+  })
+  return res.count
 }
 
 export function findForStaffWithPhases(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
