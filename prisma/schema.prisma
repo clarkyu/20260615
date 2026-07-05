@@ -23,6 +23,33 @@ enum SubmissionStatus {
   MISSING
 }
 
+// Bare-string status/kind columns promoted to enums so a mis-cased literal is a compile
+// error, not a silently-stuck row. SQLite has no native enum — Prisma stores each as the
+// same TEXT it did before, so this needs NO SQL migration (the D1 column is unchanged).
+enum GradingJobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum GradingJobKind {
+  submission
+  shadow
+  writing
+}
+
+enum FeedbackStatus {
+  PENDING
+  ADOPTED
+  DECLINED
+}
+
+enum PracticeKind {
+  audio
+  text
+}
+
 model School {
   id        Int          @id @default(autoincrement())
   name      String       @unique
@@ -353,7 +380,7 @@ model PracticeAttempt {
   assignmentId Int
   phaseId      Int?
   studentId    Int
-  kind         String   // 'audio'（朗读）| 'text'（默写）
+  kind         PracticeKind   // 'audio'（朗读）| 'text'（默写）
   mediaKey     String?
   recitedText  String?
   aiScore      Float?
@@ -459,8 +486,8 @@ model Submission {
 model GradingJob {
   id            Int      @id @default(autoincrement())
   submissionId  Int      @unique
-  kind          String   // 'submission'（整段录像/音频）| 'shadow'（逐句跟读）
-  status        String   @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
+  kind          GradingJobKind   // 'submission'（整段录像/音频）| 'shadow'（逐句跟读）
+  status        GradingJobStatus @default(PENDING)
   attempts      Int      @default(0)
   nextAttemptAt DateTime @default(now())
   lastError     String?
@@ -577,7 +604,7 @@ model Feedback {
   userId     Int
   schoolId   Int?
   body       String
-  status     String   @default("PENDING") // PENDING | ADOPTED | DECLINED
+  status     FeedbackStatus @default(PENDING)
   reply      String?
   createdAt  DateTime @default(now())
   reviewedAt DateTime?
