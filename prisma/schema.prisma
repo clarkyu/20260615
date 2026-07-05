@@ -125,6 +125,9 @@ model Chunk {
   exampleZh  String?  // 情境例句 中文
   chunkSet   ChunkSet @relation(fields: [chunkSetId], references: [id], onDelete: Cascade)
 
+  // One chunk per (set, order): makes the display order + per-sentence score mapping
+  // deterministic. Verified 0 duplicates in prod before adding (2026-07-05).
+  @@unique([chunkSetId, order])
   @@index([chunkSetId])
 }
 
@@ -419,6 +422,11 @@ model Sentence {
   assignment        Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   phase             Phase?     @relation(fields: [phaseId], references: [id], onDelete: Cascade)
 
+  // One sentence per (phase, order). phaseId is nullable and SQLite treats NULL as
+  // distinct in unique indexes, so this behaves like a partial index over non-null
+  // phaseId — legacy phase-less sentences never collide. Verified 0 non-null duplicates
+  // in prod before adding (2026-07-05).
+  @@unique([phaseId, order])
   @@index([assignmentId])
   @@index([phaseId])
 }

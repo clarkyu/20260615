@@ -83,4 +83,29 @@ describe('real cascade + raw SQL behaviours', () => {
     expect(await get('flagged')).toMatchObject({ status: 'FLAGGED', needsReview: true })
     expect(await get('done')).toMatchObject({ finalScore: null, needsReview: false })
   })
+
+  it('order-uniqueness: rejects a duplicate (chunkSetId, order) chunk (audit P2-3)', async () => {
+    const p = db.prisma
+    const set = await p.chunkSet.create({ data: { name: 'S' } })
+    await p.chunk.create({ data: { chunkSetId: set.id, order: 1, english: 'a' } })
+    await expect(p.chunk.create({ data: { chunkSetId: set.id, order: 1, english: 'b' } })).rejects.toThrow()
+    await expect(p.chunk.create({ data: { chunkSetId: set.id, order: 2, english: 'c' } })).resolves.toBeTruthy()
+  })
+
+  it('order-uniqueness: rejects a duplicate (phaseId, order) sentence but ALLOWS phase-less duplicates (NULL distinct)', async () => {
+    const p = db.prisma
+    const school = await p.school.create({ data: { name: 'S', code: 'S' } })
+    const teacher = await p.user.create({ data: { role: 'TEACHER', schoolId: school.id, staffNo: 'T', passwordHash: 'x' } })
+    const course = await p.course.create({ data: { schoolId: school.id, name: 'C', code: 'C' } })
+    const cls = await p.classGroup.create({ data: { schoolId: school.id, name: 'K' } })
+    const offering = await p.courseOffering.create({ data: { schoolId: school.id, courseId: course.id, teacherId: teacher.id, classId: cls.id, year: 'Y', semester: '1' } })
+    const asg = await p.assignment.create({ data: { offeringId: offering.id, title: 'A' } })
+    const phase = await p.phase.create({ data: { assignmentId: asg.id, order: 1 } })
+    await p.sentence.create({ data: { assignmentId: asg.id, phaseId: phase.id, order: 1, text: 'x' } })
+    await expect(p.sentence.create({ data: { assignmentId: asg.id, phaseId: phase.id, order: 1, text: 'y' } })).rejects.toThrow()
+    // legacy phase-less sentences with the same order are fine — SQLite treats NULL as distinct,
+    // so the unique index behaves like a partial index over non-null phaseId.
+    await p.sentence.create({ data: { assignmentId: asg.id, phaseId: null, order: 1, text: 'legacy1' } })
+    await expect(p.sentence.create({ data: { assignmentId: asg.id, phaseId: null, order: 1, text: 'legacy2' } })).resolves.toBeTruthy()
+  })
 })
