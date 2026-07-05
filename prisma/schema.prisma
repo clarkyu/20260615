@@ -244,6 +244,10 @@ model CourseOffering {
 model Assignment {
   id           Int       @id @default(autoincrement())
   offeringId   Int
+  // 发布批次:一次"发一份作业 + 勾多个班"会给每个班各建一份作业,它们共享同一个 batchId,
+  // 从而"发布后改一次评分标准 → 同步到同批次其它班级"能按 batchId 找到兄弟作业。可空:
+  // 发布前的老作业、以及无需批次的场景为 null。
+  batchId      String?
   title        String
   category     String?
   shadowVideoKey String?
