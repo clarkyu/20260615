@@ -6,6 +6,7 @@ import {
   buildPerceptionPrompt,
   normalizeJudge,
   normalizeAuthorDraft,
+  normalizePerSentence,
   buildAuthorPrompt,
 } from '@/lib/ai/providers/gemini'
 
@@ -52,6 +53,22 @@ describe('buildJudgePrompt', () => {
     expect(p).toContain('完整度 50；发音 50')
     expect(p).toContain('100')
     expect(p).toContain('hello')
+  })
+})
+
+describe('normalizePerSentence', () => {
+  it('clamps accuracy/completeness to [0,1] so a 0–100-scale or junk value cannot hide weak sentences (audit P2-10)', () => {
+    const out = normalizePerSentence([
+      { order: 1, spokenText: 'Hi', accuracy: 95, completeness: 1.4 }, // model returned 0–100 / >1
+      { order: 2, spokenText: 'Yo', accuracy: -0.5, completeness: NaN }, // out of range / junk
+    ])
+    expect(out[0]).toEqual({ order: 1, spokenText: 'Hi', accuracy: 1, completeness: 1 })
+    expect(out[1]).toEqual({ order: 2, spokenText: 'Yo', accuracy: 0, completeness: 0 })
+  })
+
+  it('tolerates a non-array and missing fields', () => {
+    expect(normalizePerSentence(null)).toEqual([])
+    expect(normalizePerSentence([{}])).toEqual([{ order: 0, spokenText: '', accuracy: 0, completeness: 0 }])
   })
 })
 

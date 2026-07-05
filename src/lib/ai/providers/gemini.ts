@@ -7,6 +7,7 @@ import type {
   PerceptionInput,
   PerceptionProvider,
   PerceptionResult,
+  PerSentenceResult,
   JudgeProvider,
   ReferenceSentence,
   TextJudgeInput,
@@ -300,6 +301,24 @@ async function mediaPart(mediaUrl: string): Promise<Part> {
   return { inlineData: { mimeType, data: toBase64(bytes) } }
 }
 
+// Sanitize the model's per-sentence output before it's persisted: accuracy/completeness
+// are contracts of [0,1] but a model can return a 0–100 value or junk, which would then
+// slip past the weak-sentence analytics threshold and HIDE genuinely weak lines. Clamp to
+// [0,1] (non-finite → 0), matching gradeShadowTake's guard.
+export function normalizePerSentence(raw: unknown): PerSentenceResult[] {
+  if (!Array.isArray(raw)) return []
+  const clamp01 = (n: unknown) => (Number.isFinite(Number(n)) ? Math.max(0, Math.min(1, Number(n))) : 0)
+  return raw.map((p) => {
+    const r = (p ?? {}) as { order?: unknown; spokenText?: unknown; completeness?: unknown; accuracy?: unknown }
+    return {
+      order: Number(r.order) || 0,
+      spokenText: typeof r.spokenText === 'string' ? r.spokenText : '',
+      completeness: clamp01(r.completeness),
+      accuracy: clamp01(r.accuracy),
+    }
+  })
+}
+
 export const geminiPerception: PerceptionProvider = {
   async perceive(input: PerceptionInput, modelId: string): Promise<PerceptionResult> {
     const media = input.videoUrl || input.audioUrl
@@ -309,7 +328,7 @@ export const geminiPerception: PerceptionProvider = {
     const json = data as PerceptionResult
     return {
       transcript: json.transcript ?? '',
-      perSentence: Array.isArray(json.perSentence) ? json.perSentence : [],
+      perSentence: normalizePerSentence(json.perSentence),
       pronunciationImpression: json.pronunciationImpression,
       observations: json.observations ?? {},
       usage,
