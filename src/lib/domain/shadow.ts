@@ -100,6 +100,11 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     // undercount cost across retries — acceptable for observability; the dedup below keeps
     // re-grading (and thus double-spend) to a minimum anyway.
     let usedIn = 0, usedOut = 0, gotUsage = false
+    // Whether any pending take failed to score this run (transient model/network error,
+    // not a missing-key sentinel). If so we must NOT finalize an average over the takes
+    // that happened to succeed — the missing (often weakest) sentence would be silently
+    // dropped and the submission could auto-pass on incomplete data.
+    let hadFailure = false
     // Retry dedup: a prior interrupted run may have already scored some takes. Each take
     // is a PAID perception call, so reuse the stored scores and only grade the ones still
     // missing one — a reclaimed/retried run no longer re-pays for the whole set (this is
@@ -130,6 +135,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
         } else {
           const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
           if (isUnavailable(msg)) { await revert(); return } // model not configured — leave for teacher
+          hadFailure = true
           logError('gradeShadowSubmission', 'take failed', res.reason, { submissionId })
         }
       }
@@ -137,6 +143,11 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       try { await onBatch?.() } catch { /* heartbeat is best-effort */ }
     }
 
+    // A take failed to score (transient error). Finalizing now would average over an
+    // INCOMPLETE set and could auto-pass on the missing sentence. Revert so the durable
+    // job retries — already-scored takes are reused (no re-spend), and after MAX_ATTEMPTS
+    // it dead-letters to the teacher queue. Never finalize a partial grade.
+    if (hadFailure) { await revert(); return }
     const { shadowAutoPassOverall, shadowAutoPassMin } = config.calibration()
     const summary = summarizeShadow(scoreByOrder, shadowAutoPassOverall, shadowAutoPassMin)
     if (!summary) { await revert(); return }
