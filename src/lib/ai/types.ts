@@ -7,7 +7,10 @@
 
 export type Provider = 'gemini' | 'qwen' | 'minimax' | 'openai' | 'deepseek' | 'claude' | 'whisper'
 
-export type Capability = 'perception' | 'judge'
+// Stage ③ authoring (备课出题): a teacher's topic and/or textbook photo -> a draft
+//                      assignment. Text-only models handle the topic path; the
+//                      photo path needs a multimodal model (routed to Gemini).
+export type Capability = 'perception' | 'judge' | 'author'
 
 export interface ModelDescriptor {
   id: string // stable id used in DB + selectors, e.g. "gemini-2.5-flash"
@@ -102,8 +105,29 @@ export interface JudgeResult {
   raw?: unknown
 }
 
+// ── Authoring (备课出题) ──────────────────────────────────────────────────────
+// Draft an assignment from a teacher's brief and/or a textbook photo. The topic
+// path is a plain text task any judge-grade LLM can do (DeepSeek by default); the
+// photo path needs a multimodal model, so it's routed to Gemini.
+export interface AuthorInput {
+  topic: string
+  imageBase64?: string
+  imageMime?: string
+}
+
+export interface AuthorDraft {
+  title: string
+  category: string
+  instructions: string
+  sentences: string[]
+}
+
 export interface PerceptionProvider {
   perceive(input: PerceptionInput, modelId: string): Promise<PerceptionResult>
+}
+
+export interface AuthorProvider {
+  author(input: AuthorInput, modelId: string): Promise<AuthorDraft>
 }
 
 export interface JudgeProvider {

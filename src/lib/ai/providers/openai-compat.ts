@@ -1,4 +1,7 @@
 import type {
+  AuthorDraft,
+  AuthorInput,
+  AuthorProvider,
   JudgeInput,
   JudgeResult,
   PerceptionInput,
@@ -9,7 +12,7 @@ import type {
   TextJudgeInput,
   TokenUsage,
 } from '../types'
-import { buildJudgePrompt, buildPerceptionPrompt, buildWritingJudgePrompt, normalizeJudge, stripCodeFence } from './gemini'
+import { buildAuthorPrompt, buildJudgePrompt, buildPerceptionPrompt, buildWritingJudgePrompt, normalizeAuthorDraft, normalizeJudge, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
 import { config } from '@/lib/config'
@@ -112,6 +115,9 @@ const JUDGE_JSON_HINT =
 const PERCEPTION_JSON_HINT =
   '\n\n只返回 JSON，不要解释：{"transcript": string, "perSentence": [{"order": number, "spokenText": string, "completeness": number, "accuracy": number}], "pronunciationImpression": string, "observations": {"eyesClosed": boolean, "readingSuspected": boolean, "facePresent": boolean, "continuousTake": boolean, "notes": string}}'
 
+const AUTHOR_JSON_HINT =
+  '\n\n只返回 JSON，不要解释：{"title": string, "category": string, "instructions": string, "sentences": [string]}'
+
 export function makeJudge(cfg: CompatConfig): JudgeProvider {
   return {
     async judge(input: JudgeInput, modelId: string): Promise<JudgeResult> {
@@ -162,10 +168,29 @@ export function makePerception(cfg: CompatConfig): PerceptionProvider {
   }
 }
 
+// Text authoring (备课出题) over an OpenAI-compatible chat API. Topic-only — the
+// textbook-photo path is routed to Gemini upstream, so no image is sent here.
+export function makeAuthor(cfg: CompatConfig): AuthorProvider {
+  return {
+    async author(input: AuthorInput, modelId: string): Promise<AuthorDraft> {
+      const messages = [
+        { role: 'system', content: '你是中职英语老师的备课助手，只输出 JSON。' },
+        { role: 'user', content: buildAuthorPrompt(input.topic, false) + AUTHOR_JSON_HINT },
+      ]
+      const { data } = await chat(cfg, modelId, messages)
+      return normalizeAuthorDraft(data)
+    },
+  }
+}
+
 // Ready-made providers.
 export const qwenJudge = makeJudge(COMPAT.qwen)
 export const qwenPerception = makePerception(COMPAT.qwen)
+export const qwenAuthor = makeAuthor(COMPAT.qwen)
 export const minimaxJudge = makeJudge(COMPAT.minimax)
+export const minimaxAuthor = makeAuthor(COMPAT.minimax)
 export const deepseekJudge = makeJudge(COMPAT.deepseek)
+export const deepseekAuthor = makeAuthor(COMPAT.deepseek)
 export const openaiJudge = makeJudge(COMPAT.openai)
 export const openaiPerception = makePerception(COMPAT.openai)
+export const openaiAuthor = makeAuthor(COMPAT.openai)

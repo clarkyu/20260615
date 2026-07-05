@@ -15,6 +15,7 @@ import { DefaultModelForm } from './default-model-form'
 const CAP_LABEL: Record<Capability, { zh: string; en: string }> = {
   perception: { zh: '感知·看视频/听音频', en: 'Perceive' },
   judge: { zh: '评分·按标准打分', en: 'Judge' },
+  author: { zh: '出题·备课起草', en: 'Author' },
 }
 const MODALITY: Record<'text' | 'image' | 'audio' | 'video', { zh: string; en: string }> = {
   text: { zh: '文本', en: 'Text' },
