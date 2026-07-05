@@ -16,7 +16,7 @@ vi.mock('@/lib/ai/adapters', () => ({
 // summarizeShadow / gradeShadowTake tests above don't touch these.
 vi.mock('@/lib/repo/submissions', () => ({
   findGradableShadow: vi.fn(),
-  markProcessing: vi.fn(async () => {}),
+  claimForProcessing: vi.fn(async () => ({ count: 1 })),
   setShadowTakeScore: vi.fn(async () => {}),
   applyShadowResult: vi.fn(async () => {}),
   revertToQueue: vi.fn(async () => {}),
@@ -168,6 +168,16 @@ describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P
     wirePerception(null) // nothing fails
     await gradeShadowSubmission({} as never, 1)
     expect(shadowRepo.applyShadowResult).toHaveBeenCalledTimes(1)
+    expect(shadowRepo.revertToQueue).not.toHaveBeenCalled()
+  })
+
+  it('bails without grading when the claim is lost to a teacher (audit P1-1)', async () => {
+    ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
+    ;(shadowRepo.claimForProcessing as Mock).mockResolvedValueOnce({ count: 0 })
+    wirePerception(null)
+    await gradeShadowSubmission({} as never, 1)
+    expect(shadowRepo.setShadowTakeScore).not.toHaveBeenCalled()
+    expect(shadowRepo.applyShadowResult).not.toHaveBeenCalled()
     expect(shadowRepo.revertToQueue).not.toHaveBeenCalled()
   })
 })

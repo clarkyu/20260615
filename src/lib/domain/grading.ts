@@ -105,6 +105,10 @@ export interface AutoGradeOptions {
   rubric: string
   graderUserId?: number | null
   maxScore?: number
+  // A background (durable-queue) run must not reopen a submission a teacher finalized in
+  // the race window — it claims only UPLOADED/FLAGGED and bails otherwise. A manual
+  // teacher-triggered grade (runGrading) omits this and re-grades authoritatively.
+  background?: boolean
 }
 
 export type AutoGradeResult = { ok: true; needsReview: boolean } | { ok: false; error: string }
@@ -148,7 +152,14 @@ export async function autoGradeSubmission(
     return { ok: false, error: 'err.mediaUnavailable' }
   }
 
-  await submissionRepo.markProcessing(prisma, submission.id)
+  if (opts.background) {
+    // Guarded claim: if a teacher (or another run) finalized this in the race window, bail
+    // without regrading — reopening it here would let the fenced write below clobber them.
+    const claimed = await submissionRepo.claimForProcessing(prisma, submission.id)
+    if (claimed.count === 0) return { ok: true, needsReview: false }
+  } else {
+    await submissionRepo.markProcessing(prisma, submission.id)
+  }
 
   // Grade on the assignment-owning teacher's own API keys (BYOK); empty → platform key.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
@@ -237,5 +248,6 @@ export async function autoGradeById(prisma: PrismaClient, submissionId: number):
     perceptionModel: phase?.defaultPerceptionModel || submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
     judgeModel: phase?.defaultJudgeModel || submission.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
     rubric: phase?.rubric || submission.assignment.rubric || DEFAULT_RUBRIC,
+    background: true, // durable-queue run — guarded claim so it can't overwrite a teacher grade
   })
 }

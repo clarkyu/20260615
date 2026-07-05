@@ -18,6 +18,7 @@ vi.mock('@/lib/repo/assignments', () => ({
 }))
 vi.mock('@/lib/repo/submissions', () => ({
   markProcessing: vi.fn(async () => {}),
+  claimForProcessing: vi.fn(async () => ({ count: 1 })),
   markFailed: vi.fn(async () => {}),
   revertToQueue: vi.fn(async () => {}),
   applyGradeResult: vi.fn(async () => {}),
@@ -172,6 +173,28 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
     expect(res.ok).toBe(false)
     expect(subRepo.revertToQueue).toHaveBeenCalledWith(prisma, 1, 'UPLOADED')
     expect(subRepo.markFailed).not.toHaveBeenCalled()
+  })
+
+  it('a background run uses the GUARDED claim (not the unconditional markProcessing)', async () => {
+    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 80, confidence: 0.9, feedback: 'good' }))
+    await autoGradeSubmission(prisma, sub(), { ...opts, background: true })
+    expect(subRepo.claimForProcessing).toHaveBeenCalledTimes(1)
+    expect(subRepo.markProcessing).not.toHaveBeenCalled()
+  })
+
+  it('a background run bails (no regrade, no clobber) when the claim is lost to a teacher (audit P1-1)', async () => {
+    ;(subRepo.claimForProcessing as Mock).mockResolvedValueOnce({ count: 0 })
+    const res = await autoGradeSubmission(prisma, sub(), { ...opts, background: true })
+    expect(res).toEqual({ ok: true, needsReview: false })
+    expect(gradeSubmission).not.toHaveBeenCalled()
+    expect(subRepo.applyGradeResult).not.toHaveBeenCalled()
+  })
+
+  it('the manual (teacher-triggered) path still claims unconditionally via markProcessing', async () => {
+    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 80, confidence: 0.9, feedback: 'good' }))
+    await autoGradeSubmission(prisma, sub(), opts) // no background flag = manual
+    expect(subRepo.markProcessing).toHaveBeenCalledTimes(1)
+    expect(subRepo.claimForProcessing).not.toHaveBeenCalled()
   })
 
   it('marks FAILED on a genuine grading error', async () => {
