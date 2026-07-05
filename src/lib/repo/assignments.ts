@@ -44,6 +44,8 @@ export interface PhaseInput {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string | null
+  fillBlank?: boolean
+  blanksJson?: string | null
   requireFreeText?: boolean
   rubric?: string | null
   perceptionModel?: string | null
@@ -145,6 +147,8 @@ function phaseData(p: PhaseInput) {
     correctChoice: p.correctChoice ?? null,
     multiChoice: p.multiChoice ?? false,
     correctChoices: p.correctChoices ?? null,
+    fillBlank: p.fillBlank ?? false,
+    blanksJson: p.blanksJson ?? null,
     requireFreeText: p.requireFreeText ?? false,
     // Explicit type discriminator, derived from the submit-requirement flags by the one
     // source of truth (lib/phase-item-type) — kept consistent with migration 0042's
@@ -384,7 +388,7 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
     select: {
       id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true, freePractice: true,
       requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
-      requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, requireFreeText: true,
+      requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, fillBlank: true, blanksJson: true, requireFreeText: true,
     },
   })
 }

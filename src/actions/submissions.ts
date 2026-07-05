@@ -10,6 +10,7 @@ import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
+import { parseFillBlank, gradeFillBlank } from '@/lib/fill-blank'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -87,11 +88,16 @@ export async function finishSubmission(phaseId: number) {
   // 按环节类型路由（判别式来自 ① 的 phaseItemType）。
   const itemType = phaseItemType(resolved.requirements)
 
-  // objective：单选 / 多选 / 投票。都不走 AI、不进老师待批队列。
+  // objective：填空 / 单选 / 多选 / 投票。都不走 AI、不进老师待批队列。
   if (itemType === 'objective') {
     const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
     const correctSet = phase?.multiChoice ? parseChoices(phase.correctChoices) : []
-    if (phase?.multiChoice && correctSet.length > 0) {
+    if (phase?.fillBlank) {
+      // 填空题：客观判分——按空给分（答对空数 / 总空数 × 满分），提交即定稿。
+      const { correct, total } = gradeFillBlank(parseChoices(submission.recitedText), parseFillBlank(phase.blanksJson).accept)
+      const score = total > 0 ? Math.round((correct / total) * DEFAULT_MAX_SCORE) : 0
+      await submissionRepo.flipDraftGraded(prisma, submission.id, score)
+    } else if (phase?.multiChoice && correctSet.length > 0) {
       // 多选题：客观判分——所选集合 == 正确集合 → 满分，否则 0；提交即定稿。
       const correct = sameChoiceSet(parseChoices(submission.recitedText), correctSet)
       await submissionRepo.flipDraftGraded(prisma, submission.id, correct ? DEFAULT_MAX_SCORE : 0)
@@ -234,6 +240,21 @@ export async function submitMultiChoice(phaseId: number, choices: string[]) {
   const ordered = options.filter((o) => picked.has(o))
 
   await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, JSON.stringify(ordered))
+  revalidatePath('/student')
+  return { success: true }
+}
+
+// 填空题：记录学生逐空作答（与空同序），存成 JSON 数组进 recitedText；判分在 finishSubmission。
+export async function submitFillBlank(phaseId: number, answers: string[]) {
+  const { user, prisma, t } = await studentContext()
+  const cleaned = (Array.isArray(answers) ? answers : []).map((a) => (a ?? '').trim())
+  if (cleaned.every((a) => !a)) return { error: t('err.needFillBlank') }
+
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, JSON.stringify(cleaned))
   revalidatePath('/student')
   return { success: true }
 }

@@ -111,6 +111,14 @@ describe('buildTemplatePayload', () => {
     expect(parsed.phases[0]).toMatchObject({ requireChoice: true, multiChoice: true, correctChoices: JSON.stringify(['A', 'C']) })
   })
 
+  it('preserves fill-blank fields (fillBlank + blanksJson) through build + parse', () => {
+    const blanks = JSON.stringify({ text: 'a ____', accept: [['x', 'y']] })
+    const payload = buildTemplatePayload({ title: 'T', monthLabel: null }, [srcPhase({ fillBlank: true, blanksJson: blanks })], null)
+    expect(payload.phases[0]).toMatchObject({ fillBlank: true, blanksJson: blanks })
+    const parsed = parseTemplatePayload(JSON.stringify(payload))!
+    expect(parsed.phases[0]).toMatchObject({ fillBlank: true, blanksJson: blanks })
+  })
+
   it('joins typed sentences with newlines and carries chunkSetId', () => {
     const payload = buildTemplatePayload({ title: 'T', monthLabel: null }, [srcPhase({ typedSentences: ['a', 'b'], requireText: true })], 7)
     expect(payload.chunkSetId).toBe(7)

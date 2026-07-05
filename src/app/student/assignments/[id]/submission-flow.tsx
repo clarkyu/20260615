@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, ListChecks, MessageSquare } from 'lucide-react'
-import { submitRecitedText, submitChoice, submitMultiChoice, submitFreeText, finishSubmission, getOwnSubmissionMediaUrl } from '@/actions/submissions'
+import { submitRecitedText, submitChoice, submitMultiChoice, submitFreeText, submitFillBlank, finishSubmission, getOwnSubmissionMediaUrl } from '@/actions/submissions'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
+import { splitBlanks } from '@/lib/fill-blank'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -20,7 +21,7 @@ interface Sentence {
   order: number
   text: string
 }
-type Kind = 'text' | 'video' | 'audio' | 'handwriting' | 'choice' | 'freetext'
+type Kind = 'text' | 'video' | 'audio' | 'handwriting' | 'choice' | 'freetext' | 'fill'
 
 const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
 const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
@@ -30,6 +31,7 @@ const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
   handwriting: { key: 'sub.stepImage', icon: Camera },
   choice: { key: 'sub.stepChoice', icon: ListChecks },
   freetext: { key: 'sub.stepFreeText', icon: MessageSquare },
+  fill: { key: 'sub.stepFill', icon: PenLine },
 }
 
 // 正式测试横幅：告诉学生这是受监督的正式测试，行为更端正 = 成绩更真实。
@@ -174,6 +176,59 @@ function ChoiceStep({ phaseId, choices, initial, multiChoice, onDone }: { phaseI
   )
 }
 
+// 填空题作答：题干按 ____ 切成段，段间嵌入输入框；逐空作答后 submitFillBlank。
+function FillBlankStep({ phaseId, text, initial, onDone }: { phaseId: number; text: string; initial: string; onDone: () => void }) {
+  const t = useT()
+  const segments = splitBlanks(text)
+  const n = Math.max(0, segments.length - 1)
+  const [answers, setAnswers] = useState<string[]>(() => {
+    const init = parseChoices(initial)
+    return Array.from({ length: n }, (_, i) => init[i] ?? '')
+  })
+  const [error, setError] = useState<string | null>(null)
+  const [pending, start] = useTransition()
+
+  function submit() {
+    setError(null)
+    start(async () => {
+      const res = await submitFillBlank(phaseId, answers)
+      if (res.error) setError(res.error)
+      else onDone()
+    })
+  }
+  const canSubmit = answers.some((a) => a.trim())
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('sub.fillTitle')}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">{t('sub.fillDesc')}</p>
+        <div className="rounded-xl bg-secondary p-3 text-base leading-9">
+          {segments.map((seg, i) => (
+            <span key={i}>
+              <span className="whitespace-pre-wrap">{seg}</span>
+              {i < n ? (
+                <input
+                  value={answers[i]}
+                  onChange={(e) => setAnswers((a) => a.map((x, j) => (j === i ? e.target.value : x)))}
+                  className="mx-1 inline-block w-28 rounded-md border-b-2 border-primary bg-background px-2 py-0.5 align-middle text-sm focus:outline-none"
+                  aria-label={t('asg.blankNth', { n: i + 1 })}
+                />
+              ) : null}
+            </span>
+          ))}
+        </div>
+        {error ? <FormMessage>{error}</FormMessage> : null}
+        <Button onClick={submit} disabled={pending || !canSubmit} size="lg" className="w-full">
+          {pending ? t('sub.submitting') : t('submit')}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 // 学生回看自己提交的音/视频/手写图：点按钮拉取临时链接，就地内联播放/查看。
 function MySubmissionMedia({ submissionId, hasVideo, hasAudio, hasImage }: { submissionId: number; hasVideo: boolean; hasAudio: boolean; hasImage: boolean }) {
   const t = useT()
@@ -226,6 +281,8 @@ export function SubmissionFlow(props: {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string[]
+  fillBlank?: boolean
+  fillText?: string
   requireFreeText: boolean
   attemptsLeft: number
   windowState: 'open' | 'not-open' | 'closed'
@@ -252,11 +309,12 @@ export function SubmissionFlow(props: {
     if (props.requireText) s.push('text')
     if (props.requireChoice) s.push('choice')
     if (props.requireFreeText) s.push('freetext')
+    if (props.fillBlank) s.push('fill')
     if (props.requireVideo) s.push('video')
     if (props.requireAudio) s.push('audio')
     if (props.requireHandwriting) s.push('handwriting')
     return s
-  }, [props.requireText, props.requireChoice, props.requireFreeText, props.requireVideo, props.requireAudio, props.requireHandwriting])
+  }, [props.requireText, props.requireChoice, props.requireFreeText, props.fillBlank, props.requireVideo, props.requireAudio, props.requireHandwriting])
 
   // Skip the text step when it's already submitted — but clamp so a text-only
   // assignment (steps === ['text']) can't start out of range and render a wrong
@@ -334,8 +392,8 @@ export function SubmissionFlow(props: {
     const choiceRight = choiceGraded && (isMulti
       ? sameChoiceSet(parseChoices(props.initialRecitedText), props.correctChoices ?? [])
       : props.initialRecitedText.trim() === (props.correctChoice as string).trim())
-    // 回显文本：多选作答是 JSON 数组，展开成「A、B」；揭晓答案同理。
-    const answerText = isMulti ? parseChoices(props.initialRecitedText).join('、') : props.initialRecitedText
+    // 回显文本：多选 / 填空作答都是 JSON 数组，展开成「A、B」；单选/自由文本原样。
+    const answerText = (isMulti || props.fillBlank) ? parseChoices(props.initialRecitedText).join('、') : props.initialRecitedText
     const correctText = isMulti ? (props.correctChoices ?? []).join('、') : (props.correctChoice ?? '')
     // The lines the AI marked weak — so the student can drill just those (零压力练习).
     const weakSentences = props.sentences.filter((s) => {
@@ -472,6 +530,8 @@ export function SubmissionFlow(props: {
           phKey="sub.freeTextPh"
           submitKey="submit"
         />
+      ) : current === 'fill' ? (
+        <FillBlankStep phaseId={props.phaseId} text={props.fillText ?? ''} initial={props.initialRecitedText} onDone={advance} />
       ) : current === 'handwriting' ? (
         <PhotoStep phaseId={props.phaseId} onDone={advance} />
       ) : (

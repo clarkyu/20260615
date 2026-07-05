@@ -25,6 +25,7 @@ export interface Requirements {
   requireHandwriting: boolean
   requireChoice: boolean
   requireFreeText: boolean
+  fillBlank: boolean
 }
 
 export type AttemptResult =
@@ -64,6 +65,7 @@ export async function resolveAttempt(
       requireHandwriting: phase.requireHandwriting,
       requireChoice: phase.requireChoice,
       requireFreeText: phase.requireFreeText,
+      fillBlank: phase.fillBlank,
     },
   }
 }
@@ -84,6 +86,7 @@ export function missingRequiredPart(assignment: Requirements, submission: Parts)
   if (assignment.requireHandwriting && !submission.imageKey) return 'err.noImageYet'
   if (assignment.requireChoice && !submission.recitedText) return 'err.needChoice'
   if (assignment.requireFreeText && !submission.recitedText) return 'err.needFreeText'
+  if (assignment.fillBlank && !submission.recitedText) return 'err.needFillBlank'
   return null
 }
 

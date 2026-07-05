@@ -37,7 +37,7 @@ vi.mock('next/navigation', () => ({
 
 import type { PrismaClient } from '@prisma/client'
 import { login } from '@/actions/auth'
-import { finishSubmission, submitChoice, submitFreeText, submitMultiChoice } from '@/actions/submissions'
+import { finishSubmission, submitChoice, submitFreeText, submitMultiChoice, submitFillBlank } from '@/actions/submissions'
 import { batchOverride } from '@/actions/grading'
 import { getCurrentUser } from '@/lib/auth'
 import { hashPassword } from '@/lib/password'
@@ -198,6 +198,35 @@ describe('server actions E2E (real iron-session + real SQL)', () => {
     const poll = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, requireChoice: true, multiChoice: true, choicesJson: JSON.stringify(['A', 'B']), graded: false, maxAttempts: 1 } })
     await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
     expect(await submitMultiChoice(poll.id, ['A', 'Z'])).toHaveProperty('error')
+  })
+
+  it('fill-blank auto-scores per blank on submit: all→100, half→50, none→0 (GRADED, no review)', async () => {
+    const d = await seed(db.prisma)
+    const blanks = JSON.stringify({ text: '光合作用把二氧化碳和____转化成葡萄糖和____。', accept: [['水', 'H2O', 'water'], ['氧气', 'oxygen', 'O2']] })
+    const fill = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, fillBlank: true, blanksJson: blanks, graded: true, maxAttempts: 5 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+
+    // Both blanks right (case/space-insensitive) → 100.
+    expect(await submitFillBlank(fill.id, [' Water ', '氧气'])).toEqual({ success: true })
+    expect(await finishSubmission(fill.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: fill.id, attempt: 1 } })).toMatchObject({ status: 'GRADED', finalScore: 100, needsReview: false })
+
+    // One of two right → 50 (per-blank proportional).
+    expect(await submitFillBlank(fill.id, ['水', 'wrong'])).toEqual({ success: true })
+    expect(await finishSubmission(fill.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: fill.id, attempt: 2 } })).toMatchObject({ status: 'GRADED', finalScore: 50, needsReview: false })
+
+    // None right → 0.
+    expect(await submitFillBlank(fill.id, ['x', 'y'])).toEqual({ success: true })
+    expect(await finishSubmission(fill.id)).toEqual({ success: true })
+    expect(await db.prisma.submission.findFirst({ where: { phaseId: fill.id, attempt: 3 } })).toMatchObject({ status: 'GRADED', finalScore: 0, needsReview: false })
+  })
+
+  it('rejects a fill-blank submit with no answers filled in', async () => {
+    const d = await seed(db.prisma)
+    const fill = await db.prisma.phase.create({ data: { assignmentId: d.assignment.id, order: 2, requireVideo: false, requireText: false, fillBlank: true, blanksJson: JSON.stringify({ text: 'a ____', accept: [['x']] }), graded: true, maxAttempts: 1 } })
+    await viaRedirect(() => login(null, form({ schoolId: String(d.school.id), identifier: 'stu1', password: PW })))
+    expect(await submitFillBlank(fill.id, ['   ', ''])).toHaveProperty('error')
   })
 
   it('free-text submit routes to the durable WRITING grader (not speech), pending review', async () => {
