@@ -77,7 +77,7 @@ describe('parseTemplatePayload', () => {
 const srcPhase = (over: Partial<TemplateSourcePhase> = {}): TemplateSourcePhase => ({
   title: null, category: null, instructions: null, useBankSet: false, typedSentences: [],
   requireEyesClosed: false, requireText: false, requireAudio: false, requireVideo: false,
-  requireHandwriting: false, graded: true, maxAttempts: 1, isFormalTest: false, freePractice: false,
+  requireHandwriting: false, graded: true, maxAttempts: 1, weight: 1, isFormalTest: false, freePractice: false,
   ...over,
 })
 

@@ -11,7 +11,7 @@ const draft = (): PhaseDraft => ({
   id: null, title: null, category: null, instructions: null, useBankSet: false,
   typedSentences: ['Hi'], openAt: null, dueAt: null,
   requireEyesClosed: false, requireText: false, requireAudio: true, requireVideo: false, requireHandwriting: false,
-  graded: true, maxAttempts: 1, isFormalTest: false, freePractice: false,
+  graded: true, maxAttempts: 1, weight: 1, isFormalTest: false, freePractice: false,
 })
 
 async function seed(p: PrismaClient) {
@@ -89,6 +89,13 @@ describe('sync 评阅配置 to sibling classes', () => {
     await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', meta, [draft()], ids, null, null)
     await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', meta, [draft()], ids, null, null)
     expect(await db.prisma.assignment.count()).toBe(6) // no idempotency key → two independent publishes
+  })
+
+  it('persists the teacher-set per-phase weight through publish (feature ①)', async () => {
+    const d = await seed(db.prisma)
+    await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', { title: 'W', monthLabel: null }, [{ ...draft(), weight: 3 }], [d.offerings[0].id], null, null)
+    const phase = await db.prisma.phase.findFirstOrThrow({ where: { assignment: { title: 'W' } } })
+    expect(phase.weight).toBe(3)
   })
 
   it('is scoped to the teacher: cannot find or sync to another teacher’s assignment', async () => {
