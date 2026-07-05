@@ -50,6 +50,19 @@ describe('real cascade + raw SQL behaviours', () => {
     expect(await p.user.findUnique({ where: { id: only1.id } })).toBeNull()
   })
 
+  it('classDeletionImpact counts the offerings/assignments/non-DRAFT submissions the cascade would destroy (tenant-scoped)', async () => {
+    const p = db.prisma
+    const { asg } = await assignmentWithSubs(p, [
+      { no: 'a', status: 'GRADED', needsReview: false, aiScore: 80, teacherScore: null },
+      { no: 'b', status: 'UPLOADED', needsReview: true, aiScore: null, teacherScore: null },
+      { no: 'c', status: 'DRAFT', needsReview: false, aiScore: null, teacherScore: null }, // excluded (not yet submitted)
+    ])
+    const off = (await p.courseOffering.findFirst({ where: { assignments: { some: { id: asg.id } } } }))!
+    expect(await classRepo.classDeletionImpact(p, off.classId, off.schoolId)).toEqual({ offerings: 1, assignments: 1, submissions: 2 })
+    // Wrong school → sees nothing (the ?? -1 sentinel / tenant scope holds).
+    expect(await classRepo.classDeletionImpact(p, off.classId, -999)).toEqual({ offerings: 0, assignments: 0, submissions: 0 })
+  })
+
   it('acceptAiForAssignment finalizes only AI-scored rows needing review, never clobbering a teacher score or a flagged row', async () => {
     const p = db.prisma
     const { asg, ids, teacherId } = await assignmentWithSubs(p, [
