@@ -36,6 +36,9 @@ scoping)→ prisma。依赖只能向下。
 - **双迁移树**:`d1/migrations/NNNN_name.sql` ↔ `prisma/migrations/<ts>_name/migration.sql`,
   按**逻辑名 1:1 配对**(`src/lib/__tests__/migrations.test.ts` 强制)。加列用可空
   `ALTER TABLE ADD COLUMN`。改 schema 后记得 `npx prisma generate`。
+- **整表重建须幂等**:凡 `CREATE TABLE "new_X"` 的重建迁移,必须以 `DROP TABLE IF EXISTS "new_X"`
+  开头(同一 `migrations.test.ts` 强制),这样中途失败重跑不会撞「表已存在」。**已应用的迁移一律
+  不可改、不可手动重跑**(prod 靠 `d1_migrations` 记账;改动已应用的 prisma 迁移还会触发 checksum)。
 - **i18n 平价**:`src/lib/i18n.ts` 里 `zh`/`en`/`es` 三本字典键必须全等
   (`src/lib/__tests__/i18n.test.ts` 强制)。
 - **env 只走 `lib/config.ts`**:别处不许 `process.env.X`。**日志只记密钥有无、绝不记值**。
