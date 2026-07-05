@@ -117,11 +117,12 @@ describe('createAssignments — phase resolution', () => {
 
 describe('updateAssignment — phase resolution', () => {
   it('replaces phases via updateWithPhases', async () => {
-    const res = await updateAssignment(prisma, 1, 9, 'SCHOOL_ADMIN', 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null)
+    const res = await updateAssignment(prisma, 1, 9, 'SCHOOL_ADMIN', 42, meta, [draft({ requireVideo: true, typedSentences: ['x'] })], null, [7, 8])
     expect(res).toEqual({ ok: true })
     expect(assignmentsRepo.updateWithPhases as Mock).toHaveBeenCalledTimes(1)
     const call = (assignmentsRepo.updateWithPhases as Mock).mock.calls[0]
     expect(call[1]).toBe(42)
     expect(call[3][0]).toMatchObject({ order: 1, requireVideo: true })
+    expect(call[4]).toEqual([7, 8]) // knownPhaseIds forwarded to the repo (audit P2-9)
   })
 })

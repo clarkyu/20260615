@@ -195,6 +195,10 @@ export function AssignmentForm({
   // `initial` with an id = editing an existing assignment; `initial` without an id =
   // prefilling a NEW publish from a template (still create mode).
   const editing = Boolean(initial?.id)
+  // The phase ids this form LOADED (stable across the teacher's edits). Submitted so the
+  // server deletes only phases that were loaded-then-dropped — never a phase added
+  // concurrently after load, whose submissions a stale save would otherwise destroy (P2-9).
+  const knownPhaseIds = (initial?.phases ?? []).map((p) => p.id).filter((x): x is number => typeof x === 'number')
   // The published bank set this assignment draws from (publish flow, or editing a
   // bank-published assignment): its phases can pull sentences + shadow video from it.
   const bankInfo = chunkSet ?? (initial?.chunkSetId ? { id: initial.chunkSetId, name: initial.chunkSetName ?? '', count: initial.chunkSetCount, hasVideo: initial.chunkSetHasVideo } : null)
@@ -367,6 +371,7 @@ export function AssignmentForm({
         <CardContent>
           <form action={action} className="space-y-4">
             {editing ? <input type="hidden" name="assignmentId" value={initial!.id ?? ""} /> : <input type="hidden" name="primaryOfferingId" value={singleOfferingId ?? ''} />}
+            {editing ? <input type="hidden" name="knownPhaseIds" value={knownPhaseIds.join(',')} /> : null}
             {!editing ? <input type="hidden" name="batchId" value={publishBatchId} /> : null}
             {!editing && !multi ? <input type="hidden" name="offeringId" value={singleOfferingId ?? ''} /> : null}
             {bankInfo ? <input type="hidden" name="chunkSetId" value={bankInfo.id} /> : null}
