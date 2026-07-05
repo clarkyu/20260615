@@ -22,11 +22,11 @@
 - **老师**：建校 → Excel 名单导入（预览 → 幂等）→ 发布作业（50 句/班级/时间窗/闭眼）→ 阅卷看板（选模型 + 阅卷时填评分标准 + AI 评阅 + 人工改分 + 看视频）→ 按班级导出 Excel
 - **学生**：看作业 → 复习 → 全屏录制（前置、切屏/离开记违规）→ 预签名直传 R2 → 提交 → 看成绩
 
-## AI 评阅层（`src/lib/ai/`）
+## AI 评阅 + 出题层（`src/lib/ai/`）
 
-- `registry.ts`：模型注册表（Gemini/Qwen/MiniMax/GPT-4o/Whisper/DeepSeek/Claude）+ 能力/模态标签 + 预设
-- `grade.ts`：两段式编排（感知→评分）；`adapters.ts`：各家真实适配器（Gemini/Qwen/MiniMax/DeepSeek/GPT-4o/Whisper/Claude，缺 key 优雅降级）
-- DeepSeek 仅做②评分（纯文本）；Gemini 一把梭最适合。专用发音引擎为二期
+- `registry.ts`：模型注册表（Gemini/Qwen/MiniMax/GPT-4o/Whisper/DeepSeek/Claude）+ 能力（感知/评分/出题）/模态标签 + 预设
+- `grade.ts`：两段式编排（感知→评分）；`adapters.ts`：各家真实适配器（缺 key 优雅降级）。感知 / 评分 / 备课出题三阶段都按 provider **可插拔**（`getPerceptionProvider` / `getJudgeProvider` / `getAuthorProvider`）
+- 默认「能让 DeepSeek 做的都交给 DeepSeek」：**评分**默认 DeepSeek V4 Pro（推理版，纯文本），**文字出题**默认 DeepSeek V4 Flash；DeepSeek 做不了的多模态活儿——**感知**（视频/音频）与**拍课本照片出题**——走 Gemini。老师可按作业/环节自选模型。专用发音引擎为二期
 
 ## 本地开发
 
