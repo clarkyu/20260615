@@ -55,8 +55,8 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   const [assignments, rawSubs, rawPractice] = await Promise.all([
     assignmentRepo.listForOfferingTitled(prisma, offeringId),
-    submissionRepo.listForStudentInOfferingLatestFirst(prisma, offeringId, studentId),
-    practiceRepo.listScoredForStudentInOffering(prisma, offeringId, studentId),
+    submissionRepo.listForStudentInOfferingLatestFirst(prisma, offeringId, studentId, user.schoolId, user.userId, user.role),
+    practiceRepo.listScoredForStudentInOffering(prisma, offeringId, studentId, user.schoolId, user.userId, user.role),
   ])
 
   const phaseRows = latestPhaseSubmissions(rawSubs)

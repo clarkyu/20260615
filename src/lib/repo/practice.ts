@@ -1,4 +1,5 @@
-import type { PrismaClient, PracticeKind } from '@prisma/client'
+import type { PrismaClient, PracticeKind, Role } from '@prisma/client'
+import { offeringScopeFor } from './scope'
 
 // Practice-round data access. Every round is recorded (even unavailable/error) so
 // later analytics can see how a student trained, not just their graded submission.
@@ -41,10 +42,11 @@ export function deleteAttempt(prisma: PrismaClient, id: number) {
   return prisma.practiceAttempt.delete({ where: { id } })
 }
 
-// Scored practice rounds (训练 → 平时成绩) across an offering — analytics input.
-export function listScoredForOffering(prisma: PrismaClient, offeringId: number) {
+// Scored practice rounds (训练 → 平时成绩) across an offering — analytics input. The
+// offeringScopeFor fence makes the read tenant-safe by construction (defense-in-depth, P2-8).
+export function listScoredForOffering(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.practiceAttempt.findMany({
-    where: { assignment: { offeringId }, aiScore: { not: null } },
+    where: { assignment: { offeringId, offering: offeringScopeFor(schoolId, userId, role) }, aiScore: { not: null } },
     select: { studentId: true, assignmentId: true, aiScore: true },
   })
 }
@@ -59,9 +61,9 @@ export function listScoredForStudent(prisma: PrismaClient, studentId: number) {
 
 // One student's scored practice within ONE offering — the per-student drill-down's
 // 平时成绩. Scoped by assignment.offeringId.
-export function listScoredForStudentInOffering(prisma: PrismaClient, offeringId: number, studentId: number) {
+export function listScoredForStudentInOffering(prisma: PrismaClient, offeringId: number, studentId: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.practiceAttempt.findMany({
-    where: { studentId, aiScore: { not: null }, assignment: { offeringId } },
+    where: { studentId, aiScore: { not: null }, assignment: { offeringId, offering: offeringScopeFor(schoolId, userId, role) } },
     select: { assignmentId: true, aiScore: true },
   })
 }

@@ -176,7 +176,7 @@ export async function createReviewAssignment(formData: FormData): Promise<void> 
   const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) redirect('/dashboard/teaching')
 
-  const res = await buildReviewAssignment(prisma, offeringId)
+  const res = await buildReviewAssignment(prisma, offeringId, user.schoolId, user.userId, user.role)
   revalidatePath(`/dashboard/teaching/${offeringId}`)
   redirect(res.redirectTo)
 }

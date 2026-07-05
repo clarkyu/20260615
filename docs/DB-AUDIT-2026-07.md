@@ -76,7 +76,7 @@
 | P2-5 | S2 | 迁移 CI 只比对**名**不比对 **SQL 正文**→一次手改就 prod/Client 静默分叉（今 0 漂移） | `__tests__/migrations.test.ts` | 补按对比对归一化正文 | ✅ #310 |
 | P2-6 | S3 | 数据迁移非幂等（`0018/0033/0026` 全靠 `d1_migrations` 记账）；全树 0 个 `IF NOT EXISTS`，表重建中途失败残留 `new_X` 卡死 | `d1/migrations/*` | 重建加 `DROP TABLE IF EXISTS new_X`；文档化「勿手动重跑」 | ✅ 守卫 + 约定：`migrations.test` 强制**新**重建以 `DROP TABLE IF EXISTS "new_X"` 开头（既有 5 个已应用的重建 grandfather：改动已应用迁移会触发 prisma checksum、且 prod 永不重跑）；CLAUDE.md 记「勿手动重跑」 |
 | P2-7 | S3 | 级联正确性依赖 **D1 默认 FK-on** 这个隐式前提；`relationMode` 隐式默认→换数据源即静默 no-op | `db.ts`、`schema.prisma:5-7` | `db.ts` 写明依赖 + `schema` 显式 `relationMode="foreignKeys"` | ✅ #310 |
-| P2-8 | S3 | offering/assignment 级分析读函数不带租户谓词（靠 caller 先 scope，今都做了） | `repo/submissions.ts:113`… | 把 `schoolId`/offeringId 下推进读函数 | 🟡 #307 让单 offering 读用 `where:{offeringId}`（内在 scope 到具体 offering）；其余仍靠 caller 先 scope |
+| P2-8 | S3 | offering/assignment 级分析读函数不带租户谓词（靠 caller 先 scope，今都做了） | `repo/submissions.ts:113`… | 把 `schoolId`/offeringId 下推进读函数 | ✅ 6 个 offering 分析读（submissions×4 + practice×2）加 `staffSub`/`offeringScopeFor` 租户栅栏，safe-by-construction；`offeringId` 仍是主索引过滤，scope 为二级防御 |
 | P2-9 | S3 | 并发改作业 lost-update 级联删提交（无版本守）；双发布无幂等键→重复作业；token 单次使用 check-then-act 非原子 | `repo/assignments.ts:198`、`domain/assignments.ts:149`、`actions/auth.ts:158` | 乐观并发守 / 幂等键 / 守护式 `updateMany` | 🟡 双发布幂等键 ✅ #315；token 单次使用原子化 ✅ #318（③，先守护式 `updateMany` 占用再落地，对齐 invite）；乐观并发守 lost-update 仍未动 |
 | P2-10 | S3 | perSentence accuracy/completeness 未 clamp→>1 的值污染薄弱句分析；导出多环节等权平均（BACKLOG #72）；名单导入/留存清理未按 D1 上限分批/单批清 | `gemini.ts:307`、`analytics.ts:80`、`roster.ts:101`、`retention.ts:20` | 感知层 `clamp01`；导出按句数加权；分批/循环清 | 🟡 perSentence `clamp01` ✅ #310（共享 `normalizePerSentence`）；导出等权/分批清 未动 |
 | P2-11 | S4 | `costUsd` 用 Float（金额）；填空归一化仅 trim+lowercase（`New  York`≠`New York`）；持续失败的 key 卡住整行媒体清理 | `schema:422`、`fill-blank.ts:41`、`retention.ts:30` | 若转计费改整数 micro-USD；归一化折叠内部空白/全角 | 🟡 ① costUsd→整数 micro-USD 计费级精度 ✅ #319（加 `costMicroUsd`、按整数精确累加）；填空归一化/retention 卡键 仍未动 |
@@ -88,8 +88,8 @@
 - **P2-3 order 部分唯一索引 —— ✅（clark 跑 prod 只读核对，两表 0 重复后建；commit e95cc18）**：`CREATE UNIQUE INDEX` 遇存量重复会**直接失败、拖垮部署**，故先在 prod 跑只读核对
   `SELECT chunkSetId, "order", COUNT(*) FROM Chunk GROUP BY 1,2 HAVING COUNT(*)>1`（Sentence 按 `phaseId,"order"`），返回 0 行确认安全后建（commit e95cc18；schema 内注明 2026-07-05 核对）。
 - **P2-1 SchoolInvite.createdById 建 FK —— ✅ #320（②a）**：整表重建加 FK，`createdById` 改可空 + `ON DELETE SET NULL`（对齐 `AssignmentTemplate.createdBy`）；重建时 `CASE WHEN createdById IN (SELECT id FROM User)` 把历史孤儿置空**自愈**——非破坏、不丢行、无需先人工核对。原「软引用暂缓」判定在 clark 明确要求下升级为真 FK。
-- **收口进度**：①③②a②b（#318 #319 #320 + createdAt 守卫）、P2-11 填空归一化（#322）、P2-11 retention 韧性（#323）、P2-9 lost-update（#324 known-ids + #325 version 乐观锁）、P2-6 迁移幂等守卫（本 PR）均已收口。**剩**：P2-8 的 analytics 读租户谓词下推（今靠 caller 先 scope，已够）、`aiResult` 两步取（读层优化）——S3/S4，按需再评估。
-- **`aiResult` 两步取**：offeringId 索引（#307）已把扫描变索引扫；blob 超取只在高 `maxAttempts` × 大规模时显著。可作后续读层优化（需动 analytics 消费端），本轮未做。
+- **收口进度**：①③②a②b（#318 #319 #320 + createdAt 守卫）、P2-11 填空归一化（#322）、P2-11 retention 韧性（#323）、P2-9 lost-update（#324 known-ids + #325 version 乐观锁）、P2-6 迁移幂等守卫（#326）、P2-8 租户谓词下推（本 PR）均已收口。**唯一待定**：`aiResult` 读层超取（分析 + 建议见下，待定）。
+- **`aiResult` 读层超取 —— 建议记为已接受的取舍**：`listForOfferingLatestFirst` 拉了每次 attempt 的 aiResult，消费端只留每组最新，故超取的是被淘汰 attempt 的 blob。核实：①「先取轻行 → 再按代表 id 取 blob」的两步取会多一次 round-trip，在 `maxAttempts=1`（常态）下**净变差**；②Prisma `distinct` 在 SQLite 是引擎内去重、**不减** DB 取数；唯一恒正收益是 `$queryRaw` 窗口函数（`ROW_NUMBER`）单查询只取最新行——但要 inline 租户 scope、依赖 D1 窗口函数、丢 Prisma 类型，为一个 S4「只在极端规模显著」的项付不成比例复杂度。故建议接受现状；若要优化，走窗口函数版（本 App 规模远够不到）。
 
 ---
 

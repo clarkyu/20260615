@@ -42,9 +42,9 @@ export default async function OfferingInsightsPage({ params }: { params: Promise
   const [students, assignments, rawSubs, rawPractice, scorePairs] = await Promise.all([
     userRepo.listClassRoster(prisma, user.schoolId, offering.classId),
     assignmentRepo.listForOfferingTitled(prisma, offeringId),
-    submissionRepo.listForOfferingLatestFirst(prisma, offeringId),
-    practiceRepo.listScoredForOffering(prisma, offeringId),
-    submissionRepo.listScorePairsForOffering(prisma, offeringId),
+    submissionRepo.listForOfferingLatestFirst(prisma, offeringId, user.schoolId, user.userId, user.role),
+    practiceRepo.listScoredForOffering(prisma, offeringId, user.schoolId, user.userId, user.role),
+    submissionRepo.listScorePairsForOffering(prisma, offeringId, user.schoolId, user.userId, user.role),
   ])
 
   // Per-phase latest submissions → collapsed to one score per (student, assignment) =

@@ -110,11 +110,13 @@ export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: nu
 // (student, assignment, PHASE) comes first — the caller keeps the first of each group.
 // Carries phaseId + phase.graded so analytics aggregates per phase. Excludes DRAFT so a
 // started-but-unfinished retry doesn't shadow a graded attempt.
-export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number) {
+export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.submission.findMany({
-    // Uses the denormalized offeringId + @@index([offeringId, status]) — a single indexed
-    // scan instead of a Submission→Assignment→CourseOffering join.
-    where: { offeringId, status: { not: 'DRAFT' } },
+    // Primary filter is the denormalized offeringId + @@index([offeringId, status]) — a single
+    // indexed scan, not a Submission→Assignment→CourseOffering join. The staffSub scope rides
+    // along as a defense-in-depth tenant fence (secondary, on the already-narrowed rows) so the
+    // read is safe-by-construction even if a caller forgets to resolve the offering first (P2-8).
+    where: { offeringId, status: { not: 'DRAFT' }, ...staffSub(schoolId, userId, role) },
     select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true, weight: true } } },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
@@ -123,9 +125,9 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
 // AI-vs-teacher score pairs for an offering — only submissions a teacher actually
 // re-scored (both an AI score and a teacher score present). Feeds the grading
 // calibration insight; scoped by offering like the other analytics lists.
-export function listScorePairsForOffering(prisma: PrismaClient, offeringId: number) {
+export function listScorePairsForOffering(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.submission.findMany({
-    where: { offeringId, aiScore: { not: null }, teacherScore: { not: null } },
+    where: { offeringId, aiScore: { not: null }, teacherScore: { not: null }, ...staffSub(schoolId, userId, role) },
     select: { aiScore: true, teacherScore: true },
   })
 }
@@ -156,9 +158,9 @@ export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number |
 // Lighter variant for the gradebook export: it collapses phases and never needs the
 // per-sentence detail, so the (potentially large) aiResult JSON is omitted — keeping the
 // whole-offering scan cheap in memory even for a big class. Same ordering/dedup contract.
-export function listForOfferingGradebook(prisma: PrismaClient, offeringId: number) {
+export function listForOfferingGradebook(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.submission.findMany({
-    where: { offeringId, status: { not: 'DRAFT' } },
+    where: { offeringId, status: { not: 'DRAFT' }, ...staffSub(schoolId, userId, role) },
     select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, phase: { select: { graded: true, weight: true } } },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
@@ -203,9 +205,9 @@ export function listForStudentLatestFirst(prisma: PrismaClient, studentId: numbe
 
 // One student's non-DRAFT submissions within ONE offering (RawPhaseRow shape) — for
 // the teacher's per-student drill-down. Scoped by assignment.offeringId.
-export function listForStudentInOfferingLatestFirst(prisma: PrismaClient, offeringId: number, studentId: number) {
+export function listForStudentInOfferingLatestFirst(prisma: PrismaClient, offeringId: number, studentId: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.submission.findMany({
-    where: { studentId, status: { not: 'DRAFT' }, offeringId },
+    where: { studentId, status: { not: 'DRAFT' }, offeringId, ...staffSub(schoolId, userId, role) },
     select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true, weight: true } }, assignment: { select: { title: true } } },
     orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
