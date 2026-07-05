@@ -37,6 +37,21 @@ describe('gradeFillBlank — per-blank case/space-insensitive, multiple accepted
   it('total is the number of defined blanks (accept.length)', () => {
     expect(gradeFillBlank([], [['a'], ['b'], ['c']])).toEqual({ correct: 0, total: 3 })
   })
+
+  it('folds internal whitespace and fullwidth chars so equivalent writings still match (audit P2-11)', () => {
+    // Internal double/odd whitespace collapses to a single space.
+    expect(gradeFillBlank(['New  York'], [['New York']])).toEqual({ correct: 1, total: 1 })
+    expect(gradeFillBlank(['a\tb'], [['a b']])).toEqual({ correct: 1, total: 1 })
+    // Fullwidth letters/digits (common on a Chinese IME) fold to halfwidth via NFKC.
+    expect(gradeFillBlank(['ＮＥＷ'], [['new']])).toEqual({ correct: 1, total: 1 })
+    expect(gradeFillBlank(['１２３'], [['123']])).toEqual({ correct: 1, total: 1 })
+    // A fullwidth ideographic space (U+3000) between words also normalizes.
+    expect(gradeFillBlank(['New　York'], [['new york']])).toEqual({ correct: 1, total: 1 })
+    // Normalization is symmetric: an accept key written with extra spacing still matches a clean answer.
+    expect(gradeFillBlank(['new york'], [['New   York']])).toEqual({ correct: 1, total: 1 })
+    // A genuinely different answer is still wrong (no over-folding).
+    expect(gradeFillBlank(['newyork'], [['new york']])).toEqual({ correct: 0, total: 1 })
+  })
 })
 
 describe('isGradableFillBlank — refuse to auto-grade an unusable answer key (audit P0-5)', () => {

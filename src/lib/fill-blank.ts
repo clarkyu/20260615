@@ -49,7 +49,10 @@ export function isGradableFillBlank(fb: FillBlank): boolean {
   )
 }
 
-const norm = (s: string) => s.trim().toLowerCase()
+// 判分归一化：Unicode NFKC（把中文输入法常见的全角字母/数字/标点折成半角、合并兼容字符）
+// → 折叠内部连续空白为单个空格 → 去首尾空白 → 转小写。学生答案与答案键都过同一 norm，
+// 所以「New  York」（内部双空格）、「Ｎｅｗ」（全角）这类等价写法不再被误判为错（审计 P2-11）。
+const norm = (s: string) => s.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
 
 // 逐空判分：answers[i] 命中 accept[i] 里任一（归一化后相等且非空）即该空对。
 // total = accept.length（题面定义的空数）。
