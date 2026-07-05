@@ -50,11 +50,14 @@ export function ClassManager({
   students,
   majors,
   isAdmin,
+  deleteImpact,
 }: {
   cls: Cls
   students: Student[]
   majors: MajorOpt[]
   isAdmin: boolean
+  // What deleting this class would cascade-destroy (null for non-admins).
+  deleteImpact: { offerings: number; assignments: number; submissions: number } | null
 }) {
   const t = useT()
   const confirm = useConfirm()
@@ -239,7 +242,14 @@ export function ClassManager({
       {isAdmin ? (
       <Card className="border-destructive/40">
         <CardContent className="p-4">
-          <form action={deleteClass} onSubmit={confirmSubmit(confirm, { body: t('cls.deleteClassConfirm'), danger: true })}>
+          <form action={deleteClass} onSubmit={confirmSubmit(confirm, {
+            // Surface the true cascade (授课/作业/已提交) so an admin can't accidentally wipe
+            // a semester of graded work; fall back to the simple confirm for an empty class.
+            body: deleteImpact && (deleteImpact.offerings > 0 || deleteImpact.assignments > 0 || deleteImpact.submissions > 0)
+              ? t('cls.deleteClassImpact', { offerings: deleteImpact.offerings, assignments: deleteImpact.assignments, submissions: deleteImpact.submissions })
+              : t('cls.deleteClassConfirm'),
+            danger: true,
+          })}>
             <input type="hidden" name="classId" value={cls.id} />
             <SubmitButton variant="destructive" className="w-full">{t('cls.deleteClass')}</SubmitButton>
           </form>

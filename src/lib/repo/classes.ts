@@ -19,6 +19,21 @@ export function findClassForSchool(prisma: PrismaClient, id: number, schoolId: n
   return prisma.classGroup.findFirst({ where: { id, schoolId: schoolId ?? -1 } })
 }
 
+// What deleting this class would cascade-destroy, for the delete confirmation. Deleting a
+// ClassGroup cascades to its CourseOfferings → Assignments → Submissions (+ R2 media),
+// which is far more than "the class and its students" — so we surface the real counts so
+// an admin tidying a roster can't silently wipe a semester of graded work. Tenant-scoped.
+export async function classDeletionImpact(prisma: PrismaClient, classId: number, schoolId: number | null | undefined) {
+  const inClass = { classId, schoolId: schoolId ?? -1 }
+  const [offerings, assignments, submissions] = await Promise.all([
+    prisma.courseOffering.count({ where: inClass }),
+    prisma.assignment.count({ where: { offering: inClass } }),
+    // non-DRAFT = real submitted/graded work (carries scores + media) that would be lost.
+    prisma.submission.count({ where: { status: { not: 'DRAFT' }, assignment: { offering: inClass } } }),
+  ])
+  return { offerings, assignments, submissions }
+}
+
 // All classes in a school as {id, name}, alphabetical — for offering form selects.
 export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
   return prisma.classGroup.findMany({ where: { schoolId: schoolId ?? -1 }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
