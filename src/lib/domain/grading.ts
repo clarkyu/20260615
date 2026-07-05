@@ -8,6 +8,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
+import { config } from '@/lib/config'
 import { gradeSubmission } from '@/lib/ai/grade'
 import { costUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
@@ -26,9 +27,11 @@ export const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综�
 // importers (practice / shadow / authoring) keep importing it from here.
 export { isUnavailable }
 
-// Above this AI self-confidence — and with no anti-cheat flags — a submission can
-// skip the teacher queue. This is the dial behind "AI-first grading, teacher by
-// exception". Conservative on purpose: tune up as real models prove reliable.
+// Default AI self-confidence — and with no anti-cheat flags — above which a submission
+// can skip the teacher queue. This is the dial behind "AI-first grading, teacher by
+// exception". Conservative on purpose. The runtime value is operator-tunable via
+// `config.calibration().reviewConfidenceThreshold`; this const remains the shipped
+// default (and the pure-function fallback).
 export const REVIEW_CONFIDENCE_THRESHOLD = 0.85
 
 export interface ReviewDecision {
@@ -38,17 +41,18 @@ export interface ReviewDecision {
 
 // Pure policy: given the AI's confidence and the anti-cheat signal, decide whether
 // a teacher must review. Unknown confidence ⇒ review (fail safe, never auto-approve
-// something we can't vouch for).
+// something we can't vouch for). `threshold` defaults to the shipped constant so the
+// function stays pure/testable; the orchestrator injects the configured value.
 export function decideReview(input: {
   confidence: number | null | undefined
   hasViolation: boolean
   freePractice?: boolean
-}): ReviewDecision {
+}, threshold: number = REVIEW_CONFIDENCE_THRESHOLD): ReviewDecision {
   // 自由练习环节：AI 评完即定稿，永不进老师待批队列。
   if (input.freePractice) return { needsReview: false, status: 'GRADED' }
   if (input.hasViolation) return { needsReview: true, status: 'FLAGGED' }
   const confident =
-    typeof input.confidence === 'number' && input.confidence >= REVIEW_CONFIDENCE_THRESHOLD
+    typeof input.confidence === 'number' && input.confidence >= threshold
   return { needsReview: !confident, status: 'GRADED' }
 }
 
@@ -168,7 +172,7 @@ export async function autoGradeSubmission(
       confidence: result.judge.confidence,
       hasViolation: hasAntiCheatViolation(submission.violations),
       freePractice: submission.phase?.freePractice ?? false,
-    })
+    }, config.calibration().reviewConfidenceThreshold)
 
     // Real usage/cost from the providers (perception + judge). Absent when a provider
     // didn't report usage (or per-minute whisper) → persist null rather than a fake 0.

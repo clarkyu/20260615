@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { config, storageConfigured, emailConfigured, aiConfigured, configReport } from '../config'
 
-const KEYS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'QWEN_API_KEY', 'VIDEO_RETENTION_DAYS', 'SESSION_SECRET', 'APP_URL', 'EMAIL_FROM', 'APP_NAME']
+const KEYS = ['R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'QWEN_API_KEY', 'VIDEO_RETENTION_DAYS', 'SESSION_SECRET', 'APP_URL', 'EMAIL_FROM', 'APP_NAME', 'REVIEW_CONFIDENCE_THRESHOLD', 'SHADOW_ACCURACY_WEIGHT', 'SHADOW_AUTOPASS_OVERALL', 'SHADOW_AUTOPASS_MIN']
 const SAVED = new Map(KEYS.map((k) => [k, process.env[k]]))
 
 beforeEach(() => { for (const k of KEYS) delete process.env[k] })
@@ -68,6 +68,50 @@ describe('getters + defaults', () => {
     process.env.GEMINI_BASE_URL = 'https://proxy.example/'
     expect(config.appName()).toBe('My App')
     expect(config.geminiBaseUrl()).toBe('https://proxy.example/')
+  })
+})
+
+describe('calibration dials', () => {
+  it('falls back to the shipped defaults when unset', () => {
+    expect(config.calibration()).toEqual({
+      reviewConfidenceThreshold: 0.85,
+      shadowAccuracyWeight: 0.7,
+      shadowAutoPassOverall: 85,
+      shadowAutoPassMin: 60,
+    })
+  })
+
+  it('honours valid overrides', () => {
+    process.env.REVIEW_CONFIDENCE_THRESHOLD = '0.9'
+    process.env.SHADOW_ACCURACY_WEIGHT = '0.6'
+    process.env.SHADOW_AUTOPASS_OVERALL = '80'
+    process.env.SHADOW_AUTOPASS_MIN = '55'
+    expect(config.calibration()).toEqual({
+      reviewConfidenceThreshold: 0.9,
+      shadowAccuracyWeight: 0.6,
+      shadowAutoPassOverall: 80,
+      shadowAutoPassMin: 55,
+    })
+  })
+
+  it('clamps out-of-range values into a safe range (a bad env can never break grading)', () => {
+    process.env.REVIEW_CONFIDENCE_THRESHOLD = '9' // >1 → clamp to 1
+    process.env.SHADOW_ACCURACY_WEIGHT = '-2' // <0 → clamp to 0
+    process.env.SHADOW_AUTOPASS_OVERALL = '250' // >100 → clamp to 100
+    process.env.SHADOW_AUTOPASS_MIN = '-30' // <0 → clamp to 0
+    expect(config.calibration()).toEqual({
+      reviewConfidenceThreshold: 1,
+      shadowAccuracyWeight: 0,
+      shadowAutoPassOverall: 100,
+      shadowAutoPassMin: 0,
+    })
+  })
+
+  it('ignores non-numeric junk and keeps the default', () => {
+    process.env.REVIEW_CONFIDENCE_THRESHOLD = 'abc'
+    process.env.SHADOW_ACCURACY_WEIGHT = ''
+    expect(config.calibration().reviewConfidenceThreshold).toBe(0.85)
+    expect(config.calibration().shadowAccuracyWeight).toBe(0.7)
   })
 })
 

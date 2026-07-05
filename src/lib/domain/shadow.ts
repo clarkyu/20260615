@@ -8,6 +8,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { TokenUsage } from '@/lib/ai/types'
 import { logError } from '../log'
+import { config } from '@/lib/config'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
 import { costUsd } from '@/lib/ai/cost'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
@@ -19,7 +20,9 @@ import * as assignmentRepo from '@/lib/repo/assignments'
 import { isUnavailable } from './grading'
 import { unavailable } from '@/lib/ai/errors'
 
-// Score one sentence's audio: weighted accuracy(0.7) + completeness(0.3), 0..100.
+// Score one sentence's audio: weighted accuracy + completeness, 0..100. The accuracy
+// weight is operator-tunable (`config.calibration().shadowAccuracyWeight`, default 0.7);
+// completeness takes the remainder so the two always sum to 1.
 export async function gradeShadowTake(audioUrl: string, sentenceText: string, perceptionModelId: string): Promise<{ score: number; spokenText: string; usage?: TokenUsage }> {
   const model = getModel(perceptionModelId)
   if (!model || !model.capabilities.includes('perception')) throw unavailable('感知 provider 未实现')
@@ -32,11 +35,14 @@ export async function gradeShadowTake(audioUrl: string, sentenceText: string, pe
   const clamp01 = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, Math.min(1, n as number)) : 0)
   const accuracy = clamp01(ps?.accuracy)
   const completeness = clamp01(ps?.completeness)
-  return { score: Math.round((accuracy * 0.7 + completeness * 0.3) * 100), spokenText: ps?.spokenText || perception.transcript || '', usage: perception.usage }
+  const wA = config.calibration().shadowAccuracyWeight
+  return { score: Math.round((accuracy * wA + completeness * (1 - wA)) * 100), spokenText: ps?.spokenText || perception.transcript || '', usage: perception.usage }
 }
 
-// Above this overall score (and with no terribly weak sentence) a shadowing
-// submission can skip the teacher queue.
+// Default auto-pass thresholds: above this overall score (and with no terribly weak
+// sentence) a shadowing submission can skip the teacher queue. Operator-tunable via
+// `config.calibration().shadowAutoPass{Overall,Min}`; these consts are the shipped
+// defaults (and the pure-function fallbacks).
 const AUTO_PASS_OVERALL = 85
 const AUTO_PASS_MIN = 60
 
@@ -49,15 +55,19 @@ export interface ShadowSummary {
 }
 
 // Pure aggregation of the per-sentence scores → overall + weakest + the auto-pass
-// decision. Returns null when nothing scored. Extracted so the thresholds are
-// unit-testable in isolation.
-export function summarizeShadow(scoreByOrder: Map<number, number>): ShadowSummary | null {
+// decision. Returns null when nothing scored. Thresholds default to the shipped consts
+// so this stays pure/testable; the orchestrator injects the configured values.
+export function summarizeShadow(
+  scoreByOrder: Map<number, number>,
+  autoPassOverall: number = AUTO_PASS_OVERALL,
+  autoPassMin: number = AUTO_PASS_MIN,
+): ShadowSummary | null {
   const scores = [...scoreByOrder.values()]
   if (scores.length === 0) return null
   const overall = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
   const minScore = Math.min(...scores)
   const weakest = [...scoreByOrder.entries()].sort((a, b) => a[1] - b[1])[0]
-  const needsReview = !(overall >= AUTO_PASS_OVERALL && minScore >= AUTO_PASS_MIN)
+  const needsReview = !(overall >= autoPassOverall && minScore >= autoPassMin)
   return { overall, minScore, weakestOrder: weakest[0], weakestScore: weakest[1], needsReview }
 }
 
@@ -127,12 +137,13 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       try { await onBatch?.() } catch { /* heartbeat is best-effort */ }
     }
 
-    const summary = summarizeShadow(scoreByOrder)
+    const { shadowAutoPassOverall, shadowAutoPassMin } = config.calibration()
+    const summary = summarizeShadow(scoreByOrder, shadowAutoPassOverall, shadowAutoPassMin)
     if (!summary) { await revert(); return }
     const { overall, minScore, weakestOrder, weakestScore } = summary
     // 自由练习环节：即使分数不够也不进待批队列。
     const needsReview = submission.phase?.freePractice ? false : summary.needsReview
-    const feedback = minScore < AUTO_PASS_MIN
+    const feedback = minScore < shadowAutoPassMin
       ? `逐句平均 ${overall} 分；最弱第 ${weakestOrder} 句仅 ${weakestScore} 分，注意发音与完整度。`
       : `逐句平均 ${overall} 分，整体不错，继续保持。`
 

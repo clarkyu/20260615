@@ -70,6 +70,14 @@ describe('decideReview', () => {
     expect(decideReview({ confidence: 0.1, hasViolation: true, freePractice: true })).toEqual({ needsReview: false, status: 'GRADED' })
     expect(decideReview({ confidence: null, hasViolation: false, freePractice: true }).needsReview).toBe(false)
   })
+
+  it('honours an injected threshold (the operator-tunable calibration dial)', () => {
+    // A 0.9 confidence auto-approves at the default 0.85 but not at a stricter 0.95.
+    expect(decideReview({ confidence: 0.9, hasViolation: false }).needsReview).toBe(false)
+    expect(decideReview({ confidence: 0.9, hasViolation: false }, 0.95).needsReview).toBe(true)
+    // A looser 0.6 threshold auto-approves a mid-confidence grade the default would review.
+    expect(decideReview({ confidence: 0.7, hasViolation: false }, 0.6).needsReview).toBe(false)
+  })
 })
 
 describe('hasAntiCheatViolation', () => {
