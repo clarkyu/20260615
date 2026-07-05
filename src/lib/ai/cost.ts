@@ -25,6 +25,7 @@ export const MODEL_RATES: Record<string, Rate> = {
   'qwen-omni-turbo': { inputPerM: 0.3, outputPerM: 0.6, currency: 'CNY' },
   'gpt-4o': { inputPerM: 2.5, outputPerM: 10.0, currency: 'USD' },
   'claude-opus-4-8': { inputPerM: 5.0, outputPerM: 25.0, currency: 'USD' },
+  'deepseek-v4-pro': { inputPerM: 0.28, outputPerM: 1.1, currency: 'USD' },
   'deepseek-v4-flash': { inputPerM: 0.14, outputPerM: 0.28, currency: 'USD' },
   'MiniMax-Text-01': { inputPerM: 1.0, outputPerM: 8.0, currency: 'CNY' },
   'whisper-1': { inputPerM: 0, outputPerM: 0, currency: 'USD', perMinuteUsd: 0.006 },

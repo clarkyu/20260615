@@ -109,8 +109,11 @@ async function chat(cfg: CompatConfig, model: string, messages: { role: string; 
   return { data: parseChatJson(raw), usage: extractCompatUsage(raw) }
 }
 
+// Must include `confidence` — decideReview reads it to auto-approve high-confidence clean
+// submissions ("AI 先批、只看例外"). Omitting it makes normalizeJudge yield undefined, which
+// decideReview treats as fail-safe (always needs review), silently disabling auto-approval.
 const JUDGE_JSON_HINT =
-  '\n\n只返回 JSON，不要解释：{"score": number, "breakdown": [{"dimension": string, "points": number}], "feedback": string}'
+  '\n\n只返回 JSON，不要解释：{"score": number, "breakdown": [{"dimension": string, "points": number}], "feedback": string, "confidence": number}'
 
 const PERCEPTION_JSON_HINT =
   '\n\n只返回 JSON，不要解释：{"transcript": string, "perSentence": [{"order": number, "spokenText": string, "completeness": number, "accuracy": number}], "pronunciationImpression": string, "observations": {"eyesClosed": boolean, "readingSuspected": boolean, "facePresent": boolean, "continuousTake": boolean, "notes": string}}'

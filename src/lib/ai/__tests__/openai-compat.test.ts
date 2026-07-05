@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { parseChatJson } from '@/lib/ai/providers/openai-compat'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { parseChatJson, deepseekJudge } from '@/lib/ai/providers/openai-compat'
+import type { JudgeInput } from '@/lib/ai/types'
 
 describe('parseChatJson', () => {
   it('parses content JSON from an OpenAI-style response', () => {
@@ -18,5 +19,26 @@ describe('parseChatJson', () => {
 
   it('throws when there is no content', () => {
     expect(() => parseChatJson({ choices: [] })).toThrow(/无有效返回/)
+  })
+})
+
+describe('compat judge prompt', () => {
+  afterEach(() => { vi.unstubAllGlobals(); delete process.env.DEEPSEEK_API_KEY })
+
+  it('asks the model for `confidence` (else auto-approval silently dies — audit P0-3)', async () => {
+    process.env.DEEPSEEK_API_KEY = 'sk-test'
+    const reply = JSON.stringify({ score: 8, feedback: '好', confidence: 0.9 })
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: reply } }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const input: JudgeInput = {
+      perception: { transcript: 'hi', perSentence: [], observations: {} },
+      referenceSentences: [{ order: 1, text: 'Hi' }],
+      rubric: 'r', maxScore: 10,
+    }
+    const res = await deepseekJudge.judge(input, 'deepseek-v4-pro')
+    expect(res.confidence).toBe(0.9)
+    const [, opts] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(opts.body as string).toContain('confidence')
   })
 })

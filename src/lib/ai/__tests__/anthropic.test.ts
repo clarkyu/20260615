@@ -31,5 +31,8 @@ describe('claudeJudge', () => {
     const [url, opts] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toContain('/v1/messages')
     expect((opts.headers as Record<string, string>)['x-api-key']).toBe('sk-test')
+    // regression guard: the prompt must ask for `confidence`, else decideReview treats
+    // every submission as needs-review and auto-approval silently dies (audit P0-3).
+    expect(opts.body as string).toContain('confidence')
   })
 })
