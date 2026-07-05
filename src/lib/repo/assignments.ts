@@ -461,6 +461,8 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
       id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true, freePractice: true,
       requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
       requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, fillBlank: true, blanksJson: true, requireFreeText: true,
+      // the owning offering — denormalized onto each new Submission so per-offering reads use the index
+      assignment: { select: { offeringId: true } },
     },
   })
 }

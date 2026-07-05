@@ -36,7 +36,7 @@ export async function markMissing(assignmentId: number): Promise<{ marked?: numb
   const missing = roster.filter((r) => !submittedIds.has(r.id))
   const phaseId = (a.phases.find((p) => p.graded) ?? a.phases[0])?.id
   if (missing.length === 0 || phaseId == null) return { marked: 0 }
-  await submissionRepo.createMissingMarkers(prisma, { assignmentId, phaseId, studentIds: missing.map((m) => m.id), gradedById: user.userId, at: new Date() })
+  await submissionRepo.createMissingMarkers(prisma, { assignmentId, offeringId: a.offeringId, phaseId, studentIds: missing.map((m) => m.id), gradedById: user.userId, at: new Date() })
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   return { marked: missing.length }
 }

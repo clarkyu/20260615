@@ -71,7 +71,7 @@ describe('main flow (login → submit → grade) against real SQL', () => {
     expect(attempt).toMatchObject({ ok: true, attempt: 1, assignmentId: d.assignment.id })
     if (!attempt.ok) throw new Error(attempt.error) // narrow the union for the next line
 
-    const draft = await submissionRepo.upsertDraftWithMedia(p, d.assignment.id, d.phase.id, d.student.id, 1, { videoKey: 'vid-key' })
+    const draft = await submissionRepo.upsertDraftWithMedia(p, d.assignment.id, d.offering.id, d.phase.id, d.student.id, 1, { videoKey: 'vid-key' })
     expect(draft.status).toBe('DRAFT')
     // The phase requires a video; with it present nothing is missing.
     expect(missingRequiredPart(attempt.requirements, { recitedText: null, videoKey: 'vid-key', audioKey: null, imageKey: null })).toBeNull()
