@@ -6,6 +6,12 @@
 > 相关：`src/middleware.ts`、`next.config.mjs`（静态 CSP，带 unsafe-inline 的强制头）、
 > `src/app/api/csp-report/route.ts`（违规上报）。
 
+> **定期复查记录（能否翻转 enforce）**——上游任一修复落地即可按末节「一行翻转」：
+>
+> | 复查日期 | 上游 #1302 | `@opennextjs/cloudflare`（已装 / 最新发布） | 结论 |
+> |---|---|---|---|
+> | 2026-07-05 | 仍 **open**，无关联 PR / 无修复 / 无 workaround | `1.20.1` / `1.20.1`（已是最新，无新版本） | **维持 Report-Only**，无可翻转项；强行 enforce 会拦掉生产绝大多数脚本（1/19 带 nonce） |
+
 ## 目标与结论
 
 审计唯一一条 CSP finding：enforced 头带 `script-src 'unsafe-inline'`（万一有 XSS 更糟）。
