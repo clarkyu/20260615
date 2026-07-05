@@ -35,6 +35,8 @@ export interface PhaseDraft {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string | null
+  fillBlank?: boolean
+  blanksJson?: string | null
   requireFreeText?: boolean
   // 每环节批阅配置（可选，空=跟随作业/平台默认）。
   rubric?: string | null
@@ -47,7 +49,7 @@ export interface PhaseDraft {
 }
 
 function hasSubmitKind(p: PhaseDraft): boolean {
-  return p.requireText || p.requireAudio || p.requireVideo || p.requireHandwriting || !!p.requireChoice || !!p.requireFreeText
+  return p.requireText || p.requireAudio || p.requireVideo || p.requireHandwriting || !!p.requireChoice || !!p.requireFreeText || !!p.fillBlank
 }
 
 // Resolve every phase's content into ready-to-store PhaseInput[]: bank-set phases get
@@ -100,6 +102,8 @@ async function resolvePhases(
       correctChoice: d.correctChoice ?? null,
       multiChoice: d.multiChoice ?? false,
       correctChoices: d.correctChoices ?? null,
+      fillBlank: d.fillBlank ?? false,
+      blanksJson: d.blanksJson ?? null,
       requireFreeText: d.requireFreeText ?? false,
       rubric: d.rubric ?? null,
       perceptionModel: d.perceptionModel ?? null,

@@ -38,6 +38,11 @@ export interface PhaseInitial {
   // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
   multiChoice: boolean
   correctIndices: number[]
+  // 填空题：fillText 是带 ____ 挖空标记的题干；fillAccept 是每个空的可接受答案
+  // （编辑时用「|」分隔多个），空数 = fillText 里的 ____ 个数。落库成 blanksJson。
+  fillBlank: boolean
+  fillText: string
+  fillAccept: string[]
   requireFreeText: boolean
   // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
   rubric: string
@@ -105,6 +110,11 @@ interface PhaseState {
   // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
   multiChoice: boolean
   correctIndices: number[]
+  // 填空题：fillText 是带 ____ 挖空标记的题干；fillAccept 是每个空的可接受答案
+  // （编辑时用「|」分隔多个），空数 = fillText 里的 ____ 个数。落库成 blanksJson。
+  fillBlank: boolean
+  fillText: string
+  fillAccept: string[]
   requireFreeText: boolean
   // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
   rubric: string
@@ -137,6 +147,9 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     correctIndex: -1,
     multiChoice: false,
     correctIndices: [],
+    fillBlank: false,
+    fillText: '',
+    fillAccept: [],
     requireFreeText: false,
     rubric: '',
     perceptionModel: '',
@@ -249,6 +262,17 @@ export function AssignmentForm({
       correctChoices: p.requireChoice && p.multiChoice && p.correctIndices.length > 0
         ? JSON.stringify(p.correctIndices.map((i) => p.choices[i]?.trim()).filter(Boolean))
         : null,
+      fillBlank: p.fillBlank,
+      // blanksJson = { text, accept }；accept 长度按题干 ____ 个数取（= 总空数），
+      // 每空的可接受答案由「|」分隔。空数为准，多余/缺失的 fillAccept 自动对齐。
+      blanksJson: p.fillBlank
+        ? JSON.stringify({
+            text: p.fillText,
+            accept: Array.from({ length: (p.fillText.match(/_{3,}/g) ?? []).length }, (_, i) =>
+              (p.fillAccept[i] ?? '').split('|').map((x) => x.trim()).filter(Boolean),
+            ),
+          })
+        : null,
       requireFreeText: p.requireFreeText,
       rubric: p.rubric.trim() || null,
       perceptionModel: p.perceptionModel || null,
@@ -287,6 +311,7 @@ export function AssignmentForm({
       p.requireHandwriting && t('asg.kindHandwriting'),
       p.requireChoice && t('asg.kindChoice'),
       p.requireFreeText && t('asg.kindFreeText'),
+      p.fillBlank && t('asg.kindFillBlank'),
     ].filter(Boolean).join(' / ')
   const targetLabels = (targets ?? []).filter((tg) => selected.has(tg.offeringId)).map((tg) => tg.label)
 
@@ -517,6 +542,7 @@ function PhaseCard({
     phase.requireHandwriting && t('asg.kindHandwriting'),
     phase.requireChoice && t('asg.kindChoice'),
     phase.requireFreeText && t('asg.kindFreeText'),
+    phase.fillBlank && t('asg.kindFillBlank'),
   ].filter(Boolean).join(' / ')
   const summary = [phase.title.trim() || phase.category.trim(), kinds].filter(Boolean).join(' · ')
   // Live preview of what the student will hand in (video carries its eyes-closed note).
@@ -527,6 +553,7 @@ function PhaseCard({
     phase.requireHandwriting && t('asg.kindHandwriting'),
     phase.requireChoice && t('asg.kindChoice'),
     phase.requireFreeText && t('asg.kindFreeText'),
+    phase.fillBlank && t('asg.kindFillBlank'),
   ].filter(Boolean)
   return (
     <div className="rounded-xl border border-input p-3">
@@ -621,6 +648,10 @@ function PhaseCard({
             <input type="checkbox" checked={phase.requireFreeText} onChange={(e) => onPatch({ requireFreeText: e.target.checked })} className="h-4 w-4 accent-primary" />
             <PenLine className="h-4 w-4 text-muted-foreground" />{t('asg.kindFreeText')}
           </label>
+          <label className="flex items-center gap-2.5">
+            <input type="checkbox" checked={phase.fillBlank} onChange={(e) => onPatch({ fillBlank: e.target.checked })} className="h-4 w-4 accent-primary" />
+            <Check className="h-4 w-4 text-muted-foreground" />{t('asg.kindFillBlank')}
+          </label>
           {submitParts.length > 0 ? (
             <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">{t('asg.willSubmit')}{submitParts.join(' + ')}</p>
           ) : (
@@ -692,6 +723,29 @@ function PhaseCard({
                 : (phase.correctIndex >= 0 ? t('asg.choiceGradedHint') : t('asg.choicePollHint'))}
             </p>
           </div>
+        </div>
+      ) : null}
+
+      {/* 填空题编辑器：题干用 ____（≥3 下划线）挖空；下面逐空填可接受答案（| 分隔多个）。 */}
+      {phase.fillBlank ? (
+        <div className="space-y-2">
+          <Label>{t('asg.fillBlankTitle')}</Label>
+          <Textarea value={phase.fillText} onChange={(e) => onPatch({ fillText: e.target.value })} rows={3} placeholder={t('asg.fillTextPh')} />
+          <p className="text-xs text-muted-foreground">{t('asg.fillBlankHint')}</p>
+          {(() => {
+            const n = (phase.fillText.match(/_{3,}/g) ?? []).length
+            if (n === 0) return null
+            return (
+              <div className="space-y-2 rounded-xl border border-input p-3">
+                {Array.from({ length: n }, (_, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground">{t('asg.blankNth', { n: i + 1 })}</span>
+                    <Input value={phase.fillAccept[i] ?? ''} onChange={(e) => onPatch({ fillAccept: Array.from({ length: n }, (_, j) => (j === i ? e.target.value : (phase.fillAccept[j] ?? ''))) })} placeholder={t('asg.fillAcceptPh')} aria-label={t('asg.blankNth', { n: i + 1 })} />
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       ) : null}
 

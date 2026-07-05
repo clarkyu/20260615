@@ -3,7 +3,7 @@ import { resolveAttempt, missingRequiredPart, isPollOnly } from '../submit'
 
 // ── missingRequiredPart (pure) ───────────────────────────────────────────────
 
-const reqs = { requireText: false, requireVideo: false, requireAudio: false, requireHandwriting: false, requireChoice: false, requireFreeText: false }
+const reqs = { requireText: false, requireVideo: false, requireAudio: false, requireHandwriting: false, requireChoice: false, requireFreeText: false, fillBlank: false }
 const parts = { recitedText: null as string | null, videoKey: null as string | null, audioKey: null as string | null, imageKey: null as string | null }
 
 describe('missingRequiredPart', () => {

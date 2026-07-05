@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { parseChoices } from '@/lib/choices'
+import { parseFillBlank } from '@/lib/fill-blank'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
 import { ShadowSubmit } from './shadow-submit'
@@ -113,6 +114,8 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       correctChoice={phase.correctChoice}
       multiChoice={phase.multiChoice}
       correctChoices={parseChoices(phase.correctChoices)}
+      fillBlank={phase.fillBlank}
+      fillText={parseFillBlank(phase.blanksJson).text}
       requireFreeText={phase.requireFreeText}
       attemptsLeft={attemptsLeft}
       windowState={windowState}

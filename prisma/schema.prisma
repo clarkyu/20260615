@@ -312,6 +312,11 @@ model Phase {
   // 客观判分，全对（所选集合 == 正确集合）得满分、否则 0；为空 → 多选投票（只统计分布不判分）。
   multiChoice   Boolean @default(false)
   correctChoices String?
+  // 填空题（fillBlank=true）：blanksJson = {text, accept}——text 是带 ____（≥3 下划线）挖空
+  // 标记的题干，accept 是每个空的可接受答案数组（大小写/空白不敏感、任一即对）。提交即客观
+  // 判分，按空给分（答对空数 / 总空数 × 满分）；不走 AI、不进老师待批队列。
+  fillBlank    Boolean @default(false)
+  blanksJson   String?
   // 自由文本：开放式提交，老师评阅时按自己的标准人工打分（不走背诵 AI 评分）。
   requireFreeText Boolean @default(false)
   graded       Boolean @default(true)  // false → 仅练习、不计分

@@ -19,6 +19,8 @@ export const templatePhaseSchema = z.object({
   correctChoice: z.string().nullable().default(null),
   multiChoice: z.boolean().default(false),
   correctChoices: z.string().nullable().default(null),
+  fillBlank: z.boolean().default(false),
+  blanksJson: z.string().nullable().default(null),
   requireFreeText: z.boolean().default(false),
   rubric: z.string().nullable().default(null),
   perceptionModel: z.string().nullable().default(null),
@@ -66,6 +68,8 @@ export interface TemplateSourcePhase {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string | null
+  fillBlank?: boolean
+  blanksJson?: string | null
   requireFreeText?: boolean
   rubric?: string | null
   perceptionModel?: string | null
@@ -105,6 +109,8 @@ export function buildTemplatePayload(
       correctChoice: p.correctChoice ?? null,
       multiChoice: p.multiChoice ?? false,
       correctChoices: p.correctChoices ?? null,
+      fillBlank: p.fillBlank ?? false,
+      blanksJson: p.blanksJson ?? null,
       requireFreeText: p.requireFreeText ?? false,
       rubric: p.rubric ?? null,
       perceptionModel: p.perceptionModel ?? null,

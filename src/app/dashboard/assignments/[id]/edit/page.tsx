@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { AssignmentForm, type AssignmentInitial } from '@/components/assignment-form'
 import { parseChoices } from '@/lib/choices'
+import { parseFillBlank } from '@/lib/fill-blank'
 
 export default async function EditAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -48,6 +49,9 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       correctIndex: p.correctChoice ? parseChoices(p.choicesJson).indexOf(p.correctChoice) : -1,
       multiChoice: p.multiChoice,
       correctIndices: parseChoices(p.correctChoices).map((c) => parseChoices(p.choicesJson).indexOf(c)).filter((i) => i >= 0),
+      fillBlank: p.fillBlank,
+      fillText: parseFillBlank(p.blanksJson).text,
+      fillAccept: parseFillBlank(p.blanksJson).accept.map((a) => a.join(' | ')),
       requireFreeText: p.requireFreeText,
       rubric: p.rubric ?? '',
       perceptionModel: p.defaultPerceptionModel ?? '',

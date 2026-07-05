@@ -79,6 +79,13 @@ describe('phaseItemType — named real-world phase shapes', () => {
   it('no flags at all → writing (never objective/speech)', () => {
     expect(phaseItemType({})).toBe('writing')
   })
+
+  it('填空题 (fillBlank) → objective (客观自动判分)', () => {
+    expect(phaseItemType({ fillBlank: true })).toBe('objective')
+    // fillBlank wins even mixed with text/media (invalid combos resolve to objective).
+    expect(phaseItemType({ fillBlank: true, requireText: true })).toBe('objective')
+    expect(phaseItemType({ fillBlank: true, requireVideo: true })).toBe('objective')
+  })
 })
 
 describe('phaseItemType — exhaustive over all 64 flag combinations', () => {
@@ -107,6 +114,7 @@ describe('isPollOnly stays equivalent to its old inline definition', () => {
         requireHandwriting: !!f.requireHandwriting,
         requireChoice: !!f.requireChoice,
         requireFreeText: !!f.requireFreeText,
+        fillBlank: false,
       }
       expect(isPollOnly(r), `flags=${JSON.stringify(f)}`).toBe(oldIsPollOnly(f))
       expect(isPollOnly(r)).toBe(phaseItemType(f) === 'objective')

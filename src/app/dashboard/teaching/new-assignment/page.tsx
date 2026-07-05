@@ -9,6 +9,7 @@ import * as templateRepo from '@/lib/repo/templates'
 import * as bankRepo from '@/lib/repo/bank'
 import { parseTemplatePayload } from '@/lib/assignment-template'
 import { parseChoices } from '@/lib/choices'
+import { parseFillBlank } from '@/lib/fill-blank'
 import { deleteAssignmentTemplate } from '@/actions/assignments'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -82,6 +83,9 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
           correctIndex: p.correctChoice ? parseChoices(p.choicesJson).indexOf(p.correctChoice) : -1,
           multiChoice: p.multiChoice,
           correctIndices: parseChoices(p.correctChoices).map((c) => parseChoices(p.choicesJson).indexOf(c)).filter((i) => i >= 0),
+          fillBlank: p.fillBlank,
+          fillText: parseFillBlank(p.blanksJson).text,
+          fillAccept: parseFillBlank(p.blanksJson).accept.map((a) => a.join(' | ')),
           requireFreeText: p.requireFreeText,
           rubric: p.rubric ?? '',
           perceptionModel: p.perceptionModel ?? '',

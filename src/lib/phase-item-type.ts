@@ -37,6 +37,7 @@ export interface ItemTypeFlags {
   requireHandwriting?: boolean | null
   requireChoice?: boolean | null
   requireFreeText?: boolean | null
+  fillBlank?: boolean | null
 }
 
 // Precedence mirrors the pre-existing routing exactly:
@@ -45,6 +46,9 @@ export interface ItemTypeFlags {
 //   3. everything else (text / handwriting / free-text) → writing (manual, no AI today)
 // Mixed / invalid flag combos resolve by this precedence, same as the old code did.
 export function phaseItemType(f: ItemTypeFlags): PhaseItemType {
+  // 填空题：客观自动判分（按空给分），归入 objective。（0042 回填时此类型尚不存在，
+  // 无历史行需回填；新行由 phaseData 写入 objective。）
+  if (f.fillBlank) return 'objective'
   const choiceOnly =
     !!f.requireChoice &&
     !f.requireFreeText &&
