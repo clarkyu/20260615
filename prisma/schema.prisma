@@ -393,6 +393,14 @@ model Sentence {
 model Submission {
   id           Int              @id @default(autoincrement())
   assignmentId Int
+  // Denormalized owning offering (= assignment.offeringId), so per-offering reads
+  // (insights / gradebook / score-pairs) are a single indexed scan instead of a
+  // Submission→Assignment→CourseOffering join. Nullable only because SQLite ADD COLUMN
+  // can't be NOT NULL without a default; the migration backfills every existing row and
+  // the app writes it on every create. No FK needed — integrity is transitive (a
+  // submission cascades from its assignment, which cascades from its offering), so it
+  // can never dangle.
+  offeringId   Int?
   phaseId      Int?
   studentId    Int
   attempt      Int              @default(1)
@@ -441,6 +449,7 @@ model Submission {
   @@index([assignmentId])
   @@index([phaseId])
   @@index([studentId])
+  @@index([offeringId, status])
 }
 
 // 批改任务：把"提交后自动批改"从尽力而为（waitUntil 跑一次，丢了就丢了）升级为

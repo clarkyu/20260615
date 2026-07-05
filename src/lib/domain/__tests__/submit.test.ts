@@ -61,7 +61,7 @@ function fakePrisma(phase: any, usedCount = 0): any {
   }
 }
 const REQS = { requireText: false, requireVideo: true, requireAudio: false, requireHandwriting: false, requireChoice: false, requireFreeText: false }
-const A = (over: Record<string, unknown> = {}) => ({ id: 5, assignmentId: 9, maxAttempts: 3, openAt: null, dueAt: null, ...REQS, ...over })
+const A = (over: Record<string, unknown> = {}) => ({ id: 5, assignmentId: 9, assignment: { offeringId: 12 }, maxAttempts: 3, openAt: null, dueAt: null, ...REQS, ...over })
 
 describe('resolveAttempt', () => {
   it('rejects a student with no class', async () => {
@@ -88,6 +88,7 @@ describe('resolveAttempt', () => {
       ok: true,
       attempt: 2,
       assignmentId: 9,
+      offeringId: 12,
       phaseId: 5,
       requirements: REQS,
     })

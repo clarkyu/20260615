@@ -33,7 +33,7 @@ export async function getUploadUrl(phaseId: number, kind: MediaKind, contentType
   if (!resolved.ok) return { error: t(resolved.error) }
 
   const key = submissionMediaKey(resolved.assignmentId, phaseId, user.userId, resolved.attempt, kind, ext || 'webm')
-  const submission = await submissionRepo.upsertDraftWithMedia(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, keyFieldFor(kind, key))
+  const submission = await submissionRepo.upsertDraftWithMedia(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, keyFieldFor(kind, key))
 
   try {
     const url = await presignUpload(key, contentType)
@@ -178,7 +178,7 @@ export async function getShadowTakeUploadUrl(phaseId: number, order: number, con
   if (!resolved.ok) return { error: t(resolved.error) }
 
   const key = shadowTakeKey(resolved.assignmentId, phaseId, user.userId, resolved.attempt, order, ext || 'webm')
-  const submission = await submissionRepo.upsertDraft(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt)
+  const submission = await submissionRepo.upsertDraft(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt)
   await submissionRepo.upsertShadowTake(prisma, submission.id, order, key)
   try {
     return { url: await presignUpload(key, contentType), key, order }
@@ -222,7 +222,7 @@ export async function submitChoice(phaseId: number, choice: string) {
   const options = parseChoices(phase?.choicesJson)
   if (!options.includes(picked)) return { error: t('err.badChoice') }
 
-  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, picked)
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, picked)
   revalidatePath('/student')
   return { success: true }
 }
@@ -244,7 +244,7 @@ export async function submitMultiChoice(phaseId: number, choices: string[]) {
   // Store in the phase's option order so judging + aggregation are order-stable.
   const ordered = options.filter((o) => picked.has(o))
 
-  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, JSON.stringify(ordered))
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, JSON.stringify(ordered))
   revalidatePath('/student')
   return { success: true }
 }
@@ -259,7 +259,7 @@ export async function submitFillBlank(phaseId: number, answers: string[]) {
   const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
-  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, JSON.stringify(cleaned))
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, JSON.stringify(cleaned))
   revalidatePath('/student')
   return { success: true }
 }
@@ -275,7 +275,7 @@ export async function submitFreeText(phaseId: number, text: string) {
   const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
-  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, trimmed)
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, trimmed)
   revalidatePath('/student')
   return { success: true }
 }
@@ -291,7 +291,7 @@ export async function submitRecitedText(phaseId: number, text: string) {
   const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
   if (!resolved.ok) return { error: t(resolved.error) }
 
-  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, trimmed)
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, trimmed)
   revalidatePath('/student')
   return { success: true }
 }

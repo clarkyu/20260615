@@ -30,7 +30,7 @@ export interface Requirements {
 
 export type AttemptResult =
   | { ok: false; error: string }
-  | { ok: true; attempt: number; assignmentId: number; phaseId: number; requirements: Requirements }
+  | { ok: true; attempt: number; assignmentId: number; offeringId: number; phaseId: number; requirements: Requirements }
 
 // Confirms the student may submit a PHASE (class targeted & its window open & its
 // attempts left); returns the active attempt number, the owning assignment id, and
@@ -57,6 +57,7 @@ export async function resolveAttempt(
     ok: true,
     attempt: used + 1,
     assignmentId: phase.assignmentId,
+    offeringId: phase.assignment.offeringId,
     phaseId,
     requirements: {
       requireText: phase.requireText,

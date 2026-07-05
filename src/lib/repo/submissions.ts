@@ -112,7 +112,9 @@ export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: nu
 // started-but-unfinished retry doesn't shadow a graded attempt.
 export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number) {
   return prisma.submission.findMany({
-    where: { assignment: { offeringId }, status: { not: 'DRAFT' } },
+    // Uses the denormalized offeringId + @@index([offeringId, status]) — a single indexed
+    // scan instead of a Submission→Assignment→CourseOffering join.
+    where: { offeringId, status: { not: 'DRAFT' } },
     select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } } },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
@@ -123,7 +125,7 @@ export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: num
 // calibration insight; scoped by offering like the other analytics lists.
 export function listScorePairsForOffering(prisma: PrismaClient, offeringId: number) {
   return prisma.submission.findMany({
-    where: { assignment: { offeringId }, aiScore: { not: null }, teacherScore: { not: null } },
+    where: { offeringId, aiScore: { not: null }, teacherScore: { not: null } },
     select: { aiScore: true, teacherScore: true },
   })
 }
@@ -156,7 +158,7 @@ export function listScorePairsForSchool(prisma: PrismaClient, schoolId: number |
 // whole-offering scan cheap in memory even for a big class. Same ordering/dedup contract.
 export function listForOfferingGradebook(prisma: PrismaClient, offeringId: number) {
   return prisma.submission.findMany({
-    where: { assignment: { offeringId }, status: { not: 'DRAFT' } },
+    where: { offeringId, status: { not: 'DRAFT' } },
     select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, phase: { select: { graded: true } } },
     orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
@@ -165,10 +167,11 @@ export function listForOfferingGradebook(prisma: PrismaClient, offeringId: numbe
 // Mark a set of non-submitting students as 缺交 (MISSING) for an assignment — one row
 // per student on the given phase, no score. Caller passes only students who currently
 // have no submission, so the (assignment, phase, student, attempt) unique key is safe.
-export function createMissingMarkers(prisma: PrismaClient, params: { assignmentId: number; phaseId: number; studentIds: number[]; gradedById: number; at: Date }) {
+export function createMissingMarkers(prisma: PrismaClient, params: { assignmentId: number; offeringId: number; phaseId: number; studentIds: number[]; gradedById: number; at: Date }) {
   return prisma.submission.createMany({
     data: params.studentIds.map((studentId) => ({
       assignmentId: params.assignmentId,
+      offeringId: params.offeringId,
       phaseId: params.phaseId,
       studentId,
       attempt: 1,
@@ -202,7 +205,7 @@ export function listForStudentLatestFirst(prisma: PrismaClient, studentId: numbe
 // the teacher's per-student drill-down. Scoped by assignment.offeringId.
 export function listForStudentInOfferingLatestFirst(prisma: PrismaClient, offeringId: number, studentId: number) {
   return prisma.submission.findMany({
-    where: { studentId, status: { not: 'DRAFT' }, assignment: { offeringId } },
+    where: { studentId, status: { not: 'DRAFT' }, offeringId },
     select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true } }, assignment: { select: { title: true } } },
     orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
@@ -360,20 +363,22 @@ export function countActiveAttempts(prisma: PrismaClient, phaseId: number, stude
 }
 
 // Upsert the draft for an attempt, stamping a media key (re-recording overwrites it).
-export function upsertDraftWithMedia(prisma: PrismaClient, assignmentId: number, phaseId: number, studentId: number, attempt: number, keyField: MediaKeyField) {
+// offeringId (= the assignment's offering) is denormalized onto the row at create so
+// per-offering reads can use the index; it never changes, so update leaves it be.
+export function upsertDraftWithMedia(prisma: PrismaClient, assignmentId: number, offeringId: number, phaseId: number, studentId: number, attempt: number, keyField: MediaKeyField) {
   return prisma.submission.upsert({
     where: byAttempt(assignmentId, phaseId, studentId, attempt),
     update: { ...keyField, status: 'DRAFT' },
-    create: { assignmentId, phaseId, studentId, attempt, ...keyField, status: 'DRAFT' },
+    create: { assignmentId, offeringId, phaseId, studentId, attempt, ...keyField, status: 'DRAFT' },
   })
 }
 
 // Ensure a draft row exists for the attempt (no media yet — used by shadowing).
-export function upsertDraft(prisma: PrismaClient, assignmentId: number, phaseId: number, studentId: number, attempt: number) {
+export function upsertDraft(prisma: PrismaClient, assignmentId: number, offeringId: number, phaseId: number, studentId: number, attempt: number) {
   return prisma.submission.upsert({
     where: byAttempt(assignmentId, phaseId, studentId, attempt),
     update: { status: 'DRAFT' },
-    create: { assignmentId, phaseId, studentId, attempt, status: 'DRAFT' },
+    create: { assignmentId, offeringId, phaseId, studentId, attempt, status: 'DRAFT' },
   })
 }
 
@@ -421,10 +426,10 @@ export function upsertShadowTake(prisma: PrismaClient, submissionId: number, ord
   })
 }
 
-export function upsertRecitedText(prisma: PrismaClient, assignmentId: number, phaseId: number, studentId: number, attempt: number, text: string) {
+export function upsertRecitedText(prisma: PrismaClient, assignmentId: number, offeringId: number, phaseId: number, studentId: number, attempt: number, text: string) {
   return prisma.submission.upsert({
     where: byAttempt(assignmentId, phaseId, studentId, attempt),
     update: { recitedText: text, textSubmittedAt: new Date() },
-    create: { assignmentId, phaseId, studentId, attempt, recitedText: text, textSubmittedAt: new Date(), status: 'DRAFT' },
+    create: { assignmentId, offeringId, phaseId, studentId, attempt, recitedText: text, textSubmittedAt: new Date(), status: 'DRAFT' },
   })
 }
