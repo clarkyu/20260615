@@ -157,9 +157,12 @@ export async function verifyEmail(prevState: unknown, formData: FormData): Promi
   const now = new Date()
   const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } })
   if (!record || record.usedAt || record.expiresAt <= now) return { error: t('err.linkExpired') }
+  // Consume the token FIRST, fenced on usedAt:null (mirrors the invite path), so a replayed
+  // link — double-click, retry, or an attacker holding a leaked token — can't verify twice.
+  const consumed = await prisma.emailVerificationToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: now } })
+  if (consumed.count === 0) return { error: t('err.linkExpired') }
   await prisma.$transaction([
     prisma.user.update({ where: { id: record.userId }, data: { emailVerified: now } }),
-    prisma.emailVerificationToken.update({ where: { id: record.id }, data: { usedAt: now } }),
     prisma.emailVerificationToken.deleteMany({ where: { userId: record.userId, id: { not: record.id }, usedAt: null } }),
   ])
 
@@ -262,10 +265,13 @@ export async function resetPassword(prevState: unknown, formData: FormData): Pro
   const now = new Date()
   const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } })
   if (!record || record.usedAt || record.expiresAt <= now) return { error: t('err.resetExpired') }
+  // Consume the token FIRST, fenced on usedAt:null (mirrors the invite path), so a replayed
+  // link — double-submit, retry, or a leaked token — can't reset the password twice.
+  const consumed = await prisma.passwordResetToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: now } })
+  if (consumed.count === 0) return { error: t('err.resetExpired') }
   const newHash = await hashPassword(password)
   await prisma.$transaction([
     prisma.user.update({ where: { id: record.userId }, data: { passwordHash: newHash, emailVerified: now } }),
-    prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: now } }),
     prisma.passwordResetToken.deleteMany({ where: { userId: record.userId, id: { not: record.id }, usedAt: null } }),
   ])
   return { success: true }

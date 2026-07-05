@@ -36,11 +36,12 @@ vi.mock('next/navigation', () => ({
 }))
 
 import type { PrismaClient } from '@prisma/client'
-import { login } from '@/actions/auth'
+import { login, verifyEmail, resetPassword } from '@/actions/auth'
 import { finishSubmission, submitChoice, submitFreeText, submitMultiChoice, submitFillBlank } from '@/actions/submissions'
 import { batchOverride } from '@/actions/grading'
 import { getCurrentUser } from '@/lib/auth'
-import { hashPassword } from '@/lib/password'
+import { hashPassword, verifyPassword } from '@/lib/password'
+import { generateToken, hashToken } from '@/lib/tokens'
 
 const PW = 'pw-secret'
 
@@ -243,5 +244,42 @@ describe('server actions E2E (real iron-session + real SQL)', () => {
     // mocked out (runAfterResponse no-op), so it stays PENDING for us to assert.
     expect(await db.prisma.gradingJob.count({ where: { submissionId: s!.id, kind: 'writing', status: 'PENDING' } })).toBe(1)
     expect(await db.prisma.gradingJob.count({ where: { submissionId: s!.id, kind: 'submission' } })).toBe(0)
+  })
+
+  // Single-use token atomicity (audit tail #3): consuming the token is fenced on usedAt:null
+  // (a guarded updateMany, like the invite path) BEFORE the effect is applied — so a replayed
+  // link (double-click / retry / leaked token) can never take effect a second time.
+  it('verifyEmail is single-use: first hit verifies + signs in; replaying the same token is rejected', async () => {
+    const d = await seed(db.prisma)
+    const teacher = await db.prisma.user.update({ where: { id: d.teacher.id }, data: { email: 't@e.com', emailVerified: null } })
+    const token = generateToken()
+    await db.prisma.emailVerificationToken.create({ data: { userId: teacher.id, tokenHash: await hashToken(token), expiresAt: new Date(Date.now() + 60_000) } })
+
+    // First use: verifies the address, consumes the token, establishes a session.
+    expect(await viaRedirect(() => verifyEmail(null, form({ token })))).toBe('/dashboard')
+    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: teacher.id } })).emailVerified).not.toBeNull()
+    expect(await db.prisma.emailVerificationToken.count({ where: { usedAt: null } })).toBe(0) // token spent
+
+    // Replay of the exact same token → rejected, no re-verification.
+    expect(await verifyEmail(null, form({ token }))).toHaveProperty('error')
+  })
+
+  it('resetPassword is single-use: first hit sets the new password; replaying the same token cannot change it again', async () => {
+    const d = await seed(db.prisma)
+    const token = generateToken()
+    await db.prisma.passwordResetToken.create({ data: { userId: d.teacher.id, tokenHash: await hashToken(token), expiresAt: new Date(Date.now() + 60_000) } })
+
+    const NEW = 'brand-new-pw'
+    expect(await resetPassword(null, form({ token, password: NEW, confirmPassword: NEW }))).toEqual({ success: true })
+    const afterFirst = await db.prisma.user.findUniqueOrThrow({ where: { id: d.teacher.id } })
+    expect(await verifyPassword(NEW, afterFirst.passwordHash)).toBe(true) // new password works
+    expect(await db.prisma.passwordResetToken.count({ where: { usedAt: null } })).toBe(0) // token spent
+
+    // Replay with an attacker-chosen password → rejected, password unchanged.
+    const OTHER = 'attacker-chosen-pw'
+    expect(await resetPassword(null, form({ token, password: OTHER, confirmPassword: OTHER }))).toHaveProperty('error')
+    const afterReplay = await db.prisma.user.findUniqueOrThrow({ where: { id: d.teacher.id } })
+    expect(await verifyPassword(OTHER, afterReplay.passwordHash)).toBe(false)
+    expect(await verifyPassword(NEW, afterReplay.passwordHash)).toBe(true)
   })
 })
