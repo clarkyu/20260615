@@ -6,7 +6,7 @@ import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } f
 import { gradePractice } from '@/lib/domain/practice'
 import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
-import { costUsd } from '@/lib/ai/cost'
+import { costUsd, costMicroUsd } from '@/lib/ai/cost'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { rateLimitPractice } from '@/lib/rate-limit'
@@ -109,6 +109,11 @@ export async function gradePracticeAttempt(
     ? costUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
       costUsd(r.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     : 0
+  // Bill-grade: two integer µUSD costs sum exactly (no Float accumulation drift).
+  const costMicro = r
+    ? costMicroUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+      costMicroUsd(r.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    : 0
 
   // Persist every practice round (even unavailable/error) for later analytics.
   await practiceRepo.createAttempt(prisma, {
@@ -125,6 +130,7 @@ export async function gradePracticeAttempt(
     inputTokens: hasUsage ? (pu?.inputTokens ?? 0) + (ju?.inputTokens ?? 0) : null,
     outputTokens: hasUsage ? (pu?.outputTokens ?? 0) + (ju?.outputTokens ?? 0) : null,
     costUsd: hasUsage ? cost : null,
+    costMicroUsd: hasUsage ? costMicro : null,
   })
 
   if (outcome.status === 'unavailable') return { status: 'unavailable' }

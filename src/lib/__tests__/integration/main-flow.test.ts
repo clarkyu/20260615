@@ -140,10 +140,10 @@ describe('main flow (login → submit → grade) against real SQL', () => {
       assignmentId: d.assignment.id, phaseId: d.phase.id, studentId: d.student.id,
       kind: 'audio', mediaKey: null, recitedText: null,
       aiScore: 88, confidence: 0.9, feedback: 'ok', feedbackJson: '{}',
-      inputTokens: 15800, outputTokens: 400, costUsd: 0.031,
+      inputTokens: 15800, outputTokens: 400, costUsd: 0.031, costMicroUsd: 31_000,
     })
     const back = await p.practiceAttempt.findUnique({ where: { id: row.id } })
-    expect(back).toMatchObject({ inputTokens: 15800, outputTokens: 400 })
+    expect(back).toMatchObject({ inputTokens: 15800, outputTokens: 400, costMicroUsd: 31_000 })
     expect(back?.costUsd).toBeCloseTo(0.031, 5)
   })
 })

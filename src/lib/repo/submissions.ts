@@ -315,6 +315,7 @@ export interface GradeResult {
   inputTokens: number | null
   outputTokens: number | null
   costUsd: number | null
+  costMicroUsd: number | null // integer µUSD — the bill-grade cost column (usage aggregates on this)
 }
 
 // Fenced to PROCESSING (see markFailed): a late AI write never overwrites a teacher
@@ -333,6 +334,7 @@ export interface ShadowResult {
   inputTokens: number | null
   outputTokens: number | null
   costUsd: number | null
+  costMicroUsd: number | null // integer µUSD — the bill-grade cost column (usage aggregates on this)
 }
 
 export function applyShadowResult(prisma: PrismaClient, id: number, data: ShadowResult) {

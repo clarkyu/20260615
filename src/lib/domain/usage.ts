@@ -26,52 +26,59 @@ export interface UsageSummary {
 }
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4
+// µUSD → USD. Accumulation happens in integer µUSD (exact); we divide once, at the edge,
+// only to shape the USD display contract.
+const toUsd = (micro: number) => micro / 1_000_000
 // UTC month key. Cost rows are coarse (monthly buckets), so a viewer's timezone shifting
 // a handful of boundary rows doesn't matter — and it keeps this function pure.
 const monthKey = (d: Date) => d.toISOString().slice(0, 7)
 
+// Roll up per-row costs. Money is summed in INTEGER micro-USD so hundreds of sub-cent
+// rows add up exactly — Float accumulation would drift below the cent by the time the
+// dashboard totals a school's month. USD is derived once per bucket, at the end, for the
+// (unchanged) display contract.
 export function summarizeUsage(rows: UsageRow[]): UsageSummary {
-  let totalUsd = 0
+  let totalMicro = 0
   let totalTokens = 0
-  let submissionUsd = 0
-  let practiceUsd = 0
-  const teachers = new Map<number, TeacherUsage>()
-  const months = new Map<string, MonthUsage>()
+  let submissionMicro = 0
+  let practiceMicro = 0
+  const teachers = new Map<number, { teacherId: number; name: string | null; micro: number; count: number }>()
+  const months = new Map<string, { month: string; submissionMicro: number; practiceMicro: number; micro: number }>()
 
   for (const r of rows) {
-    const usd = Math.max(0, r.costUsd)
-    totalUsd += usd
+    const micro = Math.max(0, r.costMicroUsd)
+    totalMicro += micro
     totalTokens += Math.max(0, r.inputTokens) + Math.max(0, r.outputTokens)
-    if (r.source === 'submission') submissionUsd += usd
-    else practiceUsd += usd
+    if (r.source === 'submission') submissionMicro += micro
+    else practiceMicro += micro
 
-    const t = teachers.get(r.teacherId) ?? { teacherId: r.teacherId, name: r.teacherName, usd: 0, count: 0 }
-    t.usd += usd
+    const t = teachers.get(r.teacherId) ?? { teacherId: r.teacherId, name: r.teacherName, micro: 0, count: 0 }
+    t.micro += micro
     t.count += 1
     if (!t.name && r.teacherName) t.name = r.teacherName
     teachers.set(r.teacherId, t)
 
     const mk = monthKey(r.at)
-    const m = months.get(mk) ?? { month: mk, submissionUsd: 0, practiceUsd: 0, usd: 0 }
-    m.usd += usd
-    if (r.source === 'submission') m.submissionUsd += usd
-    else m.practiceUsd += usd
+    const m = months.get(mk) ?? { month: mk, submissionMicro: 0, practiceMicro: 0, micro: 0 }
+    m.micro += micro
+    if (r.source === 'submission') m.submissionMicro += micro
+    else m.practiceMicro += micro
     months.set(mk, m)
   }
 
   const byTeacher = [...teachers.values()]
-    .map((t) => ({ ...t, usd: round4(t.usd) }))
+    .map((t) => ({ teacherId: t.teacherId, name: t.name, usd: round4(toUsd(t.micro)), count: t.count }))
     .sort((a, b) => b.usd - a.usd)
   const byMonth = [...months.values()]
-    .map((m) => ({ month: m.month, submissionUsd: round4(m.submissionUsd), practiceUsd: round4(m.practiceUsd), usd: round4(m.usd) }))
+    .map((m) => ({ month: m.month, submissionUsd: round4(toUsd(m.submissionMicro)), practiceUsd: round4(toUsd(m.practiceMicro)), usd: round4(toUsd(m.micro)) }))
     .sort((a, b) => a.month.localeCompare(b.month))
 
   return {
-    totalUsd: round4(totalUsd),
+    totalUsd: round4(toUsd(totalMicro)),
     totalTokens,
     count: rows.length,
-    submissionUsd: round4(submissionUsd),
-    practiceUsd: round4(practiceUsd),
+    submissionUsd: round4(toUsd(submissionMicro)),
+    practiceUsd: round4(toUsd(practiceMicro)),
     byTeacher,
     byMonth,
   }

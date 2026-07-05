@@ -403,6 +403,9 @@ model PracticeAttempt {
   inputTokens  Int?
   outputTokens Int?
   costUsd      Float?
+  // 计费级精度：整数微美元(1 USD = 1_000_000 µUSD)。金额用整数存/累加，规避 Float 把成百上千条
+  // 零点几美分求和时的浮点漂移；用量聚合只读这一列。costUsd 保留为旧列(仍双写)以兼容既有读。
+  costMicroUsd Int?
   createdAt    DateTime @default(now())
 
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
@@ -472,6 +475,7 @@ model Submission {
   inputTokens     Int?
   outputTokens    Int?
   costUsd         Float?
+  costMicroUsd    Int?      // 计费级精度：整数微美元(1 USD = 1e6 µUSD)，见 Submission.costMicroUsd
   needsReview     Boolean   @default(false)
   teacherScore    Float?
   finalScore      Float?

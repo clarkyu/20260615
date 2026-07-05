@@ -8,7 +8,7 @@ import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
 import { config } from '@/lib/config'
 import { gradeWriting } from '@/lib/ai/grade'
-import { costUsd } from '@/lib/ai/cost'
+import { costUsd, costMicroUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
@@ -94,6 +94,7 @@ export async function autoGradeWriting(
     const inputTokens = ju?.inputTokens ?? 0
     const outputTokens = ju?.outputTokens ?? 0
     const cost = costUsd(result.judgeModel, inputTokens, outputTokens)
+    const costMicro = costMicroUsd(result.judgeModel, inputTokens, outputTokens)
     const hasUsage = Boolean(ju)
 
     await submissionRepo.applyGradeResult(prisma, submission.id, {
@@ -113,6 +114,7 @@ export async function autoGradeWriting(
       inputTokens: hasUsage ? inputTokens : null,
       outputTokens: hasUsage ? outputTokens : null,
       costUsd: hasUsage ? cost : null,
+      costMicroUsd: hasUsage ? costMicro : null,
     })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
