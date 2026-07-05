@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { freshDb, type TestDb } from './harness'
 import { createAssignments, type PhaseDraft } from '@/lib/domain/assignments'
-import { findBatchSiblings, applyPhaseConfigToBatch } from '@/lib/repo/assignments'
+import { findSyncSiblings, applyPhaseConfigToSiblings } from '@/lib/repo/assignments'
 import type { PrismaClient } from '@prisma/client'
 
-// 「发一份作业 + 勾多个班」→ 每个班一份作业、共享一个 batchId；发布后改一次评阅配置能按
-// batchId 找到兄弟作业并同步到勾选的班（同序环节），且只动勾选的目标、不越权。
+// 「设一次评阅配置 → 同步到其它班」的服务端保证:兄弟作业的识别(同一次发布的 batchId、
+// 或已发布的同名同课程作业)+ 按显式作业 id 同步同序环节 + 本人 scope(不越权)。
 
 const draft = (): PhaseDraft => ({
   id: null, title: null, category: null, instructions: null, useBankSet: false,
@@ -22,48 +22,70 @@ async function seed(p: PrismaClient) {
   for (const i of [1, 2, 3]) classes.push(await p.classGroup.create({ data: { schoolId: school.id, name: `C${i}` } }))
   const offerings = []
   for (const c of classes) offerings.push(await p.courseOffering.create({ data: { schoolId: school.id, courseId: course.id, teacherId: teacher.id, classId: c.id, year: 'Y', semester: '1' } }))
-  return { school, teacher, offerings }
+  return { school, teacher, course, offerings }
 }
 
-describe('publish batch + sync 评阅配置 to batch', () => {
+describe('sync 评阅配置 to sibling classes', () => {
   let db: TestDb
   beforeEach(() => { db = freshDb() })
   afterEach(async () => { await db?.cleanup() })
 
-  it('one publish to 3 classes shares one batchId; siblings + targeted apply resolve by it', async () => {
+  it('one publish to 3 classes: findSyncSiblings lists the other two; apply targets by assignment id', async () => {
     const d = await seed(db.prisma)
-    const offeringIds = d.offerings.map((o) => o.id)
-    const res = await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', { title: 'A', monthLabel: null }, [draft()], offeringIds, null, null)
+    const res = await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', { title: 'A', monthLabel: null }, [draft()], d.offerings.map((o) => o.id), null, null)
     expect(res.ok).toBe(true)
 
     const assignments = await db.prisma.assignment.findMany({ orderBy: { offeringId: 'asc' }, include: { phases: true } })
     expect(assignments).toHaveLength(3)
-    const batchIds = new Set(assignments.map((a) => a.batchId))
-    expect(batchIds.size).toBe(1) // all three share one batch token
-    expect([...batchIds][0]).toBeTruthy()
+    expect(new Set(assignments.map((a) => a.batchId)).size).toBe(1) // shared batch token
 
     const a1 = assignments[0]
-    // The other two classes are the batch siblings.
-    const sibs = await findBatchSiblings(db.prisma, a1.id, d.school.id, d.teacher.id, 'TEACHER')
-    expect(sibs.map((s) => s.offeringId).sort((x, y) => x - y)).toEqual([d.offerings[1].id, d.offerings[2].id])
-    expect(sibs.map((s) => s.className).sort()).toEqual(['C2', 'C3'])
+    const sibs = await findSyncSiblings(db.prisma, a1.id, d.school.id, d.teacher.id, 'TEACHER')
+    expect(sibs.map((s) => s.className)).toEqual(['C2', 'C3'])
+    expect(sibs.map((s) => s.assignmentId).sort((x, y) => x - y)).toEqual([assignments[1].id, assignments[2].id])
 
-    // Apply a1's phase config to ONLY class 2 → class 2's same-order phase updates; class 3 untouched.
-    const n = await applyPhaseConfigToBatch(db.prisma, a1.phases[0].id, d.school.id, d.teacher.id, 'TEACHER', [d.offerings[1].id], { rubric: 'RX', defaultPerceptionModel: 'pm', defaultJudgeModel: 'jm' })
+    // Apply a1's phase config to ONLY class 2's assignment → its same-order phase updates; class 3 untouched.
+    const n = await applyPhaseConfigToSiblings(db.prisma, a1.phases[0].id, d.school.id, d.teacher.id, 'TEACHER', [assignments[1].id], { rubric: 'RX', defaultPerceptionModel: 'pm', defaultJudgeModel: 'jm' })
     expect(n).toBe(1)
-
-    const a2phase = await db.prisma.phase.findFirst({ where: { assignmentId: assignments[1].id } })
-    const a3phase = await db.prisma.phase.findFirst({ where: { assignmentId: assignments[2].id } })
-    expect(a2phase).toMatchObject({ rubric: 'RX', defaultPerceptionModel: 'pm', defaultJudgeModel: 'jm' })
-    expect(a3phase?.rubric).toBeNull() // not a target → unchanged
+    expect(await db.prisma.phase.findFirst({ where: { assignmentId: assignments[1].id } })).toMatchObject({ rubric: 'RX', defaultPerceptionModel: 'pm', defaultJudgeModel: 'jm' })
+    expect((await db.prisma.phase.findFirst({ where: { assignmentId: assignments[2].id } }))?.rubric).toBeNull()
   })
 
-  it('applyPhaseConfigToBatch is a no-op for an assignment with no batch (null batchId)', async () => {
+  it('already-published (legacy, no batchId) same-name assignments in other classes are found + syncable', async () => {
     const d = await seed(db.prisma)
-    // A standalone assignment (not created via the batch publish path) has batchId null.
-    const solo = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'Solo' } })
-    const phase = await db.prisma.phase.create({ data: { assignmentId: solo.id, order: 1, requireAudio: true, graded: true, maxAttempts: 1 } })
-    const n = await applyPhaseConfigToBatch(db.prisma, phase.id, d.school.id, d.teacher.id, 'TEACHER', [d.offerings[1].id], { rubric: 'X', defaultPerceptionModel: null, defaultJudgeModel: null })
+    // Two INDEPENDENT assignments (batchId null), same title + course, in class 1 and class 2.
+    const s1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'Unit 3' } })
+    await db.prisma.phase.create({ data: { assignmentId: s1.id, order: 1, requireAudio: true, graded: true, maxAttempts: 1 } })
+    const s2 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[1].id, title: 'Unit 3' } })
+    await db.prisma.phase.create({ data: { assignmentId: s2.id, order: 1, requireAudio: true, graded: true, maxAttempts: 1 } })
+
+    const sibs = await findSyncSiblings(db.prisma, s1.id, d.school.id, d.teacher.id, 'TEACHER')
+    expect(sibs).toHaveLength(1)
+    expect(sibs[0]).toMatchObject({ assignmentId: s2.id, className: 'C2' })
+
+    const s1phase = await db.prisma.phase.findFirstOrThrow({ where: { assignmentId: s1.id } })
+    const n = await applyPhaseConfigToSiblings(db.prisma, s1phase.id, d.school.id, d.teacher.id, 'TEACHER', [s2.id], { rubric: 'LX', defaultPerceptionModel: null, defaultJudgeModel: null })
+    expect(n).toBe(1)
+    expect((await db.prisma.phase.findFirst({ where: { assignmentId: s2.id } }))?.rubric).toBe('LX')
+  })
+
+  it('is scoped to the teacher: cannot find or sync to another teacher’s assignment', async () => {
+    const d = await seed(db.prisma)
+    const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T2', passwordHash: 'x' } })
+    const otherOffering = await db.prisma.courseOffering.create({ data: { schoolId: d.school.id, courseId: d.course.id, teacherId: other.id, classId: (await db.prisma.classGroup.create({ data: { schoolId: d.school.id, name: 'C9' } })).id, year: 'Y', semester: '1' } })
+    // T1's assignment + T2's same-title assignment in the same course.
+    const mine = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'Shared' } })
+    await db.prisma.phase.create({ data: { assignmentId: mine.id, order: 1, requireAudio: true, graded: true, maxAttempts: 1 } })
+    const theirs = await db.prisma.assignment.create({ data: { offeringId: otherOffering.id, title: 'Shared' } })
+    await db.prisma.phase.create({ data: { assignmentId: theirs.id, order: 1, requireAudio: true, graded: true, maxAttempts: 1 } })
+
+    // T2's assignment is NOT a candidate for T1 (scoped out), and applying to it is a no-op.
+    const sibs = await findSyncSiblings(db.prisma, mine.id, d.school.id, d.teacher.id, 'TEACHER')
+    expect(sibs.find((s) => s.assignmentId === theirs.id)).toBeUndefined()
+
+    const minePhase = await db.prisma.phase.findFirstOrThrow({ where: { assignmentId: mine.id } })
+    const n = await applyPhaseConfigToSiblings(db.prisma, minePhase.id, d.school.id, d.teacher.id, 'TEACHER', [theirs.id], { rubric: 'HACK', defaultPerceptionModel: null, defaultJudgeModel: null })
     expect(n).toBe(0)
+    expect((await db.prisma.phase.findFirst({ where: { assignmentId: theirs.id } }))?.rubric).toBeNull()
   })
 })
