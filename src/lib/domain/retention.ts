@@ -10,10 +10,13 @@
 //   · PracticeAttempt media — delete the throwaway attempt + its media.
 
 import type { PrismaClient } from '@prisma/client'
+import { logError } from '@/lib/log'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as practiceRepo from '@/lib/repo/practice'
 
 export interface SweepResult { scanned: number; cleared: number; errors: number }
+
+type MediaCol = 'videoKey' | 'audioKey' | 'imageKey'
 
 export async function sweepExpiredMedia(
   prisma: PrismaClient,
@@ -24,20 +27,40 @@ export async function sweepExpiredMedia(
   let cleared = 0
   let errors = 0
 
-  // 1) Submissions — clear the media keys (the grade of record stays).
+  // 1) Submissions — delete each media object independently and clear the pointers whose
+  //    object is gone (partial ok). A key whose delete keeps failing keeps only ITS OWN
+  //    pointer (retried next run) instead of wedging the whole row — so one poison object
+  //    can't perpetually re-block the sweep or force re-deleting the siblings. Failures are
+  //    logged (not silently swallowed) so a persistently-stuck key is visible to ops.
   const subs = await submissionRepo.listExpiredMedia(prisma, opts.cutoff, limit)
   scanned += subs.length
   for (const r of subs) {
-    const keys = [r.videoKey, r.audioKey, r.imageKey].filter((k): k is string => Boolean(k))
-    try {
-      // Only clear the keys after every object is gone, so a failed delete is retried next
-      // run instead of orphaning a file with no DB pointer.
-      for (const k of keys) await opts.deleteObject(k)
-      await submissionRepo.clearMedia(prisma, r.id)
-      cleared++
-    } catch {
-      errors++
+    const fields: { col: MediaCol; key: string }[] = []
+    if (r.videoKey) fields.push({ col: 'videoKey', key: r.videoKey })
+    if (r.audioKey) fields.push({ col: 'audioKey', key: r.audioKey })
+    if (r.imageKey) fields.push({ col: 'imageKey', key: r.imageKey })
+
+    const clearedCols: MediaCol[] = []
+    let rowFailed = false
+    for (const f of fields) {
+      try {
+        await opts.deleteObject(f.key)
+        clearedCols.push(f.col)
+      } catch (err) {
+        rowFailed = true
+        logError('retention', 'failed to delete submission media object', err, { submissionId: r.id, field: f.col })
+      }
     }
+    if (clearedCols.length > 0) {
+      try {
+        await submissionRepo.clearMediaKeys(prisma, r.id, clearedCols)
+      } catch (err) {
+        rowFailed = true
+        logError('retention', 'failed to clear submission media pointers', err, { submissionId: r.id })
+      }
+    }
+    if (rowFailed) errors++
+    else cleared++
   }
 
   // 2) Per-sentence shadow takes — delete the row + its audio.
@@ -48,8 +71,9 @@ export async function sweepExpiredMedia(
       await opts.deleteObject(t.audioKey)
       await submissionRepo.deleteShadowTake(prisma, t.id)
       cleared++
-    } catch {
+    } catch (err) {
       errors++
+      logError('retention', 'failed to delete shadow take media', err, { shadowTakeId: t.id })
     }
   }
 
@@ -61,8 +85,9 @@ export async function sweepExpiredMedia(
       if (a.mediaKey) await opts.deleteObject(a.mediaKey)
       await practiceRepo.deleteAttempt(prisma, a.id)
       cleared++
-    } catch {
+    } catch (err) {
       errors++
+      logError('retention', 'failed to delete practice media', err, { practiceAttemptId: a.id })
     }
   }
 

@@ -60,6 +60,20 @@ describe('sweepExpiredMedia', () => {
     expect(db._subs[0]).toMatchObject({ videoKey: 'v1' })
   })
 
+  it('clears the keys whose object was deleted even when a sibling key persistently fails (audit P2-11)', async () => {
+    // video deletes fine, audio is wedged: the good pointer must clear so it is never
+    // re-attempted, while only the poison key stays to retry next run — no whole-row block.
+    const db = fake({ subs: [{ id: 1, createdAt: old, videoKey: 'v1', audioKey: 'a-poison', imageKey: null }] })
+    const deleted: string[] = []
+    const res = await sweepExpiredMedia(db, { cutoff, deleteObject: async (k) => {
+      if (k === 'a-poison') throw new Error('R2 wedged')
+      deleted.push(k)
+    } })
+    expect(res).toEqual({ scanned: 1, cleared: 0, errors: 1 }) // row not fully cleared → counts as an error
+    expect(deleted).toEqual(['v1']) // the good object was removed
+    expect(db._subs[0]).toMatchObject({ videoKey: null, audioKey: 'a-poison' }) // good pointer cleared, poison retried
+  })
+
   it('respects the batch limit', async () => {
     const db = fake({ subs: [1, 2, 3].map((id) => ({ id, createdAt: old, videoKey: `v${id}`, audioKey: null, imageKey: null })) })
     const res = await sweepExpiredMedia(db, { cutoff, deleteObject: async () => {}, limit: 2 })
