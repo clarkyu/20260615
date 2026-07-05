@@ -234,6 +234,7 @@ model User {
   createdTemplates        AssignmentTemplate[] @relation("UserTemplates")
   feedback                Feedback[]
   bankFavorites           BankFavorite[]
+  createdInvites          SchoolInvite[]
 
   @@unique([schoolId, studentNo])
   @@unique([schoolId, staffNo])
@@ -565,13 +566,17 @@ model SchoolInvite {
   id          Int       @id @default(autoincrement())
   tokenHash   String    @unique
   schoolId    Int
-  createdById Int
+  createdById Int?
   expiresAt   DateTime
   usedAt      DateTime?
   createdAt   DateTime  @default(now())
   school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  // 谁发的邀请。此前是裸 Int(无外键、无引用完整性)——现建 FK。可空 + SetNull(与
+  // AssignmentTemplate.createdBy 同一策略):删除管理员不该连带删掉/丢失邀请审计记录,置空即可。
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([schoolId])
+  @@index([createdById])
 }
 
 // 老师自带密钥（BYOK）：各家 API key 加密后按 (userId, provider) 存放。provider 是
