@@ -487,6 +487,23 @@ export function countPhaseSentences(prisma: PrismaClient, phaseId: number) {
   return prisma.sentence.count({ where: { phaseId } })
 }
 
+// The phases (submit type + rubric + sentence count) of a set of assignments — the batch
+// list shows a batch's 内容/评分标准 from its representative assignment. Keyed by caller
+// via assignmentId. Ordered by phase order.
+export function listPhaseSummariesForAssignments(prisma: PrismaClient, assignmentIds: number[]) {
+  if (assignmentIds.length === 0) return Promise.resolve([])
+  return prisma.phase.findMany({
+    where: { assignmentId: { in: assignmentIds } },
+    orderBy: [{ assignmentId: 'asc' }, { order: 'asc' }],
+    select: {
+      assignmentId: true, order: true, title: true, rubric: true, graded: true,
+      requireVideo: true, requireAudio: true, requireText: true, requireHandwriting: true,
+      requireChoice: true, requireFreeText: true, fillBlank: true,
+      _count: { select: { sentences: true } },
+    },
+  })
+}
+
 // Sentence text for a set of assignments, keyed later by (assignmentId, phaseId, order)
 // — used to join the student's weak-sentence aggregate back to readable text.
 export function listSentencesForAssignments(prisma: PrismaClient, assignmentIds: number[]) {
