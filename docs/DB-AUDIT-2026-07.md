@@ -69,26 +69,26 @@
 
 | # | 级 | 问题 | 证据 | 修复 | 状态 |
 |---|---|---|---|---|---|
-| P2-1 | S3 | 裸外键无 FK 无索引→删校后悬挂引用 + 全表扫 | `Feedback.schoolId`、`SchoolInvite.createdById` | 建关系 + 索引，或文档化为软引用 | 🟡 Feedback.schoolId 索引 ✅ #310；SchoolInvite.createdById 仍软引用（建 FK 需表重建，风险>值，见尾巴） |
+| P2-1 | S3 | 裸外键无 FK 无索引→删校后悬挂引用 + 全表扫 | `Feedback.schoolId`、`SchoolInvite.createdById` | 建关系 + 索引，或文档化为软引用 | ✅ Feedback.schoolId 索引 ✅ #310；SchoolInvite.createdById 建 FK ✅ #320（②a，可空+SetNull，重建自愈孤儿） |
 | P2-2 | S3 | 枚举当裸字符串→拼错大小写 job 永卡不报错 | `GradingJob.status/kind`、`Feedback.status`、`PracticeAttempt.kind` | 改 Prisma enum（编译成 TEXT，零 SQL 迁移） | ✅ #309 |
 | P2-3 | S3 | 唯一约束靠应用守：`Chunk.order`/`Sentence.order` 无唯一→重复 order 时排序/逐句映射不稳（chunk 写用 `i+1` 天然唯一；sentence 用 caller order） | `schema:86,382` | 加 `WHERE … IS NOT NULL` 部分唯一索引 | ⏸ 阻塞：建唯一索引前须核对 **prod** 无重复，否则迁移失败；dev 容器无 prod D1 访问，待在有 prod 权限的环境跑只读核对 |
-| P2-4 | S3 | 时间戳格式地雷：`createdAt DEFAULT CURRENT_TIMESTAMP`（空格式）≠ Prisma DateTime（`T`+offset），字符串比较会错（当前休眠，写入永远由 Prisma 供值） | `d1/migrations/0001_init.sql` | 确保写入永不依赖 DB 默认值（或统一 epoch-ms） | ⬜ 休眠（未动，低优先） |
+| P2-4 | S3 | 时间戳格式地雷：`createdAt DEFAULT CURRENT_TIMESTAMP`（空格式）≠ Prisma DateTime（`T`+offset），字符串比较会错（当前休眠，写入永远由 Prisma 供值） | `d1/migrations/0001_init.sql` | 确保写入永不依赖 DB 默认值（或统一 epoch-ms） | ✅ ②b 守卫替代重建：`created-at-format.test.ts` 钉死「建行永走 Prisma → DB 默认永不触发」；经证实默认本就休眠、库存 createdAt 已统一（clark 拍板不重建 ~20 表） |
 | P2-5 | S2 | 迁移 CI 只比对**名**不比对 **SQL 正文**→一次手改就 prod/Client 静默分叉（今 0 漂移） | `__tests__/migrations.test.ts` | 补按对比对归一化正文 | ✅ #310 |
 | P2-6 | S3 | 数据迁移非幂等（`0018/0033/0026` 全靠 `d1_migrations` 记账）；全树 0 个 `IF NOT EXISTS`，表重建中途失败残留 `new_X` 卡死 | `d1/migrations/*` | 重建加 `DROP TABLE IF EXISTS new_X`；文档化「勿手动重跑」 | ⬜ 未动（低优先；正常部署路径由 `d1_migrations` 记账保护） |
 | P2-7 | S3 | 级联正确性依赖 **D1 默认 FK-on** 这个隐式前提；`relationMode` 隐式默认→换数据源即静默 no-op | `db.ts`、`schema.prisma:5-7` | `db.ts` 写明依赖 + `schema` 显式 `relationMode="foreignKeys"` | ✅ #310 |
 | P2-8 | S3 | offering/assignment 级分析读函数不带租户谓词（靠 caller 先 scope，今都做了） | `repo/submissions.ts:113`… | 把 `schoolId`/offeringId 下推进读函数 | 🟡 #307 让单 offering 读用 `where:{offeringId}`（内在 scope 到具体 offering）；其余仍靠 caller 先 scope |
-| P2-9 | S3 | 并发改作业 lost-update 级联删提交（无版本守）；双发布无幂等键→重复作业；token 单次使用 check-then-act 非原子 | `repo/assignments.ts:198`、`domain/assignments.ts:149`、`actions/auth.ts:158` | 乐观并发守 / 幂等键 / 守护式 `updateMany` | ⬜ 未动（低概率/有界/可恢复，低优先） |
+| P2-9 | S3 | 并发改作业 lost-update 级联删提交（无版本守）；双发布无幂等键→重复作业；token 单次使用 check-then-act 非原子 | `repo/assignments.ts:198`、`domain/assignments.ts:149`、`actions/auth.ts:158` | 乐观并发守 / 幂等键 / 守护式 `updateMany` | 🟡 双发布幂等键 ✅ #315；token 单次使用原子化 ✅ #318（③，先守护式 `updateMany` 占用再落地，对齐 invite）；乐观并发守 lost-update 仍未动 |
 | P2-10 | S3 | perSentence accuracy/completeness 未 clamp→>1 的值污染薄弱句分析；导出多环节等权平均（BACKLOG #72）；名单导入/留存清理未按 D1 上限分批/单批清 | `gemini.ts:307`、`analytics.ts:80`、`roster.ts:101`、`retention.ts:20` | 感知层 `clamp01`；导出按句数加权；分批/循环清 | 🟡 perSentence `clamp01` ✅ #310（共享 `normalizePerSentence`）；导出等权/分批清 未动 |
-| P2-11 | S4 | `costUsd` 用 Float（金额）；填空归一化仅 trim+lowercase（`New  York`≠`New York`）；持续失败的 key 卡住整行媒体清理 | `schema:422`、`fill-blank.ts:41`、`retention.ts:30` | 若转计费改整数 micro-USD；归一化折叠内部空白/全角 | ⬜ 未动（S4，细枝末节） |
+| P2-11 | S4 | `costUsd` 用 Float（金额）；填空归一化仅 trim+lowercase（`New  York`≠`New York`）；持续失败的 key 卡住整行媒体清理 | `schema:422`、`fill-blank.ts:41`、`retention.ts:30` | 若转计费改整数 micro-USD；归一化折叠内部空白/全角 | 🟡 ① costUsd→整数 micro-USD 计费级精度 ✅ #319（加 `costMicroUsd`、按整数精确累加）；填空归一化/retention 卡键 仍未动 |
 
 ---
 
 ## 剩余尾巴（低优先 / 有意暂缓）
 
-- **P2-3 order 部分唯一索引 —— ⏸ 阻塞于 prod 数据核对**：SQLite `CREATE UNIQUE INDEX` 会在存量有重复时**直接失败、拖垮部署**。须先在有 prod 权限的环境跑只读核对
-  `SELECT chunkSetId, "order", COUNT(*) FROM Chunk GROUP BY 1,2 HAVING COUNT(*)>1`（Sentence 同理按 `phaseId,"order"`），确认 0 行再建。dev 容器无 prod D1 访问，故本轮不动。缓解：chunk 写用 `i+1` 天然唯一，sentence 由发布/导入按序写。
-- **P2-1 SchoolInvite.createdById 建 FK —— 有意暂缓**：SQLite 不能对既有表 `ADD` 外键，须整表重建；表重建是审计点名的高风险迁移（中途失败残留 `new_X`）。该字段短生命周期、且 `schoolId` 级联已清理它，dangling 窗口极窄——判定风险>值，保留为**已文档化的软引用**（非未知缺口）。
-- **P1-3 / P2-8 / P2-9 / P2-10 剩余项 / P2-4 / P2-6 / P2-11**：均 S3/S4，低优先，按需再评估。
+- **P2-3 order 部分唯一索引 —— ✅（clark 跑 prod 只读核对，两表 0 重复后建；commit e95cc18）**：`CREATE UNIQUE INDEX` 遇存量重复会**直接失败、拖垮部署**，故先在 prod 跑只读核对
+  `SELECT chunkSetId, "order", COUNT(*) FROM Chunk GROUP BY 1,2 HAVING COUNT(*)>1`（Sentence 按 `phaseId,"order"`），返回 0 行确认安全后建（commit e95cc18；schema 内注明 2026-07-05 核对）。
+- **P2-1 SchoolInvite.createdById 建 FK —— ✅ #320（②a）**：整表重建加 FK，`createdById` 改可空 + `ON DELETE SET NULL`（对齐 `AssignmentTemplate.createdBy`）；重建时 `CASE WHEN createdById IN (SELECT id FROM User)` 把历史孤儿置空**自愈**——非破坏、不丢行、无需先人工核对。原「软引用暂缓」判定在 clark 明确要求下升级为真 FK。
+- **P1-3 / P2-8 / P2-9 剩余项（lost-update）/ P2-6 / P2-11 剩余项（填空归一化/retention）**：均 S3/S4，低优先，按需再评估。①③②a②b 已于本轮收口（#318 #319 #320 + createdAt 守卫）。
 - **`aiResult` 两步取**：offeringId 索引（#307）已把扫描变索引扫；blob 超取只在高 `maxAttempts` × 大规模时显著。可作后续读层优化（需动 analytics 消费端），本轮未做。
 
 ---
