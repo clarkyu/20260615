@@ -38,6 +38,17 @@ export function parseFillBlank(json: string | null | undefined): FillBlank {
   }
 }
 
+// 答案键是否可用于客观判分：空数与题干标记一致，且每个空恰有一组非空可接受答案。
+// 不可用（blanksJson 缺失/损坏、老师漏填答案键、空数不符）时**不应自动判 0**——
+// 否则整班静默得 0 且不进复核；调用方应转老师人工复核。
+export function isGradableFillBlank(fb: FillBlank): boolean {
+  return (
+    fb.accept.length > 0 &&
+    fb.accept.length === blankCount(fb.text) &&
+    fb.accept.every((a) => a.length > 0)
+  )
+}
+
 const norm = (s: string) => s.trim().toLowerCase()
 
 // 逐空判分：answers[i] 命中 accept[i] 里任一（归一化后相等且非空）即该空对。

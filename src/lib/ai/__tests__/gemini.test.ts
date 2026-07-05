@@ -66,9 +66,16 @@ describe('normalizeJudge', () => {
     expect(out.feedback).toBe('不错')
   })
 
-  it('tolerates missing fields', () => {
-    const out = normalizeJudge({}, 100)
-    expect(out.score).toBe(0)
+  it('throws on a missing/garbled score — never coerces to a fabricated 0 (audit P0-4)', () => {
+    expect(() => normalizeJudge({}, 100)).toThrow(/有效分数/)
+    expect(() => normalizeJudge({ score: 'excellent', feedback: 'x' }, 100)).toThrow(/有效分数/)
+    expect(() => normalizeJudge({ score: null, feedback: 'x' }, 100)).toThrow(/有效分数/)
+  })
+
+  it('preserves a legitimate 0 and tolerates other missing fields when the score is valid', () => {
+    expect(normalizeJudge({ score: 0, feedback: 'x' }, 100).score).toBe(0)
+    const out = normalizeJudge({ score: 50 }, 100)
+    expect(out.score).toBe(50)
     expect(out.feedback).toBe('')
     expect(out.breakdown).toEqual({})
   })

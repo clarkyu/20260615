@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseFillBlank, blankCount, splitBlanks, gradeFillBlank } from '@/lib/fill-blank'
+import { parseFillBlank, blankCount, splitBlanks, gradeFillBlank, isGradableFillBlank } from '@/lib/fill-blank'
 
 describe('blankCount / splitBlanks', () => {
   it('counts ____ (≥3 underscores) markers and splits around them', () => {
@@ -36,5 +36,22 @@ describe('gradeFillBlank — per-blank case/space-insensitive, multiple accepted
   })
   it('total is the number of defined blanks (accept.length)', () => {
     expect(gradeFillBlank([], [['a'], ['b'], ['c']])).toEqual({ correct: 0, total: 3 })
+  })
+})
+
+describe('isGradableFillBlank — refuse to auto-grade an unusable answer key (audit P0-5)', () => {
+  it('accepts a well-formed key: one non-empty accept list per blank', () => {
+    expect(isGradableFillBlank({ text: 'a ____ b ____', accept: [['x'], ['y', 'z']] })).toBe(true)
+  })
+  it('rejects an empty / malformed key (would otherwise score the whole class 0)', () => {
+    expect(isGradableFillBlank({ text: 'a ____', accept: [] })).toBe(false) // parse failure / no key
+    expect(isGradableFillBlank({ text: '', accept: [] })).toBe(false)
+  })
+  it('rejects a partially-filled key: any blank with no acceptable answers', () => {
+    expect(isGradableFillBlank({ text: 'a ____ b ____', accept: [['x'], []] })).toBe(false)
+  })
+  it('rejects a key whose blank count disagrees with the text', () => {
+    expect(isGradableFillBlank({ text: 'a ____ b ____', accept: [['x']] })).toBe(false) // 2 blanks, 1 answer
+    expect(isGradableFillBlank({ text: 'a ____', accept: [['x'], ['y']] })).toBe(false) // 1 blank, 2 answers
   })
 })

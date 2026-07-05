@@ -185,7 +185,12 @@ export function buildWritingJudgePrompt(input: TextJudgeInput): string {
 
 export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
   const r = raw as { score?: unknown; breakdown?: { dimension?: string; points?: number }[]; feedback?: unknown; confidence?: unknown }
-  const score = Math.max(0, Math.min(maxScore, Math.round(Number(r?.score) || 0)))
+  // A missing / non-numeric score must NOT be coerced to a real 0 — that persists a
+  // fabricated grade (auto-finalized on free-practice phases, invisible to the teacher).
+  // Throw so the submission goes FAILED/retry instead. A legitimate 0 is finite → passes.
+  const n = Number(r?.score)
+  if (r?.score == null || !Number.isFinite(n)) throw new Error('judge 未返回有效分数')
+  const score = Math.max(0, Math.min(maxScore, Math.round(n)))
   const breakdown: Record<string, number> = {}
   if (Array.isArray(r?.breakdown)) {
     for (const b of r.breakdown) {

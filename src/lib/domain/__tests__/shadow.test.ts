@@ -12,10 +12,24 @@ vi.mock('@/lib/ai/registry', () => ({
 vi.mock('@/lib/ai/adapters', () => ({
   getPerceptionProvider: vi.fn(),
 }))
+// Collaborators for the gradeShadowSubmission orchestration test (P0-1). The pure
+// summarizeShadow / gradeShadowTake tests above don't touch these.
+vi.mock('@/lib/repo/submissions', () => ({
+  findGradableShadow: vi.fn(),
+  markProcessing: vi.fn(async () => {}),
+  setShadowTakeScore: vi.fn(async () => {}),
+  applyShadowResult: vi.fn(async () => {}),
+  revertToQueue: vi.fn(async () => {}),
+}))
+vi.mock('@/lib/repo/assignments', () => ({ offeringTeacher: vi.fn(async () => ({ teacherId: 1, defaultPerceptionModel: null })) }))
+vi.mock('@/lib/storage', () => ({ storageConfigured: () => true, presignDownload: vi.fn(async () => 'https://signed') }))
+vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_k: unknown, fn: () => unknown) => fn() }))
+vi.mock('@/lib/ai/teacher-keys', () => ({ resolveTeacherKeys: async () => ({}) }))
 
-import { summarizeShadow, gradeShadowTake } from '../shadow'
+import { summarizeShadow, gradeShadowTake, gradeShadowSubmission } from '../shadow'
 import { getModel } from '@/lib/ai/registry'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
+import * as shadowRepo from '@/lib/repo/submissions'
 
 const m = (entries: [number, number][]) => new Map<number, number>(entries)
 
@@ -109,5 +123,51 @@ describe('gradeShadowTake — per-sentence scoring', () => {
     ;(getModel as Mock).mockReturnValue(model)
     ;(getPerceptionProvider as Mock).mockReturnValue(undefined)
     await expect(gradeShadowTake('u', 'Hi', 'pm')).rejects.toThrow(/未实现/)
+  })
+})
+
+describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P0-1)', () => {
+  const takes = [
+    { id: 101, order: 1, audioKey: 'k1', aiScore: null },
+    { id: 102, order: 2, audioKey: 'k2', aiScore: null },
+    { id: 103, order: 3, audioKey: 'k3', aiScore: null },
+  ]
+  const submission = (over: Record<string, unknown> = {}) => ({
+    id: 1, status: 'UPLOADED', assignmentId: 10, teacherScore: null,
+    phase: { freePractice: false, sentences: [{ order: 1, text: 'a' }, { order: 2, text: 'b' }, { order: 3, text: 'c' }] },
+    assignment: { defaultPerceptionModel: null, sentences: [] },
+    shadowTakes: takes.map((t) => ({ ...t })),
+    ...over,
+  })
+  // perceive succeeds for every sentence except the one whose text === failOn.
+  const wirePerception = (failOn: string | null) => {
+    ;(getModel as Mock).mockReturnValue({ id: 'pm-default', provider: 'prov', capabilities: ['perception'] })
+    ;(getPerceptionProvider as Mock).mockReturnValue({
+      perceive: async (input: { referenceSentences: { text: string }[] }) => {
+        const text = input.referenceSentences[0].text
+        if (text === failOn) throw new Error('perceive 500') // transient, NOT an unavailable sentinel
+        return { transcript: '', perSentence: [{ order: 1, spokenText: text, accuracy: 0.9, completeness: 0.9 }] }
+      },
+    })
+  }
+  beforeEach(() => vi.clearAllMocks())
+
+  it('reverts (for retry) instead of finalizing when one sentence fails to score', async () => {
+    ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
+    wirePerception('b') // sentence 2 fails
+    await gradeShadowSubmission({} as never, 1)
+    // the two that succeeded were persisted, but the overall grade was NOT finalized…
+    expect(shadowRepo.setShadowTakeScore).toHaveBeenCalledTimes(2)
+    expect(shadowRepo.applyShadowResult).not.toHaveBeenCalled()
+    // …instead the submission is reverted so the durable job retries the missing take.
+    expect(shadowRepo.revertToQueue).toHaveBeenCalledWith({}, 1, 'UPLOADED')
+  })
+
+  it('finalizes normally when every sentence scores', async () => {
+    ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
+    wirePerception(null) // nothing fails
+    await gradeShadowSubmission({} as never, 1)
+    expect(shadowRepo.applyShadowResult).toHaveBeenCalledTimes(1)
+    expect(shadowRepo.revertToQueue).not.toHaveBeenCalled()
   })
 })

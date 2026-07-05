@@ -10,7 +10,7 @@ import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
-import { parseFillBlank, gradeFillBlank } from '@/lib/fill-blank'
+import { parseFillBlank, gradeFillBlank, isGradableFillBlank } from '@/lib/fill-blank'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -93,10 +93,15 @@ export async function finishSubmission(phaseId: number) {
     const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
     const correctSet = phase?.multiChoice ? parseChoices(phase.correctChoices) : []
     if (phase?.fillBlank) {
-      // 填空题：客观判分——按空给分（答对空数 / 总空数 × 满分），提交即定稿。
-      const { correct, total } = gradeFillBlank(parseChoices(submission.recitedText), parseFillBlank(phase.blanksJson).accept)
-      const score = total > 0 ? Math.round((correct / total) * DEFAULT_MAX_SCORE) : 0
-      await submissionRepo.flipDraftGraded(prisma, submission.id, score)
+      const fb = parseFillBlank(phase.blanksJson)
+      if (isGradableFillBlank(fb)) {
+        // 填空题：客观判分——按空给分（答对空数 / 总空数 × 满分），提交即定稿。
+        const { correct, total } = gradeFillBlank(parseChoices(submission.recitedText), fb.accept)
+        await submissionRepo.flipDraftGraded(prisma, submission.id, Math.round((correct / total) * DEFAULT_MAX_SCORE))
+      } else {
+        // 答案键缺失/损坏/漏填 → 无法客观判分。绝不静默判全班 0，转老师人工复核。
+        await submissionRepo.flipDraft(prisma, submission.id, 'UPLOADED', true)
+      }
     } else if (phase?.multiChoice && correctSet.length > 0) {
       // 多选题：客观判分——所选集合 == 正确集合 → 满分，否则 0；提交即定稿。
       const correct = sameChoiceSet(parseChoices(submission.recitedText), correctSet)
