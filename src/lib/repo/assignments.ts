@@ -360,8 +360,8 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
     where: { offering: offeringScopeFor(schoolId, userId, role) },
     orderBy: { createdAt: 'desc' },
     select: {
-      id: true, title: true, category: true, dueAt: true, monthLabel: true,
-      offering: { select: { course: { select: { name: true } }, class: { select: { name: true } } } },
+      id: true, title: true, category: true, dueAt: true, monthLabel: true, batchId: true,
+      offering: { select: { courseId: true, course: { select: { name: true } }, class: { select: { name: true } } } },
       _count: { select: { phases: true } },
     },
   })
