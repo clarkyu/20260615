@@ -69,6 +69,28 @@ describe('sync 评阅配置 to sibling classes', () => {
     expect((await db.prisma.phase.findFirst({ where: { assignmentId: s2.id } }))?.rubric).toBe('LX')
   })
 
+  it('publishing twice with the SAME client batchId is idempotent — no duplicate assignments (audit P2-9)', async () => {
+    const d = await seed(db.prisma)
+    const ids = d.offerings.map((o) => o.id)
+    const meta = { title: 'A', monthLabel: null }
+    const batchId = 'fixed-batch-123'
+    const r1 = await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', meta, [draft()], ids, null, null, batchId)
+    const r2 = await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', meta, [draft()], ids, null, null, batchId) // double-click / retry
+    expect(r1.ok && r2.ok).toBe(true)
+    // Exactly one assignment per class (3), NOT six — the retry created nothing.
+    expect(await db.prisma.assignment.count()).toBe(3)
+    expect(new Set((await db.prisma.assignment.findMany({ select: { batchId: true } })).map((a) => a.batchId))).toEqual(new Set([batchId]))
+  })
+
+  it('two publishes WITHOUT a client batchId stay independent (server mints a fresh batch each time)', async () => {
+    const d = await seed(db.prisma)
+    const ids = d.offerings.map((o) => o.id)
+    const meta = { title: 'A', monthLabel: null }
+    await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', meta, [draft()], ids, null, null)
+    await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', meta, [draft()], ids, null, null)
+    expect(await db.prisma.assignment.count()).toBe(6) // no idempotency key → two independent publishes
+  })
+
   it('is scoped to the teacher: cannot find or sync to another teacher’s assignment', async () => {
     const d = await seed(db.prisma)
     const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T2', passwordHash: 'x' } })

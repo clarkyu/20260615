@@ -133,6 +133,9 @@ export async function createAssignments(
   offeringIds: number[],
   chunkSetId: number | null,
   primaryOfferingId: number | null,
+  // Client-generated idempotency key (one per publish form). Omitted → a server-side one is
+  // minted (no idempotency, matching the old behavior).
+  clientBatchId?: string,
 ): Promise<CreateResult> {
   if (offeringIds.length === 0) return { ok: false, error: 'err.needPublishTarget' }
   // Teacher-scoped: a teacher can only publish to their OWN offerings.
@@ -146,8 +149,13 @@ export async function createAssignments(
   // assignment's auto-increment id for its nested phase/sentence inserts in a batch).
   // All classes published together share one batchId, so a later per-phase 评阅配置
   // change can be synced to the whole batch (发布后改一次评分标准 → 同步到同批次班级).
-  const batchId = crypto.randomUUID()
+  const batchId = clientBatchId || crypto.randomUUID()
+  // Idempotent publish: a double-clicked / retried submit reuses the same client batchId,
+  // so skip any offering already created for it — otherwise each retry mints a fresh set of
+  // student-facing assignments the teacher then has to delete.
+  const already = clientBatchId ? await assignments.offeringsWithBatch(prisma, batchId, validIds) : new Set<number>()
   for (const offeringId of validIds) {
+    if (already.has(offeringId)) continue
     await assignments.createWithPhases(prisma, offeringId, meta, resolved.phases, batchId)
   }
 

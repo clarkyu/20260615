@@ -121,8 +121,10 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   const offeringIds = [...new Set(formData.getAll('offeringId').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))]
   const chunkSetId = Number(formData.get('chunkSetId')) || null
   const primaryOfferingId = Number(formData.get('primaryOfferingId')) || null
+  // Client idempotency key so a double-clicked / retried publish doesn't duplicate.
+  const batchId = String(formData.get('batchId') ?? '').trim() || undefined
 
-  const res = await createAssignments(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId)
+  const res = await createAssignments(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId, batchId)
   if (!res.ok) return { error: cx.t(res.error) }
 
   // Optionally save this publish config as a reusable template (school-shared).
