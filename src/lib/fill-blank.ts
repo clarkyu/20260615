@@ -49,7 +49,13 @@ export function isGradableFillBlank(fb: FillBlank): boolean {
   )
 }
 
-const norm = (s: string) => s.trim().toLowerCase()
+// Normalize before comparing a student's blank answer to the accepted keys. Both sides go
+// through this, so matching is lenient in the ways that are typos, not knowledge:
+//  · NFKC folds full-width forms (常见于中文输入法：Ｎｅｗ / ２ / ，) to their ASCII
+//    equivalents, so a full-width answer isn't wrongly scored 0 on an objective blank;
+//  · internal whitespace collapses ("New  York" == "New York");
+//  · trim + lowercase (case-insensitive).
+const norm = (s: string) => s.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
 
 // 逐空判分：answers[i] 命中 accept[i] 里任一（归一化后相等且非空）即该空对。
 // total = accept.length（题面定义的空数）。

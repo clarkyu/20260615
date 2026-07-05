@@ -37,6 +37,14 @@ describe('gradeFillBlank — per-blank case/space-insensitive, multiple accepted
   it('total is the number of defined blanks (accept.length)', () => {
     expect(gradeFillBlank([], [['a'], ['b'], ['c']])).toEqual({ correct: 0, total: 3 })
   })
+
+  it('normalizes full-width chars and collapses internal whitespace (audit P2-11)', () => {
+    // full-width letters/digits (常见于中文输入法) fold to ASCII via NFKC
+    expect(gradeFillBlank(['Ｎｅｗ Ｙｏｒｋ'], [['New York']])).toEqual({ correct: 1, total: 1 })
+    expect(gradeFillBlank(['２０２６'], [['2026']])).toEqual({ correct: 1, total: 1 })
+    // collapsed internal whitespace: "New  York" (double space) == "New York"
+    expect(gradeFillBlank(['New   York'], [['New York']])).toEqual({ correct: 1, total: 1 })
+  })
 })
 
 describe('isGradableFillBlank — refuse to auto-grade an unusable answer key (audit P0-5)', () => {
