@@ -196,6 +196,12 @@ export function AssignmentForm({
   const hasBank = Boolean(bankInfo)
   const [state, action, isPending] = useActionState(editing ? updateAssignment : createAssignment, null)
 
+  // Idempotency key for publishing: one stable id per publish-form instance, so a
+  // double-clicked / retried submit can't create duplicate assignments. Generated after
+  // mount (client-only) to avoid an SSR/client hydration mismatch.
+  const [publishBatchId, setPublishBatchId] = useState('')
+  useEffect(() => { if (!editing) setPublishBatchId(crypto.randomUUID()) }, [editing])
+
   // Assignment-level fields (controlled so the AI draft can fill them).
   const [title, setTitle] = useState(initial?.title ?? '')
   // Save-as-template (publish flow only).
@@ -355,6 +361,7 @@ export function AssignmentForm({
         <CardContent>
           <form action={action} className="space-y-4">
             {editing ? <input type="hidden" name="assignmentId" value={initial!.id ?? ""} /> : <input type="hidden" name="primaryOfferingId" value={singleOfferingId ?? ''} />}
+            {!editing ? <input type="hidden" name="batchId" value={publishBatchId} /> : null}
             {!editing && !multi ? <input type="hidden" name="offeringId" value={singleOfferingId ?? ''} /> : null}
             {bankInfo ? <input type="hidden" name="chunkSetId" value={bankInfo.id} /> : null}
             <input type="hidden" name="phasesJson" value={phasesJson} />

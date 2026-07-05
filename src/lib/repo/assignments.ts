@@ -189,6 +189,17 @@ export async function createWithPhases(prisma: PrismaClient, offeringId: number,
   return assignment
 }
 
+// Which of the given offerings ALREADY have an assignment from this publish batch. Makes
+// publishing idempotent: a double-clicked / retried submit carrying the same client-
+// generated batchId skips the offerings it already created instead of duplicating them.
+export async function offeringsWithBatch(prisma: PrismaClient, batchId: string, offeringIds: number[]): Promise<Set<number>> {
+  const rows = await prisma.assignment.findMany({
+    where: { batchId, offeringId: { in: offeringIds } },
+    select: { offeringId: true },
+  })
+  return new Set(rows.map((r) => r.offeringId))
+}
+
 // Edit an assignment's phases, RECONCILING by phase id so a phase the teacher kept is
 // updated in place — never deleted-and-recreated. This is critical: Submission /
 // PracticeAttempt cascade-delete with their Phase, so deleting a phase would destroy
