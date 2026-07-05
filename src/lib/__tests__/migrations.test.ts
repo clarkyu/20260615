@@ -54,3 +54,35 @@ describe('migration trees correspond 1:1 (d1 ↔ prisma)', () => {
     expect(mismatches).toEqual([])
   })
 })
+
+describe('table-rebuild migrations are re-runnable (idempotent) — audit P2-6', () => {
+  // A rebuild creates a temp `new_X`, copies rows, drops the original, renames. If it fails
+  // PARTWAY (after CREATE new_X, before RENAME) and is re-run, `CREATE TABLE new_X` errors
+  // "table already exists" and wedges the migration. Guard: every `new_X` a rebuild creates
+  // must be preceded by `DROP TABLE IF EXISTS "new_X"`, so a re-run starts clean. Checked on
+  // the d1 tree (the prod source of truth; the prisma copy is body-equal per the pairing test).
+  //
+  // Pre-convention rebuilds — already applied in prod, and frozen (editing an applied prisma
+  // migration would trip Prisma's checksum) — are grandfathered. The guard binds every NEW
+  // rebuild going forward.
+  const GRANDFATHERED = new Set([
+    '0003_add_courses', '0022_chunkset_global', '0025_drop_user_classid',
+    '0037_major_optional_department', '0051_school_invite_created_by_fk',
+  ])
+
+  it('a new_X CREATE is preceded by DROP TABLE IF EXISTS new_X', () => {
+    const offenders: string[] = []
+    for (const f of d1Files) {
+      const name = f.replace(/\.sql$/, '')
+      const sql = readFileSync(join(ROOT, 'd1/migrations', f), 'utf8')
+      const created = [...sql.matchAll(/CREATE\s+TABLE\s+"(new_[A-Za-z0-9_]+)"/gi)].map((m) => m[1])
+      for (const tbl of created) {
+        const createAt = sql.search(new RegExp(`CREATE\\s+TABLE\\s+"${tbl}"`, 'i'))
+        const dropAt = sql.search(new RegExp(`DROP\\s+TABLE\\s+IF\\s+EXISTS\\s+"${tbl}"`, 'i'))
+        const guarded = dropAt >= 0 && dropAt < createAt
+        if (!guarded && !GRANDFATHERED.has(name)) offenders.push(`${name} → ${tbl}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})

@@ -74,7 +74,7 @@
 | P2-3 | S3 | 唯一约束靠应用守：`Chunk.order`/`Sentence.order` 无唯一→重复 order 时排序/逐句映射不稳（chunk 写用 `i+1` 天然唯一；sentence 用 caller order） | `schema:86,382` | 加 `WHERE … IS NOT NULL` 部分唯一索引 | ⏸ 阻塞：建唯一索引前须核对 **prod** 无重复，否则迁移失败；dev 容器无 prod D1 访问，待在有 prod 权限的环境跑只读核对 |
 | P2-4 | S3 | 时间戳格式地雷：`createdAt DEFAULT CURRENT_TIMESTAMP`（空格式）≠ Prisma DateTime（`T`+offset），字符串比较会错（当前休眠，写入永远由 Prisma 供值） | `d1/migrations/0001_init.sql` | 确保写入永不依赖 DB 默认值（或统一 epoch-ms） | ✅ ②b 守卫替代重建：`created-at-format.test.ts` 钉死「建行永走 Prisma → DB 默认永不触发」；经证实默认本就休眠、库存 createdAt 已统一（clark 拍板不重建 ~20 表） |
 | P2-5 | S2 | 迁移 CI 只比对**名**不比对 **SQL 正文**→一次手改就 prod/Client 静默分叉（今 0 漂移） | `__tests__/migrations.test.ts` | 补按对比对归一化正文 | ✅ #310 |
-| P2-6 | S3 | 数据迁移非幂等（`0018/0033/0026` 全靠 `d1_migrations` 记账）；全树 0 个 `IF NOT EXISTS`，表重建中途失败残留 `new_X` 卡死 | `d1/migrations/*` | 重建加 `DROP TABLE IF EXISTS new_X`；文档化「勿手动重跑」 | ⬜ 未动（低优先；正常部署路径由 `d1_migrations` 记账保护） |
+| P2-6 | S3 | 数据迁移非幂等（`0018/0033/0026` 全靠 `d1_migrations` 记账）；全树 0 个 `IF NOT EXISTS`，表重建中途失败残留 `new_X` 卡死 | `d1/migrations/*` | 重建加 `DROP TABLE IF EXISTS new_X`；文档化「勿手动重跑」 | ✅ 守卫 + 约定：`migrations.test` 强制**新**重建以 `DROP TABLE IF EXISTS "new_X"` 开头（既有 5 个已应用的重建 grandfather：改动已应用迁移会触发 prisma checksum、且 prod 永不重跑）；CLAUDE.md 记「勿手动重跑」 |
 | P2-7 | S3 | 级联正确性依赖 **D1 默认 FK-on** 这个隐式前提；`relationMode` 隐式默认→换数据源即静默 no-op | `db.ts`、`schema.prisma:5-7` | `db.ts` 写明依赖 + `schema` 显式 `relationMode="foreignKeys"` | ✅ #310 |
 | P2-8 | S3 | offering/assignment 级分析读函数不带租户谓词（靠 caller 先 scope，今都做了） | `repo/submissions.ts:113`… | 把 `schoolId`/offeringId 下推进读函数 | 🟡 #307 让单 offering 读用 `where:{offeringId}`（内在 scope 到具体 offering）；其余仍靠 caller 先 scope |
 | P2-9 | S3 | 并发改作业 lost-update 级联删提交（无版本守）；双发布无幂等键→重复作业；token 单次使用 check-then-act 非原子 | `repo/assignments.ts:198`、`domain/assignments.ts:149`、`actions/auth.ts:158` | 乐观并发守 / 幂等键 / 守护式 `updateMany` | 🟡 双发布幂等键 ✅ #315；token 单次使用原子化 ✅ #318（③，先守护式 `updateMany` 占用再落地，对齐 invite）；乐观并发守 lost-update 仍未动 |
@@ -88,7 +88,7 @@
 - **P2-3 order 部分唯一索引 —— ✅（clark 跑 prod 只读核对，两表 0 重复后建；commit e95cc18）**：`CREATE UNIQUE INDEX` 遇存量重复会**直接失败、拖垮部署**，故先在 prod 跑只读核对
   `SELECT chunkSetId, "order", COUNT(*) FROM Chunk GROUP BY 1,2 HAVING COUNT(*)>1`（Sentence 按 `phaseId,"order"`），返回 0 行确认安全后建（commit e95cc18；schema 内注明 2026-07-05 核对）。
 - **P2-1 SchoolInvite.createdById 建 FK —— ✅ #320（②a）**：整表重建加 FK，`createdById` 改可空 + `ON DELETE SET NULL`（对齐 `AssignmentTemplate.createdBy`）；重建时 `CASE WHEN createdById IN (SELECT id FROM User)` 把历史孤儿置空**自愈**——非破坏、不丢行、无需先人工核对。原「软引用暂缓」判定在 clark 明确要求下升级为真 FK。
-- **P1-3 / P2-8 / P2-9 剩余项（lost-update）/ P2-6 / P2-11 剩余项（填空归一化/retention）**：均 S3/S4，低优先，按需再评估。①③②a②b 已于本轮收口（#318 #319 #320 + createdAt 守卫）。
+- **收口进度**：①③②a②b（#318 #319 #320 + createdAt 守卫）、P2-11 填空归一化（#322）、P2-11 retention 韧性（#323）、P2-9 lost-update（#324 known-ids + #325 version 乐观锁）、P2-6 迁移幂等守卫（本 PR）均已收口。**剩**：P2-8 的 analytics 读租户谓词下推（今靠 caller 先 scope，已够）、`aiResult` 两步取（读层优化）——S3/S4，按需再评估。
 - **`aiResult` 两步取**：offeringId 索引（#307）已把扫描变索引扫；blob 超取只在高 `maxAttempts` × 大规模时显著。可作后续读层优化（需动 analytics 消费端），本轮未做。
 
 ---
