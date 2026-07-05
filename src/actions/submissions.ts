@@ -9,7 +9,7 @@ import { scheduleGrading } from '@/lib/domain/jobs'
 import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
-import { parseChoices } from '@/lib/choices'
+import { parseChoices, sameChoiceSet } from '@/lib/choices'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -87,15 +87,20 @@ export async function finishSubmission(phaseId: number) {
   // 按环节类型路由（判别式来自 ① 的 phaseItemType）。
   const itemType = phaseItemType(resolved.requirements)
 
-  // objective：无对错的投票 / 有正确答案的单选题。都不走 AI、不进老师待批队列。
+  // objective：单选 / 多选 / 投票。都不走 AI、不进老师待批队列。
   if (itemType === 'objective') {
     const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
-    if (phase?.correctChoice) {
+    const correctSet = phase?.multiChoice ? parseChoices(phase.correctChoices) : []
+    if (phase?.multiChoice && correctSet.length > 0) {
+      // 多选题：客观判分——所选集合 == 正确集合 → 满分，否则 0；提交即定稿。
+      const correct = sameChoiceSet(parseChoices(submission.recitedText), correctSet)
+      await submissionRepo.flipDraftGraded(prisma, submission.id, correct ? DEFAULT_MAX_SCORE : 0)
+    } else if (!phase?.multiChoice && phase?.correctChoice) {
       // 单选题：客观判分——选对=满分、选错=0，提交即定稿。
       const correct = (submission.recitedText ?? '').trim() === phase.correctChoice.trim()
       await submissionRepo.flipDraftGraded(prisma, submission.id, correct ? DEFAULT_MAX_SCORE : 0)
     } else {
-      // 纯投票：记票即结束，无需复核。
+      // 纯投票（单选或多选，无正确答案）：记票即结束，无需复核。
       await submissionRepo.flipDraft(prisma, submission.id, 'UPLOADED', false)
     }
     revalidatePath('/student')
@@ -207,6 +212,28 @@ export async function submitChoice(phaseId: number, choice: string) {
   if (!options.includes(picked)) return { error: t('err.badChoice') }
 
   await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, picked)
+  revalidatePath('/student')
+  return { success: true }
+}
+
+// 多选题：记录学生勾选的多个选项（每个都必须是该环节配置的选项），去重后按选项顺序存成
+// JSON 数组进 recitedText——判分与票数聚合都从这个稳定编码读。
+export async function submitMultiChoice(phaseId: number, choices: string[]) {
+  const { user, prisma, t } = await studentContext()
+  const picked = new Set((Array.isArray(choices) ? choices : []).map((c) => (c ?? '').trim()).filter(Boolean))
+  if (picked.size === 0) return { error: t('err.needChoice') }
+
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+
+  const phase = await assignmentRepo.findPhaseForClasses(prisma, phaseId, classIds)
+  const options = parseChoices(phase?.choicesJson)
+  if (![...picked].every((c) => options.includes(c))) return { error: t('err.badChoice') }
+  // Store in the phase's option order so judging + aggregation are order-stable.
+  const ordered = options.filter((o) => picked.has(o))
+
+  await submissionRepo.upsertRecitedText(prisma, resolved.assignmentId, phaseId, user.userId, resolved.attempt, JSON.stringify(ordered))
   revalidatePath('/student')
   return { success: true }
 }

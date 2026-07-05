@@ -42,6 +42,8 @@ export interface PhaseInput {
   requireChoice?: boolean
   choicesJson?: string | null
   correctChoice?: string | null
+  multiChoice?: boolean
+  correctChoices?: string | null
   requireFreeText?: boolean
   rubric?: string | null
   perceptionModel?: string | null
@@ -96,7 +98,7 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
     include: {
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
-      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireVideo: true, requireAudio: true, requireChoice: true, choicesJson: true, correctChoice: true, requireFreeText: true, rubric: true, defaultPerceptionModel: true, defaultJudgeModel: true, _count: { select: { sentences: true } } } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireVideo: true, requireAudio: true, requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, requireFreeText: true, rubric: true, defaultPerceptionModel: true, defaultJudgeModel: true, _count: { select: { sentences: true } } } },
       submissions: {
         include: { student: { select: { name: true, studentNo: true } }, phase: { select: { order: true, title: true } } },
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
@@ -141,6 +143,8 @@ function phaseData(p: PhaseInput) {
     requireChoice: p.requireChoice ?? false,
     choicesJson: p.choicesJson ?? null,
     correctChoice: p.correctChoice ?? null,
+    multiChoice: p.multiChoice ?? false,
+    correctChoices: p.correctChoices ?? null,
     requireFreeText: p.requireFreeText ?? false,
     // Explicit type discriminator, derived from the submit-requirement flags by the one
     // source of truth (lib/phase-item-type) — kept consistent with migration 0042's
@@ -380,7 +384,7 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
     select: {
       id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true, freePractice: true,
       requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
-      requireChoice: true, choicesJson: true, correctChoice: true, requireFreeText: true,
+      requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, requireFreeText: true,
     },
   })
 }

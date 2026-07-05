@@ -34,6 +34,10 @@ export interface PhaseInitial {
   choices: string[]
   // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
   correctIndex: number
+  // 多选题：multiChoice=true → 学生可多选；correctIndices 是正确选项的下标集合
+  // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
+  multiChoice: boolean
+  correctIndices: number[]
   requireFreeText: boolean
   // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
   rubric: string
@@ -97,6 +101,10 @@ interface PhaseState {
   choices: string[]
   // 单选题正确答案的下标（-1 = 无正确答案，纯投票）。落库时映射成选项文本 correctChoice。
   correctIndex: number
+  // 多选题：multiChoice=true → 学生可多选；correctIndices 是正确选项的下标集合
+  // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
+  multiChoice: boolean
+  correctIndices: number[]
   requireFreeText: boolean
   // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
   rubric: string
@@ -127,6 +135,8 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     requireChoice: false,
     choices: [],
     correctIndex: -1,
+    multiChoice: false,
+    correctIndices: [],
     requireFreeText: false,
     rubric: '',
     perceptionModel: '',
@@ -233,7 +243,12 @@ export function AssignmentForm({
       requireChoice: p.requireChoice,
       choicesJson: p.requireChoice ? JSON.stringify(p.choices.map((c) => c.trim()).filter(Boolean)) : null,
       // 正确答案存「选项文本」（与学生作答 recitedText 同形，便于判分）；-1 或空选项 → 仅投票。
-      correctChoice: p.requireChoice && p.correctIndex >= 0 ? (p.choices[p.correctIndex]?.trim() || null) : null,
+      // 单选走 correctChoice；多选走 correctChoices（选项文本 JSON 数组），两者互斥不串。
+      correctChoice: p.requireChoice && !p.multiChoice && p.correctIndex >= 0 ? (p.choices[p.correctIndex]?.trim() || null) : null,
+      multiChoice: p.requireChoice && p.multiChoice,
+      correctChoices: p.requireChoice && p.multiChoice && p.correctIndices.length > 0
+        ? JSON.stringify(p.correctIndices.map((i) => p.choices[i]?.trim()).filter(Boolean))
+        : null,
       requireFreeText: p.requireFreeText,
       rubric: p.rubric.trim() || null,
       perceptionModel: p.perceptionModel || null,
@@ -618,21 +633,45 @@ function PhaseCard({
           客观判分；都不选（仅投票）→ 只统计票数分布、不判分。 */}
       {phase.requireChoice ? (
         <div className="space-y-2">
-          <Label>{t('asg.choiceOptions')}</Label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>{t('asg.choiceOptions')}</Label>
+            <div className="flex items-center gap-3">
+              {/* 单选 ↔ 多选切换：换模式清空已选正确项，避免残留脏数据。 */}
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input type="checkbox" checked={phase.multiChoice} onChange={(e) => onPatch({ multiChoice: e.target.checked, correctIndex: -1, correctIndices: [] })} className="h-3.5 w-3.5 accent-primary" />
+                {t('asg.multiChoice')}
+              </label>
+              {/* 判断题预设：两个选项（正确/错误）的单选，老师再点选哪个对。 */}
+              <button type="button" onClick={() => onPatch({ choices: [t('asg.tfTrue'), t('asg.tfFalse')], multiChoice: false, correctIndex: -1, correctIndices: [] })} className="tap text-xs text-primary hover:underline">
+                {t('asg.trueFalsePreset')}
+              </button>
+            </div>
+          </div>
           <div className="space-y-2 rounded-xl border border-input p-3">
             {phase.choices.map((opt, oi) => (
               <div key={oi} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={`correct-${index}`}
-                  checked={phase.correctIndex === oi}
-                  onChange={() => onPatch({ correctIndex: oi })}
-                  className="h-4 w-4 shrink-0 accent-[hsl(var(--success))]"
-                  title={t('asg.markCorrect')}
-                  aria-label={t('asg.markCorrect')}
-                />
+                {phase.multiChoice ? (
+                  <input
+                    type="checkbox"
+                    checked={phase.correctIndices.includes(oi)}
+                    onChange={(e) => onPatch({ correctIndices: e.target.checked ? [...phase.correctIndices, oi].sort((a, b) => a - b) : phase.correctIndices.filter((x) => x !== oi) })}
+                    className="h-4 w-4 shrink-0 accent-[hsl(var(--success))]"
+                    title={t('asg.markCorrect')}
+                    aria-label={t('asg.markCorrect')}
+                  />
+                ) : (
+                  <input
+                    type="radio"
+                    name={`correct-${index}`}
+                    checked={phase.correctIndex === oi}
+                    onChange={() => onPatch({ correctIndex: oi })}
+                    className="h-4 w-4 shrink-0 accent-[hsl(var(--success))]"
+                    title={t('asg.markCorrect')}
+                    aria-label={t('asg.markCorrect')}
+                  />
+                )}
                 <Input value={opt} onChange={(e) => onPatch({ choices: phase.choices.map((c, j) => (j === oi ? e.target.value : c)) })} placeholder={t('asg.choiceOptionPh', { n: oi + 1 })} aria-label={t('asg.choiceOptionPh', { n: oi + 1 })} />
-                <button type="button" onClick={() => onPatch({ choices: phase.choices.filter((_, j) => j !== oi), correctIndex: phase.correctIndex === oi ? -1 : phase.correctIndex > oi ? phase.correctIndex - 1 : phase.correctIndex })} disabled={phase.choices.length <= 2} className="tap shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label={t('asg.removeOption')}>
+                <button type="button" onClick={() => onPatch({ choices: phase.choices.filter((_, j) => j !== oi), correctIndex: phase.correctIndex === oi ? -1 : phase.correctIndex > oi ? phase.correctIndex - 1 : phase.correctIndex, correctIndices: phase.correctIndices.filter((x) => x !== oi).map((x) => (x > oi ? x - 1 : x)) })} disabled={phase.choices.length <= 2} className="tap shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-accent disabled:opacity-30" aria-label={t('asg.removeOption')}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -641,14 +680,16 @@ function PhaseCard({
               <Button type="button" variant="outline" size="sm" onClick={() => onPatch({ choices: [...phase.choices, ''] })}>
                 <Plus className="h-4 w-4" />{t('asg.addOption')}
               </Button>
-              {phase.correctIndex >= 0 ? (
-                <button type="button" onClick={() => onPatch({ correctIndex: -1 })} className="tap text-xs text-muted-foreground hover:text-foreground">
+              {(phase.multiChoice ? phase.correctIndices.length > 0 : phase.correctIndex >= 0) ? (
+                <button type="button" onClick={() => onPatch({ correctIndex: -1, correctIndices: [] })} className="tap text-xs text-muted-foreground hover:text-foreground">
                   {t('asg.clearCorrect')}
                 </button>
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
-              {phase.correctIndex >= 0 ? t('asg.choiceGradedHint') : t('asg.choicePollHint')}
+              {phase.multiChoice
+                ? (phase.correctIndices.length > 0 ? t('asg.multiGradedHint') : t('asg.multiPollHint'))
+                : (phase.correctIndex >= 0 ? t('asg.choiceGradedHint') : t('asg.choicePollHint'))}
             </p>
           </div>
         </div>

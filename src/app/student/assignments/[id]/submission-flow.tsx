@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PenLine, Video, Mic, Camera, Check, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, ListChecks, MessageSquare } from 'lucide-react'
-import { submitRecitedText, submitChoice, submitFreeText, finishSubmission, getOwnSubmissionMediaUrl } from '@/actions/submissions'
+import { submitRecitedText, submitChoice, submitMultiChoice, submitFreeText, finishSubmission, getOwnSubmissionMediaUrl } from '@/actions/submissions'
+import { parseChoices, sameChoiceSet } from '@/lib/choices'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -117,20 +118,22 @@ function TextStep({
 }
 
 // 单选投票步骤：从老师配置的选项里选一个提交。无对错，纯记票。
-function ChoiceStep({ phaseId, choices, initial, onDone }: { phaseId: number; choices: string[]; initial: string; onDone: () => void }) {
+function ChoiceStep({ phaseId, choices, initial, multiChoice, onDone }: { phaseId: number; choices: string[]; initial: string; multiChoice: boolean; onDone: () => void }) {
   const t = useT()
-  const [picked, setPicked] = useState(initial)
+  const [picked, setPicked] = useState(initial) // 单选
+  const [pickedSet, setPickedSet] = useState<string[]>(() => (multiChoice ? parseChoices(initial) : [])) // 多选
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
 
   function submit() {
     setError(null)
     start(async () => {
-      const res = await submitChoice(phaseId, picked)
+      const res = multiChoice ? await submitMultiChoice(phaseId, pickedSet) : await submitChoice(phaseId, picked)
       if (res.error) setError(res.error)
       else onDone()
     })
   }
+  const canSubmit = multiChoice ? pickedSet.length > 0 : Boolean(picked)
 
   return (
     <Card>
@@ -138,27 +141,32 @@ function ChoiceStep({ phaseId, choices, initial, onDone }: { phaseId: number; ch
         <CardTitle>{t('sub.choiceTitle')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">{t('sub.choiceDesc')}</p>
+        <p className="text-sm text-muted-foreground">{multiChoice ? t('sub.choiceMultiDesc') : t('sub.choiceDesc')}</p>
         <div className="space-y-2">
-          {choices.map((opt, i) => (
-            <label
-              key={i}
-              className={'flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm ' + (picked === opt ? 'border-primary bg-primary/5 font-medium' : 'border-input')}
-            >
-              <input
-                type="radio"
-                name={`choice-${phaseId}`}
-                value={opt}
-                checked={picked === opt}
-                onChange={() => setPicked(opt)}
-                className="h-4 w-4 accent-[hsl(var(--primary))]"
-              />
-              <span className="whitespace-pre-wrap">{opt}</span>
-            </label>
-          ))}
+          {choices.map((opt, i) => {
+            const on = multiChoice ? pickedSet.includes(opt) : picked === opt
+            return (
+              <label
+                key={i}
+                className={'flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm ' + (on ? 'border-primary bg-primary/5 font-medium' : 'border-input')}
+              >
+                <input
+                  type={multiChoice ? 'checkbox' : 'radio'}
+                  name={`choice-${phaseId}`}
+                  value={opt}
+                  checked={on}
+                  onChange={() => multiChoice
+                    ? setPickedSet((s) => (s.includes(opt) ? s.filter((x) => x !== opt) : [...s, opt]))
+                    : setPicked(opt)}
+                  className="h-4 w-4 accent-[hsl(var(--primary))]"
+                />
+                <span className="whitespace-pre-wrap">{opt}</span>
+              </label>
+            )
+          })}
         </div>
         {error ? <FormMessage>{error}</FormMessage> : null}
-        <Button onClick={submit} disabled={pending || !picked} size="lg" className="w-full">
+        <Button onClick={submit} disabled={pending || !canSubmit} size="lg" className="w-full">
           {pending ? t('sub.submitting') : t('submit')}
         </Button>
       </CardContent>
@@ -216,6 +224,8 @@ export function SubmissionFlow(props: {
   requireChoice: boolean
   choices: string[]
   correctChoice?: string | null
+  multiChoice?: boolean
+  correctChoices?: string[]
   requireFreeText: boolean
   attemptsLeft: number
   windowState: 'open' | 'not-open' | 'closed'
@@ -317,9 +327,16 @@ export function SubmissionFlow(props: {
   if (completed && !redo) {
     const byOrder = new Map(props.latestPerSentence.map((p) => [p.order, p]))
     const hasPerSentence = props.latestPerSentence.length > 0 && props.sentences.length > 0
-    // 单选题（设了正确答案）：判断对错，便于回显对/错与揭晓答案。
-    const choiceGraded = props.requireChoice && !!props.correctChoice && !!props.initialRecitedText
-    const choiceRight = choiceGraded && props.initialRecitedText.trim() === (props.correctChoice as string).trim()
+    // 单选/多选（设了正确答案）：判断对错，便于回显对/错与揭晓答案。
+    const answered = !!props.initialRecitedText
+    const isMulti = props.requireChoice && !!props.multiChoice
+    const choiceGraded = props.requireChoice && answered && (isMulti ? (props.correctChoices?.length ?? 0) > 0 : !!props.correctChoice)
+    const choiceRight = choiceGraded && (isMulti
+      ? sameChoiceSet(parseChoices(props.initialRecitedText), props.correctChoices ?? [])
+      : props.initialRecitedText.trim() === (props.correctChoice as string).trim())
+    // 回显文本：多选作答是 JSON 数组，展开成「A、B」；揭晓答案同理。
+    const answerText = isMulti ? parseChoices(props.initialRecitedText).join('、') : props.initialRecitedText
+    const correctText = isMulti ? (props.correctChoices ?? []).join('、') : (props.correctChoice ?? '')
     // The lines the AI marked weak — so the student can drill just those (零压力练习).
     const weakSentences = props.sentences.filter((s) => {
       const p = byOrder.get(s.order)
@@ -336,14 +353,14 @@ export function SubmissionFlow(props: {
                 ? t('sub.reviewPending')
                 : t('sub.bothDone')}
           </FormMessage>
-          {/* 单选投票 / 自由文本：把学生提交的答案回显出来。 */}
+          {/* 单选/多选投票 / 自由文本：把学生提交的答案回显出来。 */}
           {props.sentences.length === 0 && props.initialRecitedText ? (
             <div className="rounded-xl bg-secondary p-3">
               <div className="text-xs font-medium text-muted-foreground">{t('sub.yourAnswer')}</div>
-              <p className="mt-1 whitespace-pre-wrap">{props.initialRecitedText}</p>
+              <p className="mt-1 whitespace-pre-wrap">{answerText}</p>
             </div>
           ) : null}
-          {/* 单选题：显示对/错；答错且非正式测试时揭晓正确答案。 */}
+          {/* 单选/多选题：显示对/错；答错且非正式测试时揭晓正确答案。 */}
           {choiceGraded ? (
             <div className={'rounded-xl p-3 ' + (choiceRight ? 'bg-success/10' : 'bg-destructive/10')}>
               <p className={'flex items-center gap-1.5 font-medium ' + (choiceRight ? 'text-success' : 'text-destructive')}>
@@ -351,7 +368,7 @@ export function SubmissionFlow(props: {
                 {choiceRight ? t('sub.correct') : t('sub.wrong')}
               </p>
               {!choiceRight && !props.isFormalTest ? (
-                <p className="mt-1 text-xs text-muted-foreground">{t('sub.correctAnswer')}{props.correctChoice}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t('sub.correctAnswer')}{correctText}</p>
               ) : null}
             </div>
           ) : null}
@@ -443,7 +460,7 @@ export function SubmissionFlow(props: {
       ) : current === 'text' ? (
         <TextStep phaseId={props.phaseId} initial={props.initialRecitedText} onDone={advance} />
       ) : current === 'choice' ? (
-        <ChoiceStep phaseId={props.phaseId} choices={props.choices} initial={props.initialRecitedText} onDone={advance} />
+        <ChoiceStep phaseId={props.phaseId} choices={props.choices} initial={props.initialRecitedText} multiChoice={Boolean(props.multiChoice)} onDone={advance} />
       ) : current === 'freetext' ? (
         <TextStep
           phaseId={props.phaseId}

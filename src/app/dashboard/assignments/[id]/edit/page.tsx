@@ -46,6 +46,8 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       requireChoice: p.requireChoice,
       choices: parseChoices(p.choicesJson),
       correctIndex: p.correctChoice ? parseChoices(p.choicesJson).indexOf(p.correctChoice) : -1,
+      multiChoice: p.multiChoice,
+      correctIndices: parseChoices(p.correctChoices).map((c) => parseChoices(p.choicesJson).indexOf(c)).filter((i) => i >= 0),
       requireFreeText: p.requireFreeText,
       rubric: p.rubric ?? '',
       perceptionModel: p.defaultPerceptionModel ?? '',

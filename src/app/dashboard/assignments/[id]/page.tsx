@@ -7,7 +7,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
-import { parseChoices } from '@/lib/choices'
+import { parseChoices, sameChoiceSet } from '@/lib/choices'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 import { GradingClient } from './grading-client'
@@ -89,23 +89,31 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       sentenceCount: p._count.sentences,
     }))
 
-  // 单选环节的票数分布：每个环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
-  // 设了 correctChoice 的当作单选题：标出正确项并算正确率。
+  // 选择环节的票数分布：每个环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
+  // 单选（correctChoice）/ 多选（correctChoices，全对才算对）设了答案的当作有正确答案的题：
+  // 标出正确项并算正确率。学生作答：多选是 JSON 数组、单选是选项文本。
   const pollSubs = [...latestByStudentPhase.values()].filter((s) => s.status !== 'DRAFT')
   const pollResults = assignment.phases
     .filter((p) => p.requireChoice)
     .map((p) => {
       const subs = pollSubs.filter((s) => s.phaseId === p.id)
-      const correct = p.correctChoice?.trim() || null
+      const isMulti = p.multiChoice
+      const correctSet = isMulti ? parseChoices(p.correctChoices) : []
+      const correct = isMulti ? null : (p.correctChoice?.trim() || null)
+      const hasKey = isMulti ? correctSet.length > 0 : correct != null
+      const selectedOf = (s: (typeof subs)[number]) => (isMulti ? parseChoices(s.recitedText) : [(s.recitedText ?? '').trim()].filter(Boolean))
+      const correctNorm = new Set(correctSet.map((c) => c.trim()))
       return {
         phaseLabel: multiPhase ? (p.title?.trim() || t('phase.nth', { n: p.order })) : undefined,
         total: subs.length,
         correctChoice: correct,
-        correctCount: correct ? subs.filter((s) => (s.recitedText ?? '').trim() === correct).length : null,
+        correctCount: hasKey
+          ? subs.filter((s) => (isMulti ? sameChoiceSet(selectedOf(s), correctSet) : (s.recitedText ?? '').trim() === correct)).length
+          : null,
         options: parseChoices(p.choicesJson).map((label) => ({
           label,
-          count: subs.filter((s) => (s.recitedText ?? '') === label).length,
-          correct: correct != null && label.trim() === correct,
+          count: subs.filter((s) => selectedOf(s).includes(label)).length,
+          correct: isMulti ? correctNorm.has(label.trim()) : correct != null && label.trim() === correct,
         })),
       }
     })

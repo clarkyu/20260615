@@ -102,6 +102,15 @@ describe('buildTemplatePayload', () => {
     expect(parsed.phases[1]).toMatchObject({ requireFreeText: true, rubric: '内容 60 结构 40' })
   })
 
+  it('preserves multi-select fields (multiChoice + correctChoices) through build + parse', () => {
+    const payload = buildTemplatePayload({ title: 'T', monthLabel: null }, [
+      srcPhase({ requireChoice: true, multiChoice: true, choicesJson: JSON.stringify(['A', 'B', 'C']), correctChoices: JSON.stringify(['A', 'C']) }),
+    ], null)
+    expect(payload.phases[0]).toMatchObject({ multiChoice: true, correctChoices: JSON.stringify(['A', 'C']) })
+    const parsed = parseTemplatePayload(JSON.stringify(payload))!
+    expect(parsed.phases[0]).toMatchObject({ requireChoice: true, multiChoice: true, correctChoices: JSON.stringify(['A', 'C']) })
+  })
+
   it('joins typed sentences with newlines and carries chunkSetId', () => {
     const payload = buildTemplatePayload({ title: 'T', monthLabel: null }, [srcPhase({ typedSentences: ['a', 'b'], requireText: true })], 7)
     expect(payload.chunkSetId).toBe(7)

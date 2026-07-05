@@ -303,11 +303,15 @@ model Phase {
   requireAudio Boolean @default(false)
   requireVideo Boolean @default(true)
   requireHandwriting Boolean @default(false)
-  // 单选投票：选项见 choicesJson。correctChoice 为空 → 纯投票，只统计分布、不判分；
-  // 设了 correctChoice（某个选项的文本）→ 当作单选题，提交即客观判分（对=满分/错=0）。
+  // 选择题：选项见 choicesJson。单选（multiChoice=false）：correctChoice 为空 → 纯投票，
+  // 只统计分布、不判分；设了 correctChoice（某选项文本）→ 单选题，提交即客观判分（对=满分/错=0）。
   requireChoice Boolean @default(false)
   choicesJson  String?
   correctChoice String?
+  // 多选题（multiChoice=true）：correctChoices 是正确选项文本的 JSON 数组。设了 → 提交即
+  // 客观判分，全对（所选集合 == 正确集合）得满分、否则 0；为空 → 多选投票（只统计分布不判分）。
+  multiChoice   Boolean @default(false)
+  correctChoices String?
   // 自由文本：开放式提交，老师评阅时按自己的标准人工打分（不走背诵 AI 评分）。
   requireFreeText Boolean @default(false)
   graded       Boolean @default(true)  // false → 仅练习、不计分
