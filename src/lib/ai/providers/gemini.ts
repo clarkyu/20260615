@@ -1,4 +1,7 @@
 import type {
+  AuthorDraft,
+  AuthorInput,
+  AuthorProvider,
   JudgeInput,
   JudgeResult,
   PerceptionInput,
@@ -9,6 +12,10 @@ import type {
   TextJudgeInput,
   TokenUsage,
 } from '../types'
+
+// Re-exported so long-standing imports of these authoring types from this module
+// keep working; the canonical definitions now live in ../types.
+export type { AuthorDraft, AuthorInput } from '../types'
 import { config } from '@/lib/config'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
@@ -330,19 +337,6 @@ const AUTHOR_SCHEMA = {
   required: ['title', 'sentences'],
 } as const
 
-export interface AuthorDraft {
-  title: string
-  category: string
-  instructions: string
-  sentences: string[]
-}
-
-export interface AuthorInput {
-  topic: string
-  imageBase64?: string
-  imageMime?: string
-}
-
 export function normalizeAuthorDraft(raw: unknown): AuthorDraft {
   const r = raw as { title?: unknown; category?: unknown; instructions?: unknown; sentences?: unknown }
   const sentences = Array.isArray(r?.sentences) ? r.sentences.map((s) => String(s).trim()).filter(Boolean) : []
@@ -367,11 +361,15 @@ export function buildAuthorPrompt(topic: string, hasImage: boolean): string {
   ].join('\n')
 }
 
-export async function geminiAuthor(input: AuthorInput, modelId: string): Promise<AuthorDraft> {
-  const parts: Part[] = [{ text: buildAuthorPrompt(input.topic, Boolean(input.imageBase64)) }]
-  if (input.imageBase64 && input.imageMime) {
-    parts.push({ inlineData: { mimeType: input.imageMime, data: input.imageBase64 } })
-  }
-  const { data } = await generate(modelId, parts, AUTHOR_SCHEMA)
-  return normalizeAuthorDraft(data)
+// Gemini is the multimodal author: it can read a textbook photo inline alongside
+// the teacher's brief. Also serves the text-only path when a Gemini model is picked.
+export const geminiAuthor: AuthorProvider = {
+  async author(input: AuthorInput, modelId: string): Promise<AuthorDraft> {
+    const parts: Part[] = [{ text: buildAuthorPrompt(input.topic, Boolean(input.imageBase64)) }]
+    if (input.imageBase64 && input.imageMime) {
+      parts.push({ inlineData: { mimeType: input.imageMime, data: input.imageBase64 } })
+    }
+    const { data } = await generate(modelId, parts, AUTHOR_SCHEMA)
+    return normalizeAuthorDraft(data)
+  },
 }

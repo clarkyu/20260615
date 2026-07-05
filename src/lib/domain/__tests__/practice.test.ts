@@ -15,6 +15,8 @@ vi.mock('@/lib/ai/providers/whisper', () => ({
 // pipeline test.
 vi.mock('@/lib/ai/providers/anthropic', () => ({
   claudeJudge: { judge: async () => ({ score: 8, breakdown: { 完整度: 4, 准确度: 4 }, feedback: '不错', confidence: 0.9 }) },
+  // adapters.ts wires claudeAuthor into the author map; stub it so this mock stays complete.
+  claudeAuthor: { author: async () => ({ title: '', category: '', instructions: '', sentences: [] }) },
 }))
 
 import { gradePractice } from '@/lib/domain/practice'

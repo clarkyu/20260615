@@ -1,4 +1,4 @@
-import type { ModelDescriptor, Provider } from './types'
+import type { Capability, ModelDescriptor, Provider } from './types'
 
 // The catalogue of models teachers can pick from. `id` is the actual API model
 // name sent to the provider. Capability + modality tags drive which stage each
@@ -8,22 +8,22 @@ export const MODELS: ModelDescriptor[] = [
     id: 'gemini-2.5-flash',
     label: 'Gemini 2.5 Flash（视频+音频，一把梭）',
     provider: 'gemini',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['video', 'audio', 'image', 'text'],
-    note: '原生吃视频+音频，最省事；跑量首选。',
+    note: '原生吃视频+音频，最省事；跑量首选。也是拍课本照片出题的默认模型。',
   },
   {
     id: 'gemini-2.5-pro',
     label: 'Gemini 2.5 Pro（难例复核）',
     provider: 'gemini',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['video', 'audio', 'image', 'text'],
   },
   {
     id: 'gemini-3-flash-preview',
     label: 'Gemini 3 Flash（预览·中间价位）',
     provider: 'gemini',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['video', 'audio', 'image', 'text'],
     note: '预览版，比 3.5 Flash 便宜（约 $0.50/$3）；想升级又想控成本时用。',
   },
@@ -31,7 +31,7 @@ export const MODELS: ModelDescriptor[] = [
     id: 'gemini-3.5-flash',
     label: 'Gemini 3.5 Flash（最新·视频+音频·跑量首选）',
     provider: 'gemini',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['video', 'audio', 'image', 'text'],
     note: '最新稳定版 Flash，原生吃视频+音频；日常批改首选。',
   },
@@ -39,7 +39,7 @@ export const MODELS: ModelDescriptor[] = [
     id: 'gemini-3.1-pro-preview',
     label: 'Gemini 3.1 Pro（预览·难例复核）',
     provider: 'gemini',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['video', 'audio', 'image', 'text'],
     note: '预览版，能力最强；留给难例复核。',
   },
@@ -47,23 +47,23 @@ export const MODELS: ModelDescriptor[] = [
     id: 'qwen-omni-turbo',
     label: '通义千问 Qwen-Omni（音频/视频+文本）',
     provider: 'qwen',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['video', 'audio', 'image', 'text'],
     note: '国内账号好申请。',
   },
   {
     id: 'MiniMax-Text-01',
-    label: 'MiniMax（文本评分）',
+    label: 'MiniMax（文本评分/出题）',
     provider: 'minimax',
-    capabilities: ['judge'],
+    capabilities: ['judge', 'author'],
     modalities: ['text'],
-    note: '纯文本评分，配合感知模型用。',
+    note: '纯文本评分/出题，配合感知模型用。',
   },
   {
     id: 'gpt-4o',
     label: 'GPT-4o（音频+抽帧）',
     provider: 'openai',
-    capabilities: ['perception', 'judge'],
+    capabilities: ['perception', 'judge', 'author'],
     modalities: ['audio', 'image', 'text'],
   },
   {
@@ -85,17 +85,17 @@ export const MODELS: ModelDescriptor[] = [
   },
   {
     id: 'deepseek-v4-flash',
-    label: 'DeepSeek V4 Flash（按评分标准打分·更省）',
+    label: 'DeepSeek V4 Flash（评分/出题·更省）',
     provider: 'deepseek',
-    capabilities: ['judge'],
+    capabilities: ['judge', 'author'],
     modalities: ['text'],
-    note: '纯文本，只能做评分阶段。deepseek-chat 的继任者；跑量更省。',
+    note: '纯文本，做评分与文字出题；备课出题默认，跑量更省。deepseek-chat 的继任者。',
   },
   {
     id: 'claude-opus-4-8',
     label: 'Claude（精细评分+评语）',
     provider: 'claude',
-    capabilities: ['judge'],
+    capabilities: ['judge', 'author'],
     modalities: ['text', 'image'],
   },
 ]
@@ -125,9 +125,13 @@ export const PRESETS: Preset[] = [
 // 评分页按环节改。写作(纯文本评)与口语(Gemini 感知 → DeepSeek 评)都吃这个默认评分模型。
 export const DEFAULT_PERCEPTION_MODEL = 'gemini-3.5-flash'
 export const DEFAULT_JUDGE_MODEL = 'deepseek-v4-pro'
-// Authoring (备课出题) keeps the cheaper 2.5 Flash by default (occasional, low-stakes
-// text task); independent of the judge default so changing one never breaks the other.
-export const DEFAULT_AUTHOR_MODEL = 'gemini-2.5-flash'
+// Authoring (备课出题):
+//  · text/topic path → DeepSeek by default (cheap, capable at this text task; "让
+//    DeepSeek 做默认能做的"). Teachers can pick any author-capable model per draft.
+//  · textbook-photo path → needs a multimodal model, so it's routed to Gemini
+//    regardless of the text pick (see resolveAuthorModel).
+export const DEFAULT_AUTHOR_MODEL = 'deepseek-v4-flash'
+export const DEFAULT_AUTHOR_IMAGE_MODEL = 'gemini-2.5-flash'
 
 // ── teacher-facing catalogue metadata (用户中心：各家·使用范围·价格) ──
 
@@ -196,6 +200,21 @@ export function getModel(id: string): ModelDescriptor | undefined {
   return MODELS.find((m) => m.id === resolved)
 }
 
-export function modelsForCapability(cap: 'perception' | 'judge'): ModelDescriptor[] {
+export function modelsForCapability(cap: Capability): ModelDescriptor[] {
   return MODELS.filter((m) => m.capabilities.includes(cap))
+}
+
+// Pick the model that actually runs an authoring draft. The teacher's choice wins when
+// it's author-capable; otherwise we fall back to the default. A textbook photo forces a
+// multimodal (Gemini) model — only Gemini's author adapter reads the inline image, so a
+// text-only pick (e.g. DeepSeek) would silently drop the photo. Always returns a valid id.
+export function resolveAuthorModel(requestedId: string | undefined, hasImage: boolean): string {
+  const requested = requestedId ? getModel(requestedId) : undefined
+  const canAuthor = requested?.capabilities.includes('author') ?? false
+  if (hasImage) {
+    if (canAuthor && requested!.provider === 'gemini') return requested!.id
+    return DEFAULT_AUTHOR_IMAGE_MODEL
+  }
+  if (canAuthor) return requested!.id
+  return DEFAULT_AUTHOR_MODEL
 }

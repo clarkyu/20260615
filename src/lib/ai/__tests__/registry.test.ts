@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { getModel, modelsForCapability, DEFAULT_JUDGE_MODEL, DEFAULT_PERCEPTION_MODEL } from '../registry'
+import {
+  DEFAULT_AUTHOR_MODEL,
+  DEFAULT_AUTHOR_IMAGE_MODEL,
+  DEFAULT_JUDGE_MODEL,
+  DEFAULT_PERCEPTION_MODEL,
+  getModel,
+  modelsForCapability,
+  resolveAuthorModel,
+} from '../registry'
 
 describe('getModel + legacy aliases', () => {
   it('resolves the live DeepSeek V4 Flash id', () => {
@@ -42,5 +50,50 @@ describe('system default models are valid + capability-correct', () => {
     const p = getModel(DEFAULT_PERCEPTION_MODEL)
     expect(p?.capabilities).toContain('perception')
     expect(p?.modalities).toContain('video')
+  })
+})
+
+describe('authoring capability + defaults', () => {
+  it('offers DeepSeek and Gemini as authoring models, but not Whisper', () => {
+    const authorIds = modelsForCapability('author').map((m) => m.id)
+    expect(authorIds).toContain('deepseek-v4-flash')
+    expect(authorIds).toContain('gemini-2.5-flash')
+    expect(authorIds).not.toContain('whisper-1')
+  })
+
+  it('defaults text authoring to DeepSeek and the photo path to a multimodal Gemini', () => {
+    expect(DEFAULT_AUTHOR_MODEL).toBe('deepseek-v4-flash')
+    expect(getModel(DEFAULT_AUTHOR_MODEL)?.capabilities).toContain('author')
+    const imageModel = getModel(DEFAULT_AUTHOR_IMAGE_MODEL)
+    expect(imageModel?.provider).toBe('gemini')
+    expect(imageModel?.modalities).toContain('image')
+  })
+})
+
+describe('resolveAuthorModel', () => {
+  it('falls back to the DeepSeek default when no model is requested (text path)', () => {
+    expect(resolveAuthorModel(undefined, false)).toBe('deepseek-v4-flash')
+  })
+
+  it('honors an author-capable pick on the text path', () => {
+    expect(resolveAuthorModel('claude-opus-4-8', false)).toBe('claude-opus-4-8')
+  })
+
+  it('ignores a non-author model and uses the default', () => {
+    // whisper can't author → default
+    expect(resolveAuthorModel('whisper-1', false)).toBe('deepseek-v4-flash')
+  })
+
+  it('forces the photo path onto Gemini when a text-only model was picked', () => {
+    expect(resolveAuthorModel('deepseek-v4-flash', true)).toBe('gemini-2.5-flash')
+  })
+
+  it('keeps a Gemini pick on the photo path (it can read the image)', () => {
+    expect(resolveAuthorModel('gemini-3.5-flash', true)).toBe('gemini-3.5-flash')
+  })
+
+  it('resolves a legacy alias before checking capability', () => {
+    // deepseek-chat → deepseek-v4-flash (author-capable) on the text path
+    expect(resolveAuthorModel('deepseek-chat', false)).toBe('deepseek-v4-flash')
   })
 })

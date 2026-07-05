@@ -25,6 +25,7 @@ export async function draftAssignmentAction(formData: FormData): Promise<DraftRe
   const { user, prisma, t } = await staffContext()
 
   const topic = ((formData.get('topic') as string) ?? '').trim()
+  const model = ((formData.get('authorModel') as string) ?? '').trim() || undefined
   const image = formData.get('image')
   const hasImage = image instanceof File && image.size > 0
   if (!topic && !hasImage) return { status: 'error', message: t('author.needInput') }
@@ -43,7 +44,7 @@ export async function draftAssignmentAction(formData: FormData): Promise<DraftRe
 
   // Use the authoring teacher's own key (BYOK); empty → platform key.
   const keys = await resolveTeacherKeys(prisma, user.userId)
-  const outcome = await withAiKeys(keys, () => draftAssignment({ topic, imageBase64, imageMime }))
+  const outcome = await withAiKeys(keys, () => draftAssignment({ topic, imageBase64, imageMime, model }))
   if (outcome.status === 'unavailable') return { status: 'unavailable' }
   if (outcome.status === 'error') return { status: 'error', message: t('author.failed') }
 

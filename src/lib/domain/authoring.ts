@@ -1,10 +1,12 @@
 // AI authoring (备课出题) domain service. Drafts an assignment from a teacher's
-// topic and/or a textbook photo. Gemini-backed (the configured multimodal model);
-// degrades gracefully to `unavailable` when no key is set.
+// topic and/or a textbook photo. Pluggable: the teacher's chosen model routes to the
+// matching provider (DeepSeek by default for text; Gemini for the photo path).
+// Degrades gracefully to `unavailable` when the chosen provider's key is missing.
 
-import { geminiAuthor, type AuthorDraft } from '@/lib/ai/providers/gemini'
+import type { AuthorDraft } from '@/lib/ai/types'
+import { getAuthorProvider } from '@/lib/ai/adapters'
+import { getModel, resolveAuthorModel } from '@/lib/ai/registry'
 import { logError } from '../log'
-import { DEFAULT_AUTHOR_MODEL } from '@/lib/ai/registry'
 import { isUnavailable } from './grading'
 
 export type DraftOutcome =
@@ -16,11 +18,18 @@ export async function draftAssignment(input: {
   topic: string
   imageBase64?: string
   imageMime?: string
+  // Teacher's preferred author model id; empty/unknown → registry default.
+  model?: string
 }): Promise<DraftOutcome> {
+  const hasImage = Boolean(input.imageBase64 && input.imageMime)
+  const modelId = resolveAuthorModel(input.model, hasImage)
+  const provider = getModel(modelId)?.provider
+  const author = provider ? getAuthorProvider(provider) : undefined
+  if (!author) return { status: 'error', message: `no author provider for ${modelId}` }
   try {
-    const draft = await geminiAuthor(
+    const draft = await author.author(
       { topic: input.topic, imageBase64: input.imageBase64, imageMime: input.imageMime },
-      DEFAULT_AUTHOR_MODEL,
+      modelId,
     )
     if (draft.sentences.length === 0) return { status: 'error', message: 'empty draft' }
     return { status: 'ok', draft }

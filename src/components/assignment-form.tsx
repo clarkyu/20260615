@@ -73,6 +73,8 @@ const CATEGORY_PRESETS = ['背诵作业', '口语作业', '书面作业', '试�
 // 评分模型可选项（纯静态目录，客户端直接读 registry）。空选项 = 跟随作业/平台默认。
 const PERCEPTION_MODELS = modelsForCapability('perception').map((m) => ({ id: m.id, label: m.label }))
 const JUDGE_MODELS = modelsForCapability('judge').map((m) => ({ id: m.id, label: m.label }))
+// AI 出题（备课）可选模型。空选项 = 默认（文字用 DeepSeek，拍照自动切 Gemini）。
+const AUTHOR_MODELS = modelsForCapability('author').map((m) => ({ id: m.id, label: m.label }))
 
 // Open/due times round-trip through the browser, where the timezone is known. A
 // `datetime-local` input is a *local* wall-clock; a UTC server would otherwise read
@@ -854,6 +856,7 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
   const [open, setOpen] = useState(false)
   const [topic, setTopic] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [model, setModel] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -863,6 +866,7 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
     try {
       const fd = new FormData()
       fd.set('topic', topic)
+      if (model) fd.set('authorModel', model)
       if (file) fd.set('image', file)
       const res = await draftAssignmentAction(fd)
       if (res.status === 'ok') { onApply(res.draft); setMsg(t('author.applied')) }
@@ -911,6 +915,14 @@ function AiDraftPanel({ onApply }: { onApply: (d: DraftFields) => void }) {
             <ImageUp className="h-4 w-4" />{file ? t('author.photoChosen') : t('author.addPhoto')}
           </Button>
           {file ? <button type="button" onClick={() => setFile(null)} className="text-xs text-muted-foreground hover:text-foreground">{t('author.removePhoto')}</button> : null}
+        </div>
+        <div className="space-y-1.5">
+          <Label>{t('author.model')}</Label>
+          <Select value={model} onChange={(e) => setModel(e.target.value)} aria-label={t('author.model')}>
+            <option value="">{t('author.modelDefault')}</option>
+            {AUTHOR_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </Select>
+          <p className="text-xs text-muted-foreground">{t('author.modelHint')}</p>
         </div>
         {msg ? <FormMessage>{msg}</FormMessage> : null}
         <div className="flex gap-2">
