@@ -9,9 +9,10 @@ import { config } from '@/lib/config'
 // differs (x-api-key + anthropic-version headers, a `content` block response). Pair it
 // with any perception provider.
 
-// Must match the JSON shape normalizeJudge parses.
+// Must match the JSON shape normalizeJudge parses. `confidence` is required — decideReview
+// uses it to auto-approve; omitting it silently forces every submission to teacher review.
 const JUDGE_JSON_HINT =
-  '\n\n只返回 JSON，不要解释：{"score": number, "breakdown": [{"dimension": string, "points": number}], "feedback": string}'
+  '\n\n只返回 JSON，不要解释：{"score": number, "breakdown": [{"dimension": string, "points": number}], "feedback": string, "confidence": number}'
 
 // Must match the JSON shape normalizeAuthorDraft parses.
 const AUTHOR_JSON_HINT =

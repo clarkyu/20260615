@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { estimateGrading, formatTokens, MODEL_RATES, costUsd } from '../cost'
+import { PRESETS, DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '../registry'
 
 const sub = (over: Partial<{ hasVideo: boolean; hasAudio: boolean; hasImage: boolean; durationSec: number; recitedLen: number }> = {}) => ({
   hasVideo: false, hasAudio: false, hasImage: false, durationSec: 0, recitedLen: 0, ...over,
@@ -42,10 +43,19 @@ describe('estimateGrading', () => {
     expect(e).toMatchObject({ count: 0, totalTokens: 0, usd: 0, cny: 0 })
   })
 
-  it('has a rate for every preset-reachable model', () => {
-    for (const id of ['gemini-3.5-flash', 'gemini-2.5-flash', 'qwen-omni-turbo', 'whisper-1', 'deepseek-v4-flash', 'MiniMax-Text-01', 'claude-opus-4-8']) {
-      expect(MODEL_RATES[id]).toBeDefined()
+  it('has a rate for every default + preset-reachable grading model (derived from the registry so it cannot drift — audit P0-2)', () => {
+    // Derive the set the app can actually route to, so a new default/preset (e.g. #298's
+    // deepseek-v4-pro default judge) can never again ship without a cost rate → silent $0.
+    const referenced = new Set<string>([
+      DEFAULT_PERCEPTION_MODEL,
+      DEFAULT_JUDGE_MODEL,
+      ...PRESETS.flatMap((p) => [p.perceptionModel, p.judgeModel]),
+    ])
+    for (const id of referenced) {
+      expect(MODEL_RATES[id], `MODEL_RATES is missing a rate for '${id}' → costUsd would silently return 0`).toBeDefined()
     }
+    // explicit: the current default judge must be priced
+    expect(MODEL_RATES['deepseek-v4-pro']).toBeDefined()
   })
 })
 
