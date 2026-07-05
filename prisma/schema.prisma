@@ -305,6 +305,9 @@ model Assignment {
   defaultJudgeModel      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  // 乐观并发锁：编辑作业时按此值栅栏(where version=期望值 → increment)。表单加载时带走当前值,
+  // 保存时若已被他人改动(值不符)则整笔拒绝、不动任何环节——防并发编辑互相覆盖/误删提交(审计 P2-9)。
+  version      Int      @default(0)
 
   offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
   chunkSet    ChunkSet?      @relation(fields: [chunkSetId], references: [id], onDelete: SetNull)

@@ -159,8 +159,10 @@ export async function updateAssignment(prevState: unknown, formData: FormData): 
   // The phase ids the form loaded — so a phase added concurrently (after load) is preserved,
   // not cascade-deleted by this (possibly stale) save. See domain.updateAssignment (audit P2-9).
   const knownPhaseIds = String(formData.get('knownPhaseIds') ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+  // The assignment version the form loaded — the optimistic-lock token (0 if absent).
+  const expectedVersion = Number(formData.get('version')) || 0
 
-  const res = await updateAssignmentService(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentId, fr.data.meta, fr.data.phases, chunkSetId, knownPhaseIds)
+  const res = await updateAssignmentService(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentId, fr.data.meta, fr.data.phases, chunkSetId, knownPhaseIds, expectedVersion)
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   redirect(`/dashboard/assignments/${assignmentId}`)
