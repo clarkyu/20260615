@@ -16,6 +16,10 @@ export interface ModelDescriptor {
   capabilities: Capability[]
   // Which media the perception stage can consume directly.
   modalities: Array<'video' | 'audio' | 'image' | 'text'>
+  // Reasoning/thinking model (chain-of-thought before answering). For DeepSeek this is
+  // inherent to the model id (the Pro/reasoner tier). Drives the "推理" label; also the
+  // hook if a provider ever needs a per-request thinking toggle.
+  reasoning?: boolean
   note?: string
 }
 

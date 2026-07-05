@@ -75,12 +75,21 @@ export const MODELS: ModelDescriptor[] = [
     note: '只转写，发音分弱；配合文本评分模型用。',
   },
   {
-    id: 'deepseek-v4-flash',
-    label: 'DeepSeek V4 Flash（按评分标准打分）',
+    id: 'deepseek-v4-pro',
+    label: 'DeepSeek V4 Pro（推理·按标准精评）',
     provider: 'deepseek',
     capabilities: ['judge'],
     modalities: ['text'],
-    note: '纯文本，只能做评分阶段。deepseek-chat 的继任者。',
+    reasoning: true,
+    note: '系统默认评分模型。V4 Pro 推理版（开启思考链），纯文本；先想后判，按评分标准精细打分与写评语。感知阶段仍需多模态模型（如 Gemini）。',
+  },
+  {
+    id: 'deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash（按评分标准打分·更省）',
+    provider: 'deepseek',
+    capabilities: ['judge'],
+    modalities: ['text'],
+    note: '纯文本，只能做评分阶段。deepseek-chat 的继任者；跑量更省。',
   },
   {
     id: 'claude-opus-4-8',
@@ -101,7 +110,8 @@ export interface Preset {
 // One-click combinations surfaced in the grading UI; teachers can still pick
 // the two stages independently in "advanced" mode.
 export const PRESETS: Preset[] = [
-  { id: 'gemini35-allinone', label: 'Gemini 3.5 一把梭（默认·最新）', perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash' },
+  { id: 'gemini-deepseek-pro', label: 'Gemini 感知 + DeepSeek V4 Pro 评分（默认·推理）', perceptionModel: 'gemini-3.5-flash', judgeModel: 'deepseek-v4-pro' },
+  { id: 'gemini35-allinone', label: 'Gemini 3.5 一把梭（最省事）', perceptionModel: 'gemini-3.5-flash', judgeModel: 'gemini-3.5-flash' },
   { id: 'gemini-allinone', label: 'Gemini 2.5 一把梭（更省）', perceptionModel: 'gemini-2.5-flash', judgeModel: 'gemini-2.5-flash' },
   { id: 'qwen-allinone', label: 'Qwen 一把梭', perceptionModel: 'qwen-omni-turbo', judgeModel: 'qwen-omni-turbo' },
   { id: 'qwen-minimax', label: 'Qwen 感知 + MiniMax 评分', perceptionModel: 'qwen-omni-turbo', judgeModel: 'MiniMax-Text-01' },
@@ -110,11 +120,11 @@ export const PRESETS: Preset[] = [
 ]
 
 // Sensible default pairing when an assignment hasn't pinned its own models.
-// Default grading model: Gemini 3.5 Flash (latest stable, natively handles
-// audio/video and both perceives + judges). Teachers can still pick another model
-// per assignment on the grading screen.
+// Perception (吃视频/音频，多模态) 默认 Gemini 3.5 Flash。评分(judge) 默认 DeepSeek V4 Pro
+// 推理版：先想后判、按评分标准精评。DeepSeek 只做文本评分,故感知仍走 Gemini。老师仍可在
+// 评分页按环节改。写作(纯文本评)与口语(Gemini 感知 → DeepSeek 评)都吃这个默认评分模型。
 export const DEFAULT_PERCEPTION_MODEL = 'gemini-3.5-flash'
-export const DEFAULT_JUDGE_MODEL = 'gemini-3.5-flash'
+export const DEFAULT_JUDGE_MODEL = 'deepseek-v4-pro'
 // Authoring (备课出题) keeps the cheaper 2.5 Flash by default (occasional, low-stakes
 // text task); independent of the judge default so changing one never breaks the other.
 export const DEFAULT_AUTHOR_MODEL = 'gemini-2.5-flash'
@@ -166,6 +176,7 @@ export const MODEL_PRICING: Record<string, string> = {
   'qwen-omni-turbo': '约 ¥0.3 起（输入）/ ¥0.6 起（输出）· 以阿里控制台为准',
   'gpt-4o': '约 $2.50（输入）｜ 输出 $10 · 旧款，需核对',
   'claude-opus-4-8': '输入 $5 ｜ 输出 $25',
+  'deepseek-v4-pro': '输入 $0.28（缓存命中 $0.028）｜ 输出 $1.10（含推理 token）· 以 DeepSeek 控制台为准',
   'deepseek-v4-flash': '输入 $0.14（缓存命中 $0.0028）｜ 输出 $0.28 · 以 DeepSeek 控制台为准',
   'MiniMax-Text-01': '输入 ¥1 ｜ 输出 ¥8',
   'whisper-1': '约 $0.006 / 分钟（按音频时长计）',
