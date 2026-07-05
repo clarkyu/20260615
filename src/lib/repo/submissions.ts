@@ -1,4 +1,5 @@
-import type { PrismaClient, SubmissionStatus, Prisma, Role } from '@prisma/client'
+import type { PrismaClient, SubmissionStatus, Role } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { offeringScopeFor } from './scope'
 
 // Submission data access. A submission belongs to a school through assignment.offering;
@@ -106,20 +107,55 @@ export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: nu
   })
 }
 
-// Every submitted attempt in an offering, ordered so the latest per
-// (student, assignment, PHASE) comes first — the caller keeps the first of each group.
-// Carries phaseId + phase.graded so analytics aggregates per phase. Excludes DRAFT so a
-// started-but-unfinished retry doesn't shadow a graded attempt.
-export function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
-  return prisma.submission.findMany({
-    // Primary filter is the denormalized offeringId + @@index([offeringId, status]) — a single
-    // indexed scan, not a Submission→Assignment→CourseOffering join. The staffSub scope rides
-    // along as a defense-in-depth tenant fence (secondary, on the already-narrowed rows) so the
-    // read is safe-by-construction even if a caller forgets to resolve the offering first (P2-8).
-    where: { offeringId, status: { not: 'DRAFT' }, ...staffSub(schoolId, userId, role) },
-    select: { studentId: true, assignmentId: true, phaseId: true, status: true, finalScore: true, needsReview: true, aiResult: true, phase: { select: { graded: true, weight: true } } },
-    orderBy: [{ studentId: 'asc' }, { assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
-  })
+// Analytics row: the LATEST non-DRAFT attempt per (student, assignment, phase), with its
+// phase.graded/weight. Shape mirrors domain analytics' RawPhaseRow.
+export interface OfferingPhaseRow {
+  studentId: number
+  assignmentId: number
+  phaseId: number | null
+  status: string
+  finalScore: number | null
+  needsReview: boolean
+  aiResult: string | null
+  phase: { graded: boolean; weight: number } | null
+}
+
+// The latest non-DRAFT attempt per (student, assignment, PHASE) in an offering — analytics
+// only ever uses the latest, so a window function (ROW_NUMBER … WHERE rn=1) returns just those
+// rows. That fetches each (potentially large) aiResult blob ONCE instead of for every
+// superseded attempt — the aiResult over-fetch fix. The primary filter is still the denormalized
+// offeringId; the offeringScopeFor tenant fence is checked once via EXISTS on the offering, so
+// the read is safe-by-construction even if a caller forgets to resolve the offering first (P2-8).
+export async function listForOfferingLatestFirst(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<OfferingPhaseRow[]> {
+  const teacherFence = role === 'TEACHER' ? Prisma.sql`AND o."teacherId" = ${userId}` : Prisma.empty
+  const rows = await prisma.$queryRaw<Array<{
+    studentId: number; assignmentId: number; phaseId: number | null; status: string
+    finalScore: number | null; needsReview: number | boolean; aiResult: string | null
+    phaseGraded: number | boolean | null; phaseWeight: number | null
+  }>>(Prisma.sql`
+    SELECT s."studentId", s."assignmentId", s."phaseId", s."status", s."finalScore", s."needsReview", s."aiResult",
+           p."graded" AS "phaseGraded", p."weight" AS "phaseWeight"
+    FROM (
+      SELECT "studentId", "assignmentId", "phaseId", "status", "finalScore", "needsReview", "aiResult",
+             ROW_NUMBER() OVER (PARTITION BY "studentId", "assignmentId", "phaseId" ORDER BY "attempt" DESC) AS rn
+      FROM "Submission"
+      WHERE "offeringId" = ${offeringId} AND "status" <> 'DRAFT'
+        AND EXISTS (SELECT 1 FROM "CourseOffering" o WHERE o."id" = ${offeringId} AND o."schoolId" = ${schoolId ?? -1} ${teacherFence})
+    ) s
+    LEFT JOIN "Phase" p ON p."id" = s."phaseId"
+    WHERE s.rn = 1
+    ORDER BY s."assignmentId", s."phaseId"
+  `)
+  return rows.map((r) => ({
+    studentId: r.studentId,
+    assignmentId: r.assignmentId,
+    phaseId: r.phaseId,
+    status: r.status,
+    finalScore: r.finalScore,
+    needsReview: Boolean(r.needsReview),
+    aiResult: r.aiResult,
+    phase: r.phaseId != null ? { graded: Boolean(r.phaseGraded), weight: r.phaseWeight ?? 1 } : null,
+  }))
 }
 
 // AI-vs-teacher score pairs for an offering — only submissions a teacher actually

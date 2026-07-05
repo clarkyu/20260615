@@ -61,4 +61,17 @@ describe('Submission.offeringId denormalization (real SQL)', () => {
     // A SCHOOL_ADMIN of the same school still sees it (whole-school scope).
     expect(await submissionRepo.listForOfferingLatestFirst(p, d.offA.id, d.school.id, sameSchoolOther.id, 'SCHOOL_ADMIN')).toHaveLength(1)
   })
+
+  it('returns only the latest attempt per (student, assignment, phase) — superseded attempts’ aiResult is never fetched (window dedup)', async () => {
+    const d = await seed(db.prisma)
+    const p = db.prisma
+    // Two graded attempts on the same phase: the older one must not come back at all.
+    await p.submission.create({ data: { assignmentId: d.asgA.id, offeringId: d.offA.id, phaseId: d.phaseA.id, studentId: d.student.id, attempt: 1, status: 'GRADED', finalScore: 40, aiResult: '{"v":"old"}' } })
+    await p.submission.create({ data: { assignmentId: d.asgA.id, offeringId: d.offA.id, phaseId: d.phaseA.id, studentId: d.student.id, attempt: 2, status: 'GRADED', finalScore: 90, aiResult: '{"v":"new"}' } })
+
+    const rows = await submissionRepo.listForOfferingLatestFirst(p, d.offA.id, d.school.id, d.teacher.id, 'TEACHER')
+    expect(rows).toHaveLength(1) // one row per group, NOT one per attempt
+    expect(rows[0]).toMatchObject({ finalScore: 90, aiResult: '{"v":"new"}' }) // the latest only
+    expect(rows[0].phase).toMatchObject({ graded: true, weight: 1 }) // phase.graded/weight joined through
+  })
 })
