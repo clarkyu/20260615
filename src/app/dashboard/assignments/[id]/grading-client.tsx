@@ -402,7 +402,7 @@ export function GradingClient(props: {
                     g.rows.length === 1 ? (
                       <UnmatchedVoteRow key={g.rows[0].submissionId} row={g.rows[0]} options={poll.options.map((o) => o.label)} />
                     ) : (
-                      <GroupVoteRow key={`grp-${g.rows[0].submissionId}`} text={g.text} rows={g.rows} options={poll.options.map((o) => o.label)} />
+                      <GroupVoteRow key={g.key} text={g.text} rows={g.rows} options={poll.options.map((o) => o.label)} />
                     ),
                   )}
                 </div>
@@ -744,9 +744,14 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
   const [pending, startTransition] = useTransition()
   const [report, setReport] = useState<Awaited<ReturnType<typeof unifyPollSiblingsAction>> | null>(null)
   const [done, setDone] = useState(false)
+  // 在途的是预览还是执行——两个按钮各自转菊花,执行时预览钮不再误显 '…'(复查 R14)。
+  const [applying, setApplying] = useState(false)
 
   const run = (apply: boolean) =>
     startTransition(async () => {
+      setApplying(apply)
+      // 重新预览 = 新一轮快照:清掉上次执行的「已完成」态,报告可再执行(复查 R14)。
+      if (!apply) setDone(false)
       const r = await unifyPollSiblingsAction(phaseId, apply)
       setReport(r)
       if (apply && r.ok) {
@@ -764,7 +769,7 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
       <div className="space-y-2.5 border-t border-border/60 p-3">
         <p className="text-xs text-muted-foreground">{t('poll.unifyHint')}</p>
         <Button size="sm" variant="outline" disabled={pending} onClick={() => run(false)}>
-          {pending && !done ? '…' : t('poll.unifyPreview')}
+          {pending && !applying ? '…' : t('poll.unifyPreview')}
         </Button>
         {report && !report.ok ? <FormMessage>{report.error}</FormMessage> : null}
         {report?.ok ? (
@@ -796,15 +801,19 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
               {done ? (
                 <FormMessage tone="success">{t('poll.unifyDone')}</FormMessage>
               ) : (
-                <Button
-                  size="sm"
-                  disabled={pending || report.targets.some((g) => g.scored > 0)}
-                  onClick={async () => {
-                    if (await confirm({ body: t('poll.unifyConfirm', { n: report.targets.length }), danger: true, okLabel: t('poll.unifyApply') })) run(true)
-                  }}
-                >
-                  {t('poll.unifyApply')}
-                </Button>
+                <>
+                  {/* 预览是快照,不随后续提交/归票自动更新;执行时服务端按最新数据重算。 */}
+                  <p className="text-xs text-muted-foreground">{t('poll.unifySnapshot')}</p>
+                  <Button
+                    size="sm"
+                    disabled={pending || report.targets.some((g) => g.scored > 0)}
+                    onClick={async () => {
+                      if (await confirm({ body: t('poll.unifyConfirm', { n: report.targets.length }), danger: true, okLabel: t('poll.unifyApply') })) run(true)
+                    }}
+                  >
+                    {pending && applying ? '…' : t('poll.unifyApply')}
+                  </Button>
+                </>
               )}
             </div>
           )
@@ -849,8 +858,10 @@ function VoteNoteRow({ note }: { note: VoteNote }) {
 }
 
 // 相同作答聚组(按人数降序)——18 个「自我介绍」一组一次归完,不再逐条点。
-// 组键 = 原文长度 + 截断文本:等长且前 400 字相同才算「相同作答」。
-function groupUnmatched(rows: UnmatchedRow[]): { text: string; rows: UnmatchedRow[] }[] {
+// 组键 = 原文长度 + 截断文本:等长且前 400 字相同才算「相同作答」。key 一并返回,
+// 供 React 作组卡 key(复查 R14:用首行 submissionId 当 key,首行变了整卡重挂,
+// 展开态/报错提示被吞;组的身份是「作答文本」,不是恰好排第一的那条提交)。
+function groupUnmatched(rows: UnmatchedRow[]): { key: string; text: string; rows: UnmatchedRow[] }[] {
   const m = new Map<string, UnmatchedRow[]>()
   for (const r of rows) {
     const key = `${r.textLen}:${r.text}`
@@ -858,7 +869,7 @@ function groupUnmatched(rows: UnmatchedRow[]): { text: string; rows: UnmatchedRo
     a.push(r)
     m.set(key, a)
   }
-  return [...m.values()].map((rs) => ({ text: rs[0].text, rows: rs })).sort((a, b) => b.rows.length - a.rows.length)
+  return [...m.entries()].map(([key, rs]) => ({ key, text: rs[0].text, rows: rs })).sort((a, b) => b.rows.length - a.rows.length)
 }
 
 // 一组相同作答的批量归票行:左边作答原文 + 学生名单(可展开),右边选项按钮——
