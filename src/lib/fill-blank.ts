@@ -41,7 +41,9 @@ export function parseFillBlank(json: string | null | undefined): FillBlank {
 // 判分归一化：Unicode NFKC（把中文输入法常见的全角字母/数字/标点折成半角、合并兼容字符）
 // → 折叠内部连续空白为单个空格 → 去首尾空白 → 转小写。学生答案与答案键都过同一 norm，
 // 所以「New  York」（内部双空格）、「Ｎｅｗ」（全角）这类等价写法不再被误判为错（审计 P2-11）。
-const norm = (s: string) => s.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
+// 也导出给其它「学生作答 vs 既定文本」的等价比较用（如投票归票的文本匹配），全站单一 norm。
+export const normalizeAnswer = (s: string) => s.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
+const norm = normalizeAnswer
 
 // 答案键是否可用于客观判分：空数与题干标记一致，且每个空至少有一个「归一化后非空」的可接受答案。
 // 不可用（blanksJson 缺失/损坏、老师漏填答案键、空数不符、某空只有空串答案）时**不应自动判 0**——

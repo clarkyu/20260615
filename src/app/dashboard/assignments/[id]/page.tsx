@@ -103,7 +103,16 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       const hasKey = isMulti ? correctSet.length > 0 : correct != null
       const selectedOf = (s: (typeof subs)[number]) => (isMulti ? parseChoices(s.recitedText) : [(s.recitedText ?? '').trim()].filter(Boolean))
       const correctNorm = new Set(correctSet.map((c) => c.trim()))
+      // 与任何选项不符的作答(计入 total 但未落任何选项)——多为环节改型前的历史文本。
+      // 单选类才提供人工归票;多选存 JSON 数组,不在此列。
+      const optionSet = new Set(parseChoices(p.choicesJson).map((o) => o.trim()))
+      const unmatched = isMulti
+        ? []
+        : subs
+            .filter((s) => { const v = (s.recitedText ?? '').trim(); return v !== '' && !optionSet.has(v) })
+            .map((s) => ({ submissionId: s.id, studentName: s.student.name ?? '', studentNo: s.student.studentNo ?? '', text: (s.recitedText ?? '').trim() }))
       return {
+        unmatched,
         phaseLabel: multiPhase ? (p.title?.trim() || t('phase.nth', { n: p.order })) : undefined,
         total: subs.length,
         correctChoice: correct,
