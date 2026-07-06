@@ -513,7 +513,7 @@ export function AssignmentForm({
                   <div className="text-xs font-semibold text-muted-foreground">{t('asg.summaryTitle')}</div>
                   <div><span className="text-muted-foreground">{t('asg.fTitle')}：</span><span className="font-medium">{title.trim() || t('asg.summaryNoTitle')}</span></div>
                   {targetLabels.length > 0 ? (
-                    <div><span className="text-muted-foreground">{t('asg.publishTo')}：</span>{targetLabels.join('、')}</div>
+                    <div><span className="text-muted-foreground">{t('asg.publishTo')}：</span>{targetLabels.join(t('sep.list'))}</div>
                   ) : null}
                   <div>
                     <span className="text-muted-foreground">{t('asg.phases')}：</span>{phases.length} {t('asg.phaseUnit')}

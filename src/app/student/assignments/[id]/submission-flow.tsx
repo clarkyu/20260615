@@ -392,9 +392,9 @@ export function SubmissionFlow(props: {
     const choiceRight = choiceGraded && (isMulti
       ? sameChoiceSet(parseChoices(props.initialRecitedText), props.correctChoices ?? [])
       : props.initialRecitedText.trim() === (props.correctChoice as string).trim())
-    // 回显文本：多选 / 填空作答都是 JSON 数组，展开成「A、B」；单选/自由文本原样。
-    const answerText = (isMulti || props.fillBlank) ? parseChoices(props.initialRecitedText).join('、') : props.initialRecitedText
-    const correctText = isMulti ? (props.correctChoices ?? []).join('、') : (props.correctChoice ?? '')
+    // 回显文本：多选 / 填空作答都是 JSON 数组，按语言的列表分隔符展开；单选/自由文本原样。
+    const answerText = (isMulti || props.fillBlank) ? parseChoices(props.initialRecitedText).join(t('sep.list')) : props.initialRecitedText
+    const correctText = isMulti ? (props.correctChoices ?? []).join(t('sep.list')) : (props.correctChoice ?? '')
     // The lines the AI marked weak — so the student can drill just those (零压力练习).
     const weakSentences = props.sentences.filter((s) => {
       const p = byOrder.get(s.order)

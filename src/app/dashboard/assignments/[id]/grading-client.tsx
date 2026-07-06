@@ -905,7 +905,7 @@ function GroupVoteRow({ text, rows, options }: { text: string; rows: UnmatchedRo
           <details>
             <summary className="tap cursor-pointer text-muted-foreground">{t('poll.groupList', { n: rows.length })}</summary>
             <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
-              {rows.map((r) => r.studentName || r.studentNo).join('、')}
+              {rows.map((r) => r.studentName || r.studentNo).join(t('sep.list'))}
             </p>
           </details>
         </div>
