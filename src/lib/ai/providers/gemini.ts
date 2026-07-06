@@ -116,11 +116,18 @@ export function extractJson(data: unknown): unknown {
   return JSON.parse(stripCodeFence(text))
 }
 
-// Real token usage from a generateContent response (undefined when absent).
+// Real token usage from a generateContent response (undefined when absent). Gemini 2.5/3 models
+// "think" by default; their reasoning tokens are billed at the OUTPUT rate but reported separately
+// as `thoughtsTokenCount` (`candidatesTokenCount` is only the visible answer). Fold thoughts into
+// outputTokens, else cost is systematically under-reported on the default perception model (which
+// runs on every speech submission and shadow take).
 export function extractUsage(data: unknown): TokenUsage | undefined {
-  const u = (data as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } })?.usageMetadata
+  const u = (data as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } })?.usageMetadata
   if (!u) return undefined
-  return { inputTokens: Number(u.promptTokenCount) || 0, outputTokens: Number(u.candidatesTokenCount) || 0 }
+  return {
+    inputTokens: Number(u.promptTokenCount) || 0,
+    outputTokens: (Number(u.candidatesTokenCount) || 0) + (Number(u.thoughtsTokenCount) || 0),
+  }
 }
 
 function referenceBlock(sentences: ReferenceSentence[]): string {
