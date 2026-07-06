@@ -36,7 +36,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 import type { PrismaClient } from '@prisma/client'
-import { login, verifyEmail, resetPassword } from '@/actions/auth'
+import { login, register, verifyEmail, resetPassword } from '@/actions/auth'
 import { finishSubmission, submitChoice, submitFreeText, submitMultiChoice, submitFillBlank } from '@/actions/submissions'
 import { batchOverride } from '@/actions/grading'
 import { getCurrentUser } from '@/lib/auth'
@@ -262,6 +262,22 @@ describe('server actions E2E (real iron-session + real SQL)', () => {
 
     // Replay of the exact same token → rejected, no re-verification.
     expect(await verifyEmail(null, form({ token }))).toHaveProperty('error')
+  })
+
+  it('register CANNOT take over an existing account — no password/role overwrite, no student→teacher escalation (security)', async () => {
+    const d = await seed(db.prisma)
+    // A roster-imported student: has an email but is never email-verified (verification is disabled).
+    const victim = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: 'victim1', email: 'victim@e.com', passwordHash: await hashPassword('victim-pw'), emailVerified: null } })
+
+    // Anonymous attacker registers with the victim's email + their own password.
+    const res = await register(null, form({ email: 'victim@e.com', password: 'attacker-pw', name: 'Mallory' }))
+    expect(res).toHaveProperty('error') // err.emailTaken — refused
+
+    const after = await db.prisma.user.findUniqueOrThrow({ where: { id: victim.id } })
+    expect(after.role).toBe('STUDENT') // NOT escalated to TEACHER
+    expect(after.name).not.toBe('Mallory') // name not overwritten
+    expect(await verifyPassword('victim-pw', after.passwordHash)).toBe(true) // original password intact
+    expect(await verifyPassword('attacker-pw', after.passwordHash)).toBe(false) // attacker password rejected
   })
 
   it('resetPassword is single-use: first hit sets the new password; replaying the same token cannot change it again', async () => {
