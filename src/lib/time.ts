@@ -1,3 +1,7 @@
+// One day in milliseconds — the canonical name for this magic number, reused across
+// day-window math, streak math, and retention/calibration cutoffs.
+export const DAY_MS = 86_400_000
+
 // Local-day math for "due today" style windows. `tzo` is the browser's
 // Date.getTimezoneOffset() (minutes; e.g. UTC+8 → -480), captured into a cookie so a
 // UTC server can reason about the user's own calendar day. Pure — no Next imports.
@@ -6,7 +10,7 @@ export function localDayWindowUtc(now: Date, tzo: number): { start: Date; end: D
   const local = new Date(now.getTime() - tzo * 60000)
   const localMidnight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
   const startMs = localMidnight + tzo * 60000 // convert that local midnight back to a UTC instant
-  return { start: new Date(startMs), end: new Date(startMs + 86_400_000) }
+  return { start: new Date(startMs), end: new Date(startMs + DAY_MS) }
 }
 
 // Parse the `tzo` cookie value defensively → minutes offset, default 0 (UTC).

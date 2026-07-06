@@ -2,6 +2,7 @@ import type { AuthorDraft, AuthorInput, AuthorProvider, JudgeInput, JudgeResult,
 import { buildAuthorPrompt, buildJudgePrompt, buildWritingJudgePrompt, normalizeAuthorDraft, normalizeJudge, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
+import { UPSTREAM_TIMEOUT_MS } from '../net'
 import { config } from '@/lib/config'
 
 // Anthropic Claude as a text judge (and text author). It scores from the perception
@@ -50,7 +51,7 @@ async function callClaude(system: string, userContent: string, modelId: string):
       messages: [{ role: 'user', content: userContent }],
     }),
     // Don't let a stalled upstream pin the isolate to the platform wall-clock limit.
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`claude ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const data = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } }

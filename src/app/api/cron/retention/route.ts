@@ -4,6 +4,7 @@ import { config } from '@/lib/config'
 import { timingSafeEqual } from '@/lib/safe-compare'
 import { deleteObject, storageConfigured } from '@/lib/storage'
 import { sweepExpiredMedia } from '@/lib/domain/retention'
+import { DAY_MS } from '@/lib/time'
 
 // Retention sweep endpoint, driven by a scheduler (the media-retention GitHub Action, or
 // any cron that can send the bearer secret). Deletes student recordings older than
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (days <= 0) return NextResponse.json({ skipped: 'retention disabled (VIDEO_RETENTION_DAYS unset)' })
   if (!storageConfigured()) return NextResponse.json({ skipped: 'storage not configured' })
 
-  const cutoff = new Date(Date.now() - days * 86_400_000)
+  const cutoff = new Date(Date.now() - days * DAY_MS)
   const prisma = await getDb()
   const res = await sweepExpiredMedia(prisma, { cutoff, deleteObject })
   return NextResponse.json({ retentionDays: days, ...res })

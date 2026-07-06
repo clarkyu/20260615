@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { DAY_MS } from '@/lib/time'
 import * as feedbackRepo from '@/lib/repo/feedback'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as practiceRepo from '@/lib/repo/practice'
@@ -29,7 +30,6 @@ export function feedbackPointsTotal(f: { submitted: number; adopted: number }): 
   return f.submitted * PTS.feedbackSubmit + f.adopted * PTS.feedbackAdopted
 }
 
-const DAY_MS = 86_400_000
 const dayKey = (d: Date) => d.toISOString().slice(0, 10)
 
 export type PointsSource =
