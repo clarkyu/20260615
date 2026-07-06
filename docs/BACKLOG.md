@@ -64,8 +64,8 @@
 |---|---|---|---|
 | 78 | 隐私同意 UI | B6b | 录像/采集前的隐私同意与告知（合规） |
 | 79 | 视频留存定期清理 | B6c | 按留存策略定期清理 R2 旧视频（Cloudflare Cron Trigger + 清理任务） |
-| 80 | Whisper(perception) 接真实 API | A8a | 当前为占位 stub；已有 Gemini/Qwen/OpenAI 真实可用并优雅降级，**可选，待产品确认是否要这家** |
-| 81 | Claude(judge) 接真实 API | A8b | 当前为占位 stub；已有 Gemini/Qwen/MiniMax/DeepSeek/GPT-4o 真实 judge，**可选，待产品确认** |
+| 80 | Whisper(perception) 接真实 API | A8a | ✅ **已实现**（非 stub）：`providers/whisper.ts` 真调 OpenAI `/audio/transcriptions` → 转写 → 逐句 token 对齐；`adapters.ts` 挂 `whisper: whisperPerception`；预设 `whisper-deepseek`（Whisper 感知 + DeepSeek 评分）可选；`whisper.test.ts` 覆盖；成本 `whisper-1` 按分钟计。 |
+| 81 | Claude(judge) 接真实 API | A8b | ✅ **已实现**（非 stub）：`providers/anthropic.ts` 真调 Claude Messages API（`claudeJudge` 评分 + `claudeAuthor` 出题，x-api-key/anthropic-version）；`adapters.ts` 挂 `claude`；预设 `gemini-claude`（Gemini 感知 + Claude 评分）可选；`anthropic.test.ts` 覆盖。 |
 
 ## P4 · 基础设施（已重新评估，2026-06）· ✅ 已结案（82 完成；DO/Queues 有意不做）
 
