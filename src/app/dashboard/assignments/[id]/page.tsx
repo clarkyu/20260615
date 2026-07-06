@@ -104,13 +104,32 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       const selectedOf = (s: (typeof subs)[number]) => (isMulti ? parseChoices(s.recitedText) : [(s.recitedText ?? '').trim()].filter(Boolean))
       const correctNorm = new Set(correctSet.map((c) => c.trim()))
       // 与任何选项不符的作答(计入 total 但未落任何选项)——多为环节改型前的历史文本。
-      // 单选类才提供人工归票;多选存 JSON 数组,不在此列。
+      // 单选类才提供人工归票;多选存 JSON 数组,不在此列。归票操作只对「每人最新一次」
+      // (统计口径),但把该生本环节的**全部提交历史**一并带出(每次内容可能不同、
+      // 归票也可能不同——老师看全再定),旧次只读展示:各写了什么/当前归在哪。
       const optionSet = new Set(parseChoices(p.choicesJson).map((o) => o.trim()))
       const unmatched = isMulti
         ? []
         : subs
             .filter((s) => { const v = (s.recitedText ?? '').trim(); return v !== '' && !optionSet.has(v) })
-            .map((s) => ({ submissionId: s.id, studentName: s.student.name ?? '', studentNo: s.student.studentNo ?? '', text: (s.recitedText ?? '').trim() }))
+            .map((s) => ({
+              submissionId: s.id,
+              studentName: s.student.name ?? '',
+              studentNo: s.student.studentNo ?? '',
+              text: (s.recitedText ?? '').trim(),
+              history: assignment.submissions
+                .filter((h) => h.studentId === s.studentId && (h.phaseId ?? 0) === p.id && h.status !== 'DRAFT' && h.id !== s.id)
+                .map((h) => {
+                  const v = (h.recitedText ?? '').trim()
+                  return {
+                    attempt: h.attempt,
+                    // 旧次当前算哪个选项(命中即它的票面),不算票——统计只看最新一次。
+                    option: optionSet.has(v) ? v : null,
+                    text: h.voteSourceText ?? v,
+                  }
+                })
+                .sort((a, b) => b.attempt - a.attempt),
+            }))
       return {
         unmatched,
         phaseId: p.id,
