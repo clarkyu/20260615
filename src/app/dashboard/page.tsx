@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library, Gauge, Coins } from 'lucide-react'
 import { requireStaff, availablePanels } from '@/lib/auth'
-import { parseTzOffset } from '@/lib/time'
+import { parseTzOffset, DAY_MS } from '@/lib/time'
 import { getDb } from '@/lib/db'
 import { runAfterResponse } from '@/lib/cf'
 import { drainGradingJobs } from '@/lib/domain/jobs'
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
   // School-wide AI grading calibration — admin-only, and only once teachers have
   // re-scored some AI grades (otherwise nothing to calibrate against). One query feeds
   // both the school-wide number and the per-teacher outlier breakdown.
-  const calSince = new Date(Date.now() - CALIBRATION_WINDOW_DAYS * 86_400_000)
+  const calSince = new Date(Date.now() - CALIBRATION_WINDOW_DAYS * DAY_MS)
   const scorePairs = isAdmin ? await submissionRepo.listScorePairsForSchool(prisma, schoolId, calSince) : []
   const calibration = isAdmin ? gradingCalibration(scorePairs) : null
   const byTeacher = gradingCalibrationByTeacher(

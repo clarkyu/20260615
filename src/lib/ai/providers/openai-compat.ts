@@ -15,6 +15,7 @@ import type {
 import { buildAuthorPrompt, buildJudgePrompt, buildPerceptionPrompt, buildWritingJudgePrompt, normalizeAuthorDraft, normalizeJudge, normalizePerSentence, stripCodeFence } from './gemini'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
+import { UPSTREAM_TIMEOUT_MS } from '../net'
 import { config } from '@/lib/config'
 
 // Shared adapter for OpenAI-compatible chat APIs: Qwen (DashScope compatible
@@ -108,7 +109,7 @@ async function chat(cfg: CompatConfig, model: string, messages: { role: string; 
     headers: { Authorization: `Bearer ${apiKey(cfg)}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, messages, temperature: 0.2 }),
     // Don't let a stalled upstream pin the isolate to the platform wall-clock limit.
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`${cfg.provider} ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const raw = await res.json()

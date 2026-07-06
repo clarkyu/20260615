@@ -20,6 +20,7 @@ export type { AuthorDraft, AuthorInput } from '../types'
 import { config } from '@/lib/config'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
+import { UPSTREAM_TIMEOUT_MS, POLL_TIMEOUT_MS } from '../net'
 
 // Real Gemini adapter (REST API via fetch — Workers-compatible, no SDK).
 // Perception (multimodal: video/audio) and judging (text) both go to Gemini
@@ -212,10 +213,10 @@ export function normalizeJudge(raw: unknown, maxScore: number): JudgeResult {
 
 // ── Network ───────────────────────────────────────────────────────────────────
 
-// A stalled upstream must not pin a Worker isolate until the platform wall-clock
-// limit — every provider fetch carries an abort timeout.
-const GEN_TIMEOUT_MS = 180_000
-const NET_TIMEOUT_MS = 60_000
+// Descriptive local names for the shared upstream timeouts (values single-sourced in ../net):
+// a stalled upstream must not pin a Worker isolate until the platform wall-clock limit.
+const GEN_TIMEOUT_MS = UPSTREAM_TIMEOUT_MS
+const NET_TIMEOUT_MS = POLL_TIMEOUT_MS
 
 async function generate(model: string, parts: Part[], schema: unknown): Promise<{ data: unknown; usage?: TokenUsage }> {
   // Auth via the x-goog-api-key header, not a ?key= query param — a query string leaks

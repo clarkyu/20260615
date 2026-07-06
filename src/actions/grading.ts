@@ -12,6 +12,9 @@ import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
 
+// The manual-override score ceiling, single-sourced from the domain default.
+const MAX_SCORE = DEFAULT_MAX_SCORE
+
 // Apply the same score and/or feedback to a set of selected submissions at once.
 export async function batchOverride(assignmentId: number, submissionIds: number[], score: number | null, feedback: string): Promise<{ updated?: number; error?: string }> {
   const { user, prisma, t } = await staffContext()
@@ -41,8 +44,6 @@ export async function markMissing(assignmentId: number): Promise<{ marked?: numb
   revalidatePath(`/dashboard/assignments/${assignmentId}`)
   return { marked: missing.length }
 }
-
-const MAX_SCORE = DEFAULT_MAX_SCORE
 
 export async function runGrading(prevState: unknown, formData: FormData): Promise<ActionState> {
   const { user, prisma, t } = await staffContext()

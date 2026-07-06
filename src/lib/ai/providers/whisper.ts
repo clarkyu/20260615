@@ -1,6 +1,7 @@
 import type { PerceptionInput, PerceptionProvider, PerceptionResult, PerSentenceResult, ReferenceSentence } from '../types'
 import { overrideKey } from '../key-context'
 import { unavailable } from '../errors'
+import { UPSTREAM_TIMEOUT_MS } from '../net'
 import { config } from '@/lib/config'
 
 // OpenAI Whisper is a transcription model (audio → text) — no vision, no scoring. So
@@ -64,7 +65,7 @@ export const whisperPerception: PerceptionProvider = {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey()}` },
       body: form,
-      signal: AbortSignal.timeout(180_000),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     })
     if (!res.ok) throw new Error(`whisper ${res.status}: ${(await res.text()).slice(0, 300)}`)
     const data = (await res.json()) as { text?: string; duration?: number }
