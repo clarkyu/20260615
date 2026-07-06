@@ -85,6 +85,11 @@ export default async function StaffAssignmentsPage() {
         <ClipboardList className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold tracking-tight">{t('nav.assignments')}</h1>
         <span className="text-sm text-muted-foreground">{batches.length}</span>
+        {batches.length >= 2 ? (
+          <Link href="/dashboard/assignments/merge" className="ml-auto text-sm font-medium text-primary hover:underline">
+            {t('asgList.merge')}
+          </Link>
+        ) : null}
       </div>
 
       {batches.length === 0 ? emptyState : batches.map((b) => {

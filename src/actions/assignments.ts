@@ -11,6 +11,7 @@ import {
   createAssignments,
   updateAssignment as updateAssignmentService,
   buildReviewAssignment,
+  mergeAssignmentBatch,
   type AssignmentMeta,
   type PhaseDraft,
 } from '@/lib/domain/assignments'
@@ -179,6 +180,25 @@ export async function createReviewAssignment(formData: FormData): Promise<void> 
   const res = await buildReviewAssignment(prisma, offeringId, user.schoolId, user.userId, user.role)
   revalidatePath(`/dashboard/teaching/${offeringId}`)
   redirect(res.redirectTo)
+}
+
+// 归并批次:把勾选的同课程作业合并为一个发布批次并统一标题(误分开发布的自救入口)。
+// 每个 `assignmentIds` 字段携带一张卡的成员 id(逗号分隔),多张卡多个字段。
+export async function mergeAssignmentBatches(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { error: cx.error }
+  const parsed = parseForm(z.object({ title: reqText('err.needTitle', 200) }), formData)
+  if (!parsed.ok) return { error: cx.t(parsed.error) }
+  const assignmentIds = formData
+    .getAll('assignmentIds')
+    .flatMap((v) => String(v).split(','))
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0)
+
+  const res = await mergeAssignmentBatch(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentIds, parsed.data.title)
+  if (!res.ok) return { error: cx.t(res.error) }
+  revalidatePath('/dashboard/assignments')
+  redirect('/dashboard/assignments')
 }
 
 export async function deleteAssignment(formData: FormData): Promise<void> {
