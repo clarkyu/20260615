@@ -60,11 +60,14 @@ interface PollResult {
 // 归票留痕:该选项名下由原文归入的一票(学生 + 原始作答),可撤销。
 interface VoteNote { submissionId: number; studentName: string; studentNo: string; source: string }
 // 一条未归票作答:最新一次提交(可归票)+ 历史提交(只读:各写了什么/当前归在哪)。
+// text 是服务端截断后的展示文本(载荷上限,复查 R11);textLen 是原文长度,
+// 与 text 合成聚组键——截断后相同、原文不同的长文不会误并成「相同作答」。
 interface UnmatchedRow {
   submissionId: number
   studentName: string
   studentNo: string
   text: string
+  textLen: number
   history: { attempt: number; option: string | null; text: string }[]
 }
 
@@ -846,14 +849,16 @@ function VoteNoteRow({ note }: { note: VoteNote }) {
 }
 
 // 相同作答聚组(按人数降序)——18 个「自我介绍」一组一次归完,不再逐条点。
+// 组键 = 原文长度 + 截断文本:等长且前 400 字相同才算「相同作答」。
 function groupUnmatched(rows: UnmatchedRow[]): { text: string; rows: UnmatchedRow[] }[] {
   const m = new Map<string, UnmatchedRow[]>()
   for (const r of rows) {
-    const a = m.get(r.text) ?? []
+    const key = `${r.textLen}:${r.text}`
+    const a = m.get(key) ?? []
     a.push(r)
-    m.set(r.text, a)
+    m.set(key, a)
   }
-  return [...m.entries()].map(([text, rs]) => ({ text, rows: rs })).sort((a, b) => b.rows.length - a.rows.length)
+  return [...m.values()].map((rs) => ({ text: rs[0].text, rows: rs })).sort((a, b) => b.rows.length - a.rows.length)
 }
 
 // 一组相同作答的批量归票行:左边作答原文 + 学生名单(可展开),右边选项按钮——
