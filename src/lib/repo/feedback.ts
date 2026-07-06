@@ -1,10 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
-// User feedback / suggestions. Points are DERIVED (not a stored balance):
-//   每提交一条 +10；被采纳（status ADOPTED）再 +100。
-export const POINTS_PER_SUBMISSION = 10
-export const POINTS_PER_ADOPTED = 100
-
+// User feedback / suggestions. The +N/条 point *policy* lives in `lib/domain/points.ts`
+// (`PTS`, single source of truth) — this repo only returns the raw counts it's derived from.
 export function create(prisma: PrismaClient, data: { userId: number; schoolId: number | null; body: string }) {
   return prisma.feedback.create({ data })
 }
@@ -18,13 +15,13 @@ export function listForUser(prisma: PrismaClient, userId: number) {
   })
 }
 
-// A user's derived points = submissions×10 + adopted×100.
-export async function pointsForUser(prisma: PrismaClient, userId: number): Promise<{ total: number; submitted: number; adopted: number }> {
+// Raw feedback counts for one user (the point total is computed from these by the domain layer).
+export async function pointsForUser(prisma: PrismaClient, userId: number): Promise<{ submitted: number; adopted: number }> {
   const [submitted, adopted] = await Promise.all([
     prisma.feedback.count({ where: { userId } }),
     prisma.feedback.count({ where: { userId, status: 'ADOPTED' } }),
   ])
-  return { total: submitted * POINTS_PER_SUBMISSION + adopted * POINTS_PER_ADOPTED, submitted, adopted }
+  return { submitted, adopted }
 }
 
 // All feedback for the super-admin review queue, pending first then newest.

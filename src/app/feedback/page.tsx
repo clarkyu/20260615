@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db'
 import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as feedbackRepo from '@/lib/repo/feedback'
+import { feedbackPointsTotal } from '@/lib/domain/points'
 import { reviewFeedback } from '@/actions/feedback'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -49,7 +50,7 @@ export default async function FeedbackPage() {
               <Star className="h-4 w-4 text-primary" />{t('fb.myPoints')}
             </span>
             <span className="text-2xl font-extrabold tabular-nums text-primary">
-              {points.total}
+              {feedbackPointsTotal(points)}
               <span className="ml-1 text-xs font-medium text-muted-foreground">{t('fb.pointsUnit')}</span>
             </span>
           </div>
