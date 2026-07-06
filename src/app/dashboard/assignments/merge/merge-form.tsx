@@ -127,7 +127,7 @@ export function MergeForm({ groups }: { groups: MergeCandidate[] }) {
           <Button type="submit" size="lg" className="w-full" disabled={pending || chosen.length < 2}>
             <GitMerge className="h-4 w-4" />
             {pending ? t('merge.merging') : t('merge.submit')}
-            {totalSelected > 0 && !pending ? <span className="ml-1 text-xs font-normal opacity-80">（{t('merge.selectedN', { n: totalSelected })}）</span> : null}
+            {totalSelected > 0 && !pending ? <span className="ml-1 text-xs font-normal opacity-80">{t('merge.selectedN', { n: totalSelected })}</span> : null}
           </Button>
         </CardContent>
       </Card>
