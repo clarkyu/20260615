@@ -12,7 +12,7 @@ import {
   updateAssignment as updateAssignmentService,
   buildReviewAssignment,
   mergeAssignmentBatch,
-  updateAssignmentBatch,
+  updateAssignmentBatch as updateAssignmentBatchService,
   type AssignmentMeta,
   type PhaseDraft,
 } from '@/lib/domain/assignments'
@@ -190,7 +190,8 @@ export async function createReviewAssignment(formData: FormData): Promise<void> 
 }
 
 // 编辑批次:批内所有成员统一改名 + 定性质(mode 四态)。`assignmentIds` 为成员 id 逗号串。
-export async function editAssignmentBatch(prevState: unknown, formData: FormData): Promise<ActionState> {
+// 与 domain 层同名(update,复查 R23 命名对齐):action 归 action,domain 加 Service 后缀引入。
+export async function updateAssignmentBatch(prevState: unknown, formData: FormData): Promise<ActionState> {
   const cx = await staffSchoolContext()
   if (!cx.ok) return { error: cx.error }
   const parsed = parseForm(
@@ -203,7 +204,7 @@ export async function editAssignmentBatch(prevState: unknown, formData: FormData
   if (!parsed.ok) return { error: cx.t(parsed.error) }
   const assignmentIds = String(formData.get('assignmentIds') ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
 
-  const res = await updateAssignmentBatch(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentIds, { title: parsed.data.title, mode: parsed.data.mode || null })
+  const res = await updateAssignmentBatchService(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentIds, { title: parsed.data.title, mode: parsed.data.mode || null })
   if (!res.ok) return { error: cx.t(res.error) }
   revalidatePath('/dashboard/assignments')
   return { success: true }

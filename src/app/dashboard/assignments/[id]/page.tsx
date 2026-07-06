@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
@@ -14,18 +15,23 @@ import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 import { GradingClient } from './grading-client'
 
-// Tab title = the assignment's own title (teachers often have several grading tabs
-// open). Scoped exactly like the page (own offering for a TEACHER) so a guessed id
-// can't leak another teacher's title; falls back to the generic menu name otherwise.
+// generateMetadata 与页面主体共用这一份详情读取(React cache 同请求去重,复查 R23):
+// 页签标题不再单独多查一次。Scoped exactly like the page(own offering for a TEACHER,
+// 学生一律 null)so a guessed id can't leak another teacher's title.
+const loadAssignmentDetail = cache(async (assignmentId: number) => {
+  const user = await getCurrentUser()
+  if (!user?.schoolId || user.role === 'STUDENT') return null
+  const prisma = await getDb()
+  return assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId, user.userId, user.role)
+})
+
+// Tab title = the assignment's own title (teachers often have several grading tabs open).
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { t } = await getT()
   const fallback = { title: t('nav.assignments') }
   const id = Number((await params).id)
   if (!Number.isInteger(id)) return fallback
-  const user = await getCurrentUser()
-  if (!user?.schoolId) return fallback
-  const prisma = await getDb()
-  const a = await assignmentRepo.findForSchool(prisma, id, user.schoolId, user.userId, user.role)
+  const a = await loadAssignmentDetail(id)
   return a ? { title: a.title } : fallback
 }
 
@@ -39,7 +45,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   const { t } = await getT()
   if (!user.schoolId) redirect('/dashboard')
 
-  const assignment = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId, user.userId, user.role)
+  const assignment = await loadAssignmentDetail(assignmentId)
   if (!assignment) notFound()
 
   // A submission is per-phase: keep ONE representative per (student, phase) — the latest

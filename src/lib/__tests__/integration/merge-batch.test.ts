@@ -36,7 +36,7 @@ describe('mergeAssignmentBatch (归并批次)', () => {
     const a3 = await publishOne(db.prisma, d.offerings[2].id, '期末考核：三班')
 
     const res = await mergeAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a2.id, a3.id], '期末考核')
-    expect(res).toEqual({ ok: true, merged: 3 })
+    expect(res).toEqual({ ok: true, count: 3 })
 
     const rows = await db.prisma.assignment.findMany({ orderBy: { id: 'asc' } })
     const batchIds = new Set(rows.map((r) => r.batchId))
@@ -105,7 +105,7 @@ describe('updateAssignmentBatch (编辑批次:改名 + 定性质)', () => {
     const a2 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[1].id, title: '期末考核', batchId } })
 
     const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a2.id], { title: '期末口语考试', mode: 'EXAM' })
-    expect(res).toEqual({ ok: true, merged: 2 })
+    expect(res).toEqual({ ok: true, count: 2 })
 
     const rows = await db.prisma.assignment.findMany({ orderBy: { id: 'asc' } })
     expect(rows.map((r) => r.title)).toEqual(['期末口语考试', '期末口语考试'])
@@ -118,7 +118,7 @@ describe('updateAssignmentBatch (编辑批次:改名 + 定性质)', () => {
     const d = await seed(db.prisma)
     const a1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'T', mode: 'EXAM' } })
     const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id], { title: 'T', mode: null })
-    expect(res).toEqual({ ok: true, merged: 1 })
+    expect(res).toEqual({ ok: true, count: 1 })
     const row = await db.prisma.assignment.findUniqueOrThrow({ where: { id: a1.id } })
     expect(row.mode).toBeNull()
     expect(row.batchId).not.toBeNull() // legacy 单员组同样获得铸新批次身份(R9)
@@ -132,7 +132,7 @@ describe('updateAssignmentBatch (编辑批次:改名 + 定性质)', () => {
     const b1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[2].id, title: '背诵2' } })
 
     const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a2.id], { title: '背诵2', mode: null })
-    expect(res).toEqual({ ok: true, merged: 2 })
+    expect(res).toEqual({ ok: true, count: 2 })
     const rows = await db.prisma.assignment.findMany({ where: { id: { in: [a1.id, a2.id] } } })
     const minted = new Set(rows.map((r) => r.batchId))
     expect(minted.size).toBe(1)

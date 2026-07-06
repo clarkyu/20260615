@@ -123,7 +123,8 @@ function buildPlan(p: TargetPhaseRow, byNorm: Map<string, string>) {
 // 环节改型是「提交点」,必须放最后——一旦某班在中途失败,该班环节仍是默写型,重跑时
 // 会再次被识别为目标并从头补齐;若改型先写,重跑会把半成品班误判为已完成而跳过
 // (幽灵待批 + 残留任务写分)。故:①先撤评阅任务(阻断 AI 回写)→ ②等价作答规范化
-// (改写可逆:原始写法留痕 voteSourceText)→ ③清复核 → ④最后改型。每步幂等。
+// (改写的**文本**可撤销:原始写法留痕 voteSourceText;已清的复核标记、已撤的任务
+// 不随撤销恢复——投票环节本就不该有它们)→ ③清复核 → ④最后改型。每步幂等。
 async function applyPlans(prisma: PrismaClient, plans: ReturnType<typeof buildPlan>[], choicesJson: string, phaseOrder: number) {
   for (const { phase, rewrites } of plans) {
     await cancelPendingForPhase(prisma, phase.id)
