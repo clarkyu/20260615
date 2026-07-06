@@ -7,6 +7,7 @@ import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/do
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
+import { logError } from '@/lib/log'
 import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
@@ -121,7 +122,10 @@ export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?:
     takes.map(async (tk) => {
       try {
         return { order: tk.order, url: await presignDownload(tk.audioKey), score: tk.aiScore, spokenText: tk.spokenText }
-      } catch {
+      } catch (err) {
+        // Drop the unsignable take from the review, but leave a breadcrumb — otherwise a
+        // sentence just vanishes from the teacher's list with no trace of which one or why.
+        logError('getShadowTakeUrls', 'shadow take presign failed', err, { submissionId, order: tk.order })
         return null
       }
     }),
