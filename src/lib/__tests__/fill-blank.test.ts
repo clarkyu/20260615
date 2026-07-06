@@ -65,6 +65,11 @@ describe('isGradableFillBlank — refuse to auto-grade an unusable answer key (a
   it('rejects a partially-filled key: any blank with no acceptable answers', () => {
     expect(isGradableFillBlank({ text: 'a ____ b ____', accept: [['x'], []] })).toBe(false)
   })
+  it('rejects a blank whose only key normalizes to empty — it can never be matched, so it would auto-zero the class (audit A15)', () => {
+    expect(isGradableFillBlank({ text: 'a ____', accept: [['']] })).toBe(false) // empty-string key
+    expect(isGradableFillBlank({ text: 'a ____', accept: [['   ']] })).toBe(false) // whitespace-only key
+    expect(isGradableFillBlank({ text: 'a ____ b ____', accept: [['x'], ['']] })).toBe(false) // one good, one empty
+  })
   it('rejects a key whose blank count disagrees with the text', () => {
     expect(isGradableFillBlank({ text: 'a ____ b ____', accept: [['x']] })).toBe(false) // 2 blanks, 1 answer
     expect(isGradableFillBlank({ text: 'a ____', accept: [['x'], ['y']] })).toBe(false) // 1 blank, 2 answers
