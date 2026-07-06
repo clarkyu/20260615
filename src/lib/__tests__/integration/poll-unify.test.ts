@@ -31,9 +31,12 @@ async function seed(p: PrismaClient) {
   const s1 = await student('01') // 原文与选项逐字相同
   const s2 = await student('02') // 全角/空白变体 → 归一化等价
   const s3 = await student('03') // 对不上任何选项
-  const sub = (studentId: number, text: string) =>
-    p.submission.create({ data: { assignmentId: textAsg.id, offeringId: textOffering.id, phaseId: textPhase.id, studentId, status: 'UPLOADED', needsReview: true, recitedText: text } })
-  const subExact = await sub(s1.id, '英语口语大赛')
+  const sub = (studentId: number, text: string, attempt = 1) =>
+    p.submission.create({ data: { assignmentId: textAsg.id, offeringId: textOffering.id, phaseId: textPhase.id, studentId, attempt, status: 'UPLOADED', needsReview: true, recitedText: text } })
+  // s1 重交过:旧 attempt 是无关文本,最新一次才逐字命中——报告与匹配都只看每人最新一次
+  // (否则份数会大于班级人数,这正是真实数据里出现 85 > 54 的原因)。
+  await sub(s1.id, '早期草稿内容', 1)
+  const subExact = await sub(s1.id, '英语口语大赛', 2)
   const subVariant = await sub(s2.id, '　英文歌曲比赛 ')
   const subUnmatched = await sub(s3.id, '想参加朗诵会')
   await p.gradingJob.create({ data: { submissionId: subVariant.id, kind: 'writing', status: 'PENDING' } })
@@ -53,10 +56,16 @@ describe('unifyPhaseToPoll', () => {
     expect(r.options).toEqual(['英语口语大赛', '英文歌曲比赛'])
     expect(r.templateClasses).toEqual(['2531323'])
     expect(r.targets).toHaveLength(1)
-    expect(r.targets[0]).toMatchObject({ className: '2531324', total: 3, alreadyCanonical: 1, autoMatched: 1, pendingReview: 3, scored: 0 })
+    // total=3 人(s1 有 2 次 attempt 只算最新一次);pendingReview=4 行(历史 attempt 也要清)。
+    expect(r.targets[0]).toMatchObject({ className: '2531324', total: 3, alreadyCanonical: 1, autoMatched: 1, pendingReview: 4, scored: 0 })
     expect(r.targets[0].unmatched).toEqual([
       { submissionId: d.subUnmatched.id, studentNo: '03', studentName: '学生03', text: '想参加朗诵会' },
     ])
+    // 作答明细:原文 × 人数 → 命中选项/未匹配(s1 的旧草稿不出现——只看最新一次)。
+    expect(r.targets[0].answers).toHaveLength(3)
+    expect(r.targets[0].answers).toContainEqual({ text: '英语口语大赛', count: 1, matchedOption: '英语口语大赛' })
+    expect(r.targets[0].answers).toContainEqual({ text: '英文歌曲比赛', count: 1, matchedOption: '英文歌曲比赛' })
+    expect(r.targets[0].answers).toContainEqual({ text: '想参加朗诵会', count: 1, matchedOption: null })
     // Nothing written: phase still text, submissions untouched, job still pending.
     expect((await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })).requireText).toBe(true)
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subVariant.id } })).recitedText).toBe('　英文歌曲比赛 ')
