@@ -29,6 +29,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
     id: a.id,
     version: a.version,
     title: a.title,
+    mode: a.mode ?? '',
     monthLabel: a.monthLabel ?? '',
     chunkSetId: bank?.id ?? null,
     chunkSetName: bank?.name ?? null,

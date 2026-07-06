@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { mergeAssignmentBatch } from '@/lib/domain/assignments'
+import { mergeAssignmentBatch, updateAssignmentBatch } from '@/lib/domain/assignments'
 import { groupAssignmentBatches } from '@/lib/assignment-batches'
 import type { PrismaClient } from '@prisma/client'
 
@@ -49,7 +49,7 @@ describe('mergeAssignmentBatch (归并批次)', () => {
 
     // 列表分组随即合一:一张卡、按班级三行。
     const groups = groupAssignmentBatches(
-      rows.map((r, i) => ({ id: r.id, title: r.title, category: null, dueAt: null, batchId: r.batchId, phaseCount: 1, courseId: d.course.id, courseName: 'E', className: `C${i + 1}` })),
+      rows.map((r, i) => ({ id: r.id, title: r.title, category: null, mode: null, dueAt: null, batchId: r.batchId, phaseCount: 1, courseId: d.course.id, courseName: 'E', className: `C${i + 1}` })),
       new Map(),
       new Map(),
     )
@@ -90,5 +90,49 @@ describe('mergeAssignmentBatch (归并批次)', () => {
     const a1 = await publishOne(db.prisma, d.offerings[0].id, 'A')
     expect(await mergeAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a1.id], 'A')).toEqual({ ok: false, error: 'err.mergeNeedTwo' })
     expect(await mergeAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [], 'A')).toEqual({ ok: false, error: 'err.mergeNeedTwo' })
+  })
+})
+
+describe('updateAssignmentBatch (编辑批次:改名 + 定性质)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('renames + sets the mode across every member, bumping the version fence', async () => {
+    const d = await seed(db.prisma)
+    const batchId = crypto.randomUUID()
+    const a1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: '期末考核', batchId } })
+    const a2 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[1].id, title: '期末考核', batchId } })
+
+    const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a2.id], { title: '期末口语考试', mode: 'EXAM' })
+    expect(res).toEqual({ ok: true, merged: 2 })
+
+    const rows = await db.prisma.assignment.findMany({ orderBy: { id: 'asc' } })
+    expect(rows.map((r) => r.title)).toEqual(['期末口语考试', '期末口语考试'])
+    expect(rows.map((r) => r.mode)).toEqual(['EXAM', 'EXAM'])
+    expect(rows.map((r) => r.version)).toEqual([1, 1])
+    expect(rows.map((r) => r.batchId)).toEqual([batchId, batchId]) // batch identity untouched
+  })
+
+  it('mode null clears the classification (back to the free-text fallback)', async () => {
+    const d = await seed(db.prisma)
+    const a1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'T', mode: 'EXAM' } })
+    const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id], { title: 'T', mode: null })
+    expect(res).toEqual({ ok: true, merged: 1 })
+    expect((await db.prisma.assignment.findUniqueOrThrow({ where: { id: a1.id } })).mode).toBeNull()
+  })
+
+  it('rejects wholesale when any id is outside the actor scope — zero writes', async () => {
+    const d = await seed(db.prisma)
+    const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T3', passwordHash: 'x' } })
+    const otherCls = await db.prisma.classGroup.create({ data: { schoolId: d.school.id, name: 'C8' } })
+    const otherOffering = await db.prisma.courseOffering.create({ data: { schoolId: d.school.id, courseId: d.course.id, teacherId: other.id, classId: otherCls.id, year: 'Y', semester: '1' } })
+    const mine = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'M' } })
+    const theirs = await db.prisma.assignment.create({ data: { offeringId: otherOffering.id, title: 'X' } })
+
+    const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [mine.id, theirs.id], { title: 'HACK', mode: 'EXAM' })
+    expect(res).toEqual({ ok: false, error: 'err.assignNotFound' })
+    expect((await db.prisma.assignment.findUniqueOrThrow({ where: { id: mine.id } })).title).toBe('M')
+    expect((await db.prisma.assignment.findUniqueOrThrow({ where: { id: theirs.id } })).title).toBe('X')
   })
 })

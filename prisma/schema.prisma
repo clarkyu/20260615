@@ -287,6 +287,9 @@ model Assignment {
   batchId      String?
   title        String
   category     String?
+  // 作业性质(VISION 的「四态」):HOMEWORK/TRAINING/ASSESSMENT/EXAM → 作业/训练/测评/考试。
+  // 批次卡的分类标签优先显示它;可空 = 老作业未定性质(回退显示自由文本 category)。
+  mode         String?
   shadowVideoKey String?
   chunkSetId   Int?
   monthLabel   String?

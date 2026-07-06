@@ -15,10 +15,13 @@ export interface SentenceRow {
 }
 
 // Assignment-level (shared by all phases): identity + scheduling label. The category
-// (作业类型) lives per-phase now; the assignment's column mirrors phase 1.
+// (作业类型) lives per-phase now; the assignment's column mirrors phase 1. `mode` is the
+// 作业性质「四态」(HOMEWORK/TRAINING/ASSESSMENT/EXAM) — optional so omitting it (undefined)
+// leaves the stored value untouched on update paths that don't carry it.
 export interface AssignmentMeta {
   title: string
   monthLabel: string | null
+  mode?: string | null
 }
 
 // One ordered 环节 (phase) of an assignment: its own type (category), content (bank set
@@ -223,6 +226,16 @@ export async function mergeIntoBatch(prisma: PrismaClient, ids: number[], school
   return res.count
 }
 
+// 编辑批次:批内所有成员统一改名 + 定性质(mode 四态,null = 清除)。Scoped;
+// `version + 1` 围栏在途编辑表单(同 mergeIntoBatch 的理由)。
+export async function updateBatchMeta(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role, data: { title: string; mode: string | null }): Promise<number> {
+  const res = await prisma.assignment.updateMany({
+    where: { id: { in: ids }, offering: offeringScopeFor(schoolId, userId, role) },
+    data: { title: data.title, mode: data.mode, version: { increment: 1 } },
+  })
+  return res.count
+}
+
 // Edit an assignment's phases, RECONCILING by phase id so a phase the teacher kept is
 // updated in place — never deleted-and-recreated. This is critical: Submission /
 // PracticeAttempt cascade-delete with their Phase, so deleting a phase would destroy
@@ -420,7 +433,7 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
     where: { offering: offeringScopeFor(schoolId, userId, role) },
     orderBy: { createdAt: 'desc' },
     select: {
-      id: true, title: true, category: true, dueAt: true, monthLabel: true, batchId: true,
+      id: true, title: true, category: true, mode: true, dueAt: true, monthLabel: true, batchId: true,
       offering: { select: { courseId: true, course: { select: { name: true } }, class: { select: { name: true } } } },
       _count: { select: { phases: true } },
     },

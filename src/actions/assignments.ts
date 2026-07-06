@@ -12,9 +12,11 @@ import {
   updateAssignment as updateAssignmentService,
   buildReviewAssignment,
   mergeAssignmentBatch,
+  updateAssignmentBatch,
   type AssignmentMeta,
   type PhaseDraft,
 } from '@/lib/domain/assignments'
+import { ASSIGNMENT_MODES } from '@/lib/assignment-mode'
 import { parseForm, reqText, optText, z, type ParseResult } from '@/lib/validate'
 
 type ActionState = { error?: string; success?: boolean }
@@ -35,6 +37,8 @@ function parseDate(value: string | null | undefined): Date | null {
 const metaSchema = z.object({
   title: reqText('err.needTitle', 200),
   monthLabel: optText(20),
+  // 作业性质四态,空串 = 未定(存 null)。
+  mode: z.enum(ASSIGNMENT_MODES).or(z.literal('')).optional().default(''),
 })
 
 const phaseJsonSchema = z.object({
@@ -111,7 +115,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
     isFormalTest: p.isFormalTest,
     freePractice: p.freePractice,
   }))
-  return { ok: true, data: { meta: { title: parsed.data.title, monthLabel: parsed.data.monthLabel }, phases } }
+  return { ok: true, data: { meta: { title: parsed.data.title, monthLabel: parsed.data.monthLabel, mode: parsed.data.mode || null }, phases } }
 }
 
 export async function createAssignment(prevState: unknown, formData: FormData): Promise<ActionState> {
@@ -180,6 +184,26 @@ export async function createReviewAssignment(formData: FormData): Promise<void> 
   const res = await buildReviewAssignment(prisma, offeringId, user.schoolId, user.userId, user.role)
   revalidatePath(`/dashboard/teaching/${offeringId}`)
   redirect(res.redirectTo)
+}
+
+// 编辑批次:批内所有成员统一改名 + 定性质(mode 四态)。`assignmentIds` 为成员 id 逗号串。
+export async function editAssignmentBatch(prevState: unknown, formData: FormData): Promise<ActionState> {
+  const cx = await staffSchoolContext()
+  if (!cx.ok) return { error: cx.error }
+  const parsed = parseForm(
+    z.object({
+      title: reqText('err.needTitle', 200),
+      mode: z.enum(ASSIGNMENT_MODES).or(z.literal('')).optional().default(''),
+    }),
+    formData,
+  )
+  if (!parsed.ok) return { error: cx.t(parsed.error) }
+  const assignmentIds = String(formData.get('assignmentIds') ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+
+  const res = await updateAssignmentBatch(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, assignmentIds, { title: parsed.data.title, mode: parsed.data.mode || null })
+  if (!res.ok) return { error: cx.t(res.error) }
+  revalidatePath('/dashboard/assignments')
+  return { success: true }
 }
 
 // 归并批次:把勾选的同课程作业合并为一个发布批次并统一标题(误分开发布的自救入口)。

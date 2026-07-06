@@ -9,6 +9,7 @@ import { groupAssignmentBatches } from '@/lib/assignment-batches'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LocalDate } from '@/components/local-date'
+import { BatchEditForm } from './batch-edit-form'
 
 // The staff "作业" menu: assignments grouped by publish batch (one "发一份 + 勾多班" =
 // one card), so N classes' copies of the same assignment no longer show as N rows.
@@ -66,7 +67,7 @@ export default async function StaffAssignmentsPage() {
 
   const batches = groupAssignmentBatches(
     list.map((a) => ({
-      id: a.id, title: a.title, category: a.category, dueAt: a.dueAt, batchId: a.batchId,
+      id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,
       phaseCount: a._count.phases, courseId: a.offering.courseId, courseName: a.offering.course.name, className: a.offering.class.name,
     })),
     submitted,
@@ -93,6 +94,8 @@ export default async function StaffAssignmentsPage() {
       </div>
 
       {batches.length === 0 ? emptyState : batches.map((b) => {
+        // 分类标签:优先「作业性质」四态(作业/训练/测评/考试),未定时回退旧的自由文本类型。
+        const badge = b.mode ? t(`mode.${b.mode}`) : b.category
         const meta = (
           <>
             {b.courseName}
@@ -110,7 +113,7 @@ export default async function StaffAssignmentsPage() {
               <Card className="tap hover:shadow-card">
                 <CardContent className="flex items-center gap-3 p-4">
                   <div className="min-w-0 flex-1">
-                    {b.category ? <Badge tone="primary" className="mb-1">{b.category}</Badge> : null}
+                    {badge ? <Badge tone="primary" className="mb-1">{badge}</Badge> : null}
                     <p className="truncate font-semibold leading-snug">{b.title}</p>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{t('asgList.submittedN', { n: c.submitted })}</p>
@@ -130,7 +133,7 @@ export default async function StaffAssignmentsPage() {
           <details key={b.key} className="group rounded-2xl border border-border bg-card shadow-card">
             <summary className="tap flex cursor-pointer list-none items-center gap-3 p-4">
               <div className="min-w-0 flex-1">
-                {b.category ? <Badge tone="primary" className="mb-1">{b.category}</Badge> : null}
+                {badge ? <Badge tone="primary" className="mb-1">{badge}</Badge> : null}
                 <p className="truncate font-semibold leading-snug">{b.title}</p>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{t('asgList.submittedN', { n: b.totalSubmitted })}</p>
@@ -162,6 +165,9 @@ export default async function StaffAssignmentsPage() {
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </Link>
               ))}
+            </div>
+            <div className="border-t border-border/60 p-2">
+              <BatchEditForm assignmentIds={b.classes.map((c) => c.assignmentId)} title={b.title} mode={b.mode} />
             </div>
           </details>
         )
