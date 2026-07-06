@@ -38,7 +38,7 @@
 | A16 | **S4** | `repo/ai-keys.ts:11`、`repo/users.ts:28` | 死导出 `findSecret` / `setSchool` | ✅ 本 PR（两个无调用方的导出删除；活路径分别是 `listSecretsForUser` / `setSchoolAsAdmin`） |
 | A17 | **S4** | `ai/providers/gemini.ts:214` | Gemini API key 走 URL query（建议改 `x-goog-api-key` 头） | ✅ 本 PR（三处 generateContent/upload/poll 的 `?key=` 全改 `x-goog-api-key` 头） |
 | A18 | **S4** | `points.ts` / `retention/route.ts` 等 | 魔法值 `DAY_MS` / `180_000` 超时 / `MAX_SCORE` 声明序等一致性小项 | ✅ 本 PR（`DAY_MS` 收进 `lib/time`、AI 超时收进 `lib/ai/net`、`MAX_SCORE` 提到首用之前） |
-| A19 | **S4** | `student/.../shadow-submit.tsx:153` | `scrollIntoView` 写在 state updater 里（StrictMode 双触发） | ⬜ |
+| A19 | **S4** | `student/.../shadow-submit.tsx:153` | `scrollIntoView` 写在 state updater 里（StrictMode 双触发） | ✅ 本 PR（updater 只并集、纯函数；滚动副作用移到 updater 外） |
 
 ## 审计过、确认干净
 
