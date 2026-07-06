@@ -218,11 +218,24 @@ export function AssignmentForm({
   const [saveTemplate, setSaveTemplate] = useState(false)
   const [templateName, setTemplateName] = useState('')
 
+  // Seed with EMPTY open/due times so SSR and the client render identically; the loaded ISO is
+  // converted to the teacher's local wall-clock AFTER mount (below), mirroring the month handling.
+  // `toLocalInput` is TZ-dependent, so doing it in the initializer made a UTC server and a local-TZ
+  // browser disagree at hydration on every edit of an assignment with times (audit A5).
   const [phases, setPhases] = useState<PhaseState[]>(() =>
     initial?.phases?.length
-      ? initial.phases.map((p) => ({ ...p, openAt: p.openAt ? toLocalInput(p.openAt) : '', dueAt: p.dueAt ? toLocalInput(p.dueAt) : '' }))
+      ? initial.phases.map((p) => ({ ...p, openAt: '', dueAt: '' }))
       : [newPhase(hasBank)],
   )
+  useEffect(() => {
+    if (!initial?.phases?.length) return
+    setPhases((cur) => cur.map((p, i) => {
+      const src = initial.phases![i]
+      return src ? { ...p, openAt: src.openAt ? toLocalInput(src.openAt) : '', dueAt: src.dueAt ? toLocalInput(src.dueAt) : '' } : p
+    }))
+    // Mount-only: fill the loaded phase times once, client-side. `initial` is a stable prop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Phases are an accordion — only one expanded at a time so a multi-phase form isn't
   // a wall of inputs. -1 = all collapsed.
   const [openPhase, setOpenPhase] = useState(0)
