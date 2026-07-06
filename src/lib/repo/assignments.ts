@@ -238,11 +238,11 @@ export async function mergeIntoBatch(prisma: PrismaClient, ids: number[], school
 }
 
 // ── 环节统一为单选投票（维护工具,CRON_SECRET 路由专用） ─────────────────────────
-// 平台级读:同名作业在指定序号上的环节 + 各自班级 + 非草稿提交。不按租户 scope——
-// 调用方是 CRON_SECRET 守卫的维护端点(与 retention 同类,跨租户是其本职),不是用户请求。
-export function listPhaseGroupForUnify(prisma: PrismaClient, title: string, order: number) {
+// 平台级读(无 actor scope,由 CRON_SECRET 把门),但**必须钉学校**:作业标题全平台
+// 不唯一,不带 schoolId 会把别校恰好同名的作业一并扫进目标(复查 R6)。
+export function listPhaseGroupForUnify(prisma: PrismaClient, schoolId: number, title: string, order: number) {
   return prisma.phase.findMany({
-    where: { order, assignment: { title } },
+    where: { order, assignment: { title, offering: { schoolId } } },
     select: {
       id: true, order: true, requireText: true, requireChoice: true, requireFreeText: true,
       requireAudio: true, requireVideo: true, requireHandwriting: true, fillBlank: true,
