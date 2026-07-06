@@ -1,5 +1,8 @@
 {
   "model": "opus",
+  "env": {
+    "WATCH_DETAIL": "efficient"
+  },
   "extraKnownMarketplaces": {
     "claude-video": {
       "source": {
