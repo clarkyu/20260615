@@ -54,11 +54,12 @@ export function MergeForm({ groups }: { groups: MergeCandidate[] }) {
     })
   }
 
-  // 按课程分节展示,禁用态一目了然。
+  // 按课程分节展示,禁用态一目了然。节的身份是 courseId——课程名可以重名
+  // (两个「英语」),React key 不能用它(复查 R13)。
   const byCourse = useMemo(() => {
-    const m = new Map<number, { courseName: string; items: MergeCandidate[] }>()
+    const m = new Map<number, { courseId: number; courseName: string; items: MergeCandidate[] }>()
     for (const g of groups) {
-      const e = m.get(g.courseId) ?? { courseName: g.courseName, items: [] }
+      const e = m.get(g.courseId) ?? { courseId: g.courseId, courseName: g.courseName, items: [] }
       e.items.push(g)
       m.set(g.courseId, e)
     }
@@ -72,7 +73,7 @@ export function MergeForm({ groups }: { groups: MergeCandidate[] }) {
       <p className="px-1 text-xs text-muted-foreground">{t('merge.pickHint')}</p>
 
       {byCourse.map((course) => (
-        <section key={course.courseName} className="space-y-2">
+        <section key={course.courseId} className="space-y-2">
           {byCourse.length > 1 ? <h2 className="px-1 text-sm font-semibold text-muted-foreground">{course.courseName}</h2> : null}
           {course.items.map((g) => {
             const disabled = lockedCourseId != null && g.courseId !== lockedCourseId
