@@ -218,9 +218,11 @@ const GEN_TIMEOUT_MS = 180_000
 const NET_TIMEOUT_MS = 60_000
 
 async function generate(model: string, parts: Part[], schema: unknown): Promise<{ data: unknown; usage?: TokenUsage }> {
-  const res = await fetch(`${baseUrl()}/v1beta/models/${model}:generateContent?key=${apiKey()}`, {
+  // Auth via the x-goog-api-key header, not a ?key= query param — a query string leaks
+  // into access/proxy logs and any error that echoes the URL; a header does not.
+  const res = await fetch(`${baseUrl()}/v1beta/models/${model}:generateContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey() },
     body: JSON.stringify({
       contents: [{ role: 'user', parts }],
       generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2 },
@@ -241,9 +243,10 @@ async function sleep(ms: number) {
 // Uploads media to the Gemini File API (resumable) and waits until ACTIVE.
 async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<string> {
   const key = apiKey()
-  const start = await fetch(`${baseUrl()}/upload/v1beta/files?key=${key}`, {
+  const start = await fetch(`${baseUrl()}/upload/v1beta/files`, {
     method: 'POST',
     headers: {
+      'x-goog-api-key': key,
       'X-Goog-Upload-Protocol': 'resumable',
       'X-Goog-Upload-Command': 'start',
       'X-Goog-Upload-Header-Content-Length': String(contentLength),
@@ -271,7 +274,7 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
     await sleep(2000)
     // A transient poll error/timeout shouldn't abort the whole upload — keep waiting.
     try {
-      const poll = await fetch(`${baseUrl()}/v1beta/${file.name}?key=${key}`, { signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
+      const poll = await fetch(`${baseUrl()}/v1beta/${file.name}`, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
       if (!poll.ok) continue
       file = (await poll.json()) as { uri?: string; name?: string; state?: string }
     } catch { /* keep polling */ }
