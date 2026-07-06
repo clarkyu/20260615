@@ -23,7 +23,7 @@
 | A1 | **S1** | `actions/auth.ts` register | 匿名 register 覆盖未验证账号密码/角色 → 账号劫持 + 学生越权为老师 | ✅ #332 |
 | A2 | **S2** | `assignments/[id]/export/route.ts:71` | 导出成绩单用等权平均，与全站加权 `collapsePhases` 矛盾（老师设权重后导出≠界面） | ✅ 本 PR（抽出 `weightedPhaseMean` 共用） |
 | A3 | **S2** | `ai/providers/gemini.ts:120` | 少算 `thoughtsTokenCount` → 默认感知模型每次评阅系统性低报输出成本 | ✅ 本 PR（thoughts 折进 outputTokens） |
-| A4 | **S2** | `ai/providers/anthropic.ts:42` | Claude 评分 `max_tokens:1024`，长评语截断 → JSON 解析失败 → 提交 FAILED/死信 | ⬜ |
+| A4 | **S2** | `ai/providers/anthropic.ts:42` | Claude 评分 `max_tokens:1024`，长评语截断 → JSON 解析失败 → 提交 FAILED/死信 | ✅ 本 PR（提到 4096） |
 | A5 | **S2** | `components/assignment-form.tsx:221` | `toLocalInput` 在 SSR 用服务器时区算环节时间 → 编辑页水合不一致（仅显示） | ⬜ |
 | A6 | **S3** | `assignments/[id]/export/route.ts:22` | 导出 `classId` 未校验属于该作业 offering → 可取本校任意班名单 PII | ✅ 本 PR（改由作业 offering 派生班级，弃用 query 参数） |
 | A7 | **S3** | `ai/providers/openai-compat.ts:90` | usage 缺 token 拆分时记成真实 $0（MiniMax 触发） | ⬜ |

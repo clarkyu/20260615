@@ -39,7 +39,12 @@ async function callClaude(system: string, userContent: string, modelId: string):
     },
     body: JSON.stringify({
       model: modelId,
-      max_tokens: 1024,
+      // Anthropic requires an explicit output cap. The judge returns a detailed 中文评语 + a
+      // per-dimension breakdown + quoted sentences as JSON; 1024 tokens truncated verbose grades
+      // mid-string → JSON.parse threw → the submission was marked FAILED and dead-lettered on
+      // retry (same input reproduces the truncation). Give it real headroom (audit A4). Gemini and
+      // the OpenAI-compat path set no cap at all, so only Claude hit this.
+      max_tokens: 4096,
       temperature: 0.2,
       system,
       messages: [{ role: 'user', content: userContent }],
