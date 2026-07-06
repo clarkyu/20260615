@@ -167,6 +167,35 @@ export async function createAssignments(
   return { ok: true, redirectTo: `/dashboard/teaching/${target}` }
 }
 
+export type MergeResult = { ok: true; merged: number } | { ok: false; error: string }
+
+// 归并批次:把误分开发布的同课程作业写上同一个「新」batchId + 统一标题,列表随即合并为
+// 一张按班级展开的卡(与一次发布勾多班的效果一致),评阅配置同步也随之互认兄弟。
+// batchId 必须是新 UUID、绝不复用旧值——旧值可能还躺在某个未关闭的发布表单里当幂等键,
+// 复用会让那次重试被 offeringsWithBatch 误判「已发布」而静默丢班。
+export async function mergeAssignmentBatch(
+  prisma: PrismaClient,
+  schoolId: number,
+  userId: number,
+  role: Role,
+  assignmentIds: number[],
+  title: string,
+): Promise<MergeResult> {
+  const ids = [...new Set(assignmentIds)].filter((n) => Number.isInteger(n) && n > 0)
+  if (ids.length < 2) return { ok: false, error: 'err.mergeNeedTwo' }
+
+  // Every id must exist within the actor's scope (a shortfall means an out-of-scope or
+  // deleted id — reject wholesale rather than merging a partial selection), and all must
+  // share one course: cross-course groups would render as one card under a single course
+  // name and cross-pollinate 评阅配置 sync targets.
+  const rows = await assignments.listCourseIdsForMerge(prisma, ids, schoolId, userId, role)
+  if (rows.length !== ids.length) return { ok: false, error: 'err.assignNotFound' }
+  if (new Set(rows.map((r) => r.offering.courseId)).size > 1) return { ok: false, error: 'err.mergeSameCourse' }
+
+  const merged = await assignments.mergeIntoBatch(prisma, ids, schoolId, userId, role, crypto.randomUUID(), title)
+  return { ok: true, merged }
+}
+
 export type UpdateResult = { ok: true } | { ok: false; error: string }
 
 export async function updateAssignment(

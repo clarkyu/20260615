@@ -202,6 +202,27 @@ export async function offeringsWithBatch(prisma: PrismaClient, batchId: string, 
   return new Set(rows.map((r) => r.offeringId))
 }
 
+// The merge pre-check: which of the requested assignments the actor actually owns, and
+// each one's course (归并只允许同课程 — the domain layer enforces it on these rows).
+export function listCourseIdsForMerge(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.assignment.findMany({
+    where: { id: { in: ids }, offering: offeringScopeFor(schoolId, userId, role) },
+    select: { id: true, offering: { select: { courseId: true } } },
+  })
+}
+
+// 归并批次: stamp the given assignments with one shared (fresh) batchId + a unified title,
+// so the staff list groups them as a single per-class expandable card. Scoped like every
+// other staff write; `version + 1` fences any in-flight edit form (its stale save then
+// conflicts cleanly instead of silently reverting the unified title).
+export async function mergeIntoBatch(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role, batchId: string, title: string): Promise<number> {
+  const res = await prisma.assignment.updateMany({
+    where: { id: { in: ids }, offering: offeringScopeFor(schoolId, userId, role) },
+    data: { batchId, title, version: { increment: 1 } },
+  })
+  return res.count
+}
+
 // Edit an assignment's phases, RECONCILING by phase id so a phase the teacher kept is
 // updated in place — never deleted-and-recreated. This is critical: Submission /
 // PracticeAttempt cascade-delete with their Phase, so deleting a phase would destroy
