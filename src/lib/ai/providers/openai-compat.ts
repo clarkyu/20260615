@@ -201,5 +201,7 @@ export const minimaxAuthor = makeAuthor(COMPAT.minimax)
 export const deepseekJudge = makeJudge(COMPAT.deepseek)
 export const deepseekAuthor = makeAuthor(COMPAT.deepseek)
 export const openaiJudge = makeJudge(COMPAT.openai)
-export const openaiPerception = makePerception(COMPAT.openai)
+// No openaiPerception: OpenAI Chat Completions can't take the video the perception path sends
+// (that shape is Qwen-only); OpenAI-side speech perception is Whisper's job. gpt-4o is judge/author
+// only (audit A9). makePerception stays — Qwen uses it (qwen-omni does accept video_url).
 export const openaiAuthor = makeAuthor(COMPAT.openai)

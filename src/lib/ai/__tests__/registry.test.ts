@@ -51,6 +51,12 @@ describe('system default models are valid + capability-correct', () => {
     expect(p?.capabilities).toContain('perception')
     expect(p?.modalities).toContain('video')
   })
+  it('gpt-4o is a judge/author only, NOT a perception model — OpenAI chat 400s on the video path (audit A9)', () => {
+    const m = getModel('gpt-4o')
+    expect(m?.capabilities).toEqual(expect.arrayContaining(['judge', 'author']))
+    expect(m?.capabilities).not.toContain('perception')
+    expect(modelsForCapability('perception').map((x) => x.id)).not.toContain('gpt-4o')
+  })
 })
 
 describe('authoring capability + defaults', () => {
