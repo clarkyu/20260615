@@ -61,10 +61,13 @@ export const MODELS: ModelDescriptor[] = [
   },
   {
     id: 'gpt-4o',
-    label: 'GPT-4o（音频+抽帧）',
+    label: 'GPT-4o（评分 / 出题）',
     provider: 'openai',
-    capabilities: ['perception', 'judge', 'author'],
-    modalities: ['audio', 'image', 'text'],
+    // OpenAI Chat Completions can't ingest the video the perception path sends (that content
+    // shape is Qwen-only), and OpenAI-side speech perception is Whisper's job — so gpt-4o is a
+    // text judge/author, NOT a perception model (audit A9: it 400'd if picked for perception).
+    capabilities: ['judge', 'author'],
+    modalities: ['text'],
   },
   {
     id: 'whisper-1',

@@ -8,7 +8,6 @@ import {
   minimaxAuthor,
   deepseekJudge,
   deepseekAuthor,
-  openaiPerception,
   openaiJudge,
   openaiAuthor,
 } from './providers/openai-compat'
@@ -22,7 +21,6 @@ import { claudeJudge, claudeAuthor } from './providers/anthropic'
 const perceptionProviders: Partial<Record<Provider, PerceptionProvider>> = {
   gemini: geminiPerception,
   qwen: qwenPerception,
-  openai: openaiPerception,
   whisper: whisperPerception,
 }
 
