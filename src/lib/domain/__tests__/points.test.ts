@@ -37,6 +37,24 @@ describe('points tally', () => {
     expect(r.activeDays).toBe(4)
   })
 
+  it('a teacher-marked MISSING (缺交) day does NOT count as an active day or extend the streak (audit A10)', () => {
+    const r = tally(
+      {
+        feedback: { submitted: 0, adopted: 0 },
+        submissions: [
+          { status: 'GRADED', finalScore: 90, gradedAt: d('2026-06-13'), createdAt: d('2026-06-13') }, // real activity today
+          { status: 'MISSING', finalScore: null, gradedAt: d('2026-06-12'), createdAt: d('2026-06-12') }, // teacher marked; student did nothing
+        ],
+        practice: [],
+      },
+      d('2026-06-13'),
+    )
+    expect(r.activeDays).toBe(1) // only 06-13, NOT 06-12
+    const by = Object.fromEntries(r.rows.map((row) => [row.source, row.points]))
+    expect(by.activeDay).toBe(5)
+    expect(r.streak).toBe(1) // today only; the MISSING day doesn't bridge/extend the streak
+  })
+
   it('returns an empty breakdown and zero total when nothing earned', () => {
     const r = tally({ feedback: { submitted: 0, adopted: 0 }, submissions: [], practice: [] }, d('2026-06-13'))
     expect(r.total).toBe(0)

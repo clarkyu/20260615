@@ -87,7 +87,10 @@ export function tally(input: TallyInput, now: Date): PointsResult {
   const practiceCount = input.practice.filter((p) => p.aiScore != null).length
 
   const days = new Set<string>()
-  for (const s of input.submissions) days.add(dayKey(s.createdAt))
+  // A teacher-created 缺交(MISSING) marker is NOT student activity — its createdAt is the teacher's
+  // marking day. Counting it would earn the student an active-day (+streak) for a day they did
+  // nothing (audit A10). Every other status is a real student action, so it counts.
+  for (const s of input.submissions) if (s.status !== 'MISSING') days.add(dayKey(s.createdAt))
   for (const p of input.practice) days.add(dayKey(p.createdAt))
   const activeDays = days.size
 
