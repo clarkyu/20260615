@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
 import { useT } from '@/components/i18n-provider'
 import { Button } from '@/components/ui/button'
 
@@ -39,6 +39,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const t = useT()
   const [opts, setOpts] = useState<ConfirmOptions | null>(null)
   const resolverRef = useRef<((ok: boolean) => void) | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  const bodyId = useId()
 
   const confirm = useCallback(
     (o: ConfirmOptions) =>
@@ -55,10 +58,20 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     setOpts(null)
   }, [])
 
-  // Esc 取消（弹窗打开时）。
+  // Esc 取消；Tab 在弹窗按钮间循环（焦点陷阱），键盘焦点不会溜到模态框背后——
+  // 与 RecordConsentNotice 的键盘契约一致。
   useEffect(() => {
     if (!opts) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(false) }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { close(false); return }
+      const root = panelRef.current
+      if (e.key !== 'Tab' || !root) return
+      const f = root.querySelectorAll<HTMLButtonElement>('button')
+      if (f.length === 0) return
+      const first = f[0], last = f[f.length - 1]
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [opts, close])
@@ -70,15 +83,18 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         <div
           role="dialog"
           aria-modal="true"
+          aria-labelledby={opts.title ? titleId : bodyId}
+          aria-describedby={opts.title ? bodyId : undefined}
           className="safe-bottom fixed inset-0 z-[60] flex items-end justify-center bg-foreground/40 p-4 backdrop-blur-sm sm:items-center"
           onClick={() => close(false)}
         >
           <div
+            ref={panelRef}
             className="animate-in-up w-full max-w-sm rounded-lg border border-border bg-card p-5 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
-            {opts.title ? <p className="text-base font-bold tracking-tight">{opts.title}</p> : null}
-            <p className={'whitespace-pre-wrap text-sm text-muted-foreground' + (opts.title ? ' mt-1.5' : '')}>{opts.body}</p>
+            {opts.title ? <p id={titleId} className="text-base font-bold tracking-tight">{opts.title}</p> : null}
+            <p id={bodyId} className={'whitespace-pre-wrap text-sm text-muted-foreground' + (opts.title ? ' mt-1.5' : '')}>{opts.body}</p>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => close(false)}>{t('confirm.cancel')}</Button>
               <Button variant={opts.danger ? 'destructive' : 'default'} size="sm" autoFocus onClick={() => close(true)}>
