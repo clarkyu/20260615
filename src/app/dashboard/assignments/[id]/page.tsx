@@ -7,6 +7,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
+import { representativeSubmission } from '@/lib/domain/submit'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -40,13 +41,25 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   const assignment = await assignmentRepo.findDetailForStaff(prisma, assignmentId, user.schoolId, user.userId, user.role)
   if (!assignment) notFound()
 
-  // A submission is per-phase: keep the latest attempt per (student, phase). When the
-  // assignment has several phases, label each row with its phase.
+  // A submission is per-phase: keep ONE representative per (student, phase) — the latest
+  // NON-DRAFT attempt when one exists, else the in-progress draft. Same contract as the
+  // student's own status screens (domain/submit.representativeSubmission): starting a redo
+  // creates a higher-attempt DRAFT which must NOT shadow the already-submitted attempt —
+  // otherwise a cast vote vanishes from the poll tally and a graded row shows as 未提交
+  // the moment a student taps 重做 (audit R1). Rows arrive attempt-DESC per student, and
+  // the per-key subsequence keeps that order, which representativeSubmission requires.
   const multiPhase = assignment.phases.length > 1
-  const latestByStudentPhase = new Map<string, (typeof assignment.submissions)[number]>()
+  const byStudentPhase = new Map<string, (typeof assignment.submissions)[number][]>()
   for (const s of assignment.submissions) {
     const key = `${s.studentId}:${s.phaseId ?? 0}`
-    if (!latestByStudentPhase.has(key)) latestByStudentPhase.set(key, s)
+    const list = byStudentPhase.get(key) ?? []
+    list.push(s)
+    byStudentPhase.set(key, list)
+  }
+  const latestByStudentPhase = new Map<string, (typeof assignment.submissions)[number]>()
+  for (const [key, subs] of byStudentPhase) {
+    const rep = representativeSubmission(subs)
+    if (rep) latestByStudentPhase.set(key, rep)
   }
 
   // 单选投票环节按「票数分布」整体呈现（见下方 pollResults），不逐个学生进评分列表。
