@@ -211,7 +211,11 @@ export async function updateAssignmentBatch(
   if (ids.length === 0) return { ok: false, error: 'err.assignNotFound' }
   const rows = await assignments.listCourseIdsForMerge(prisma, ids, schoolId, userId, role)
   if (rows.length !== ids.length) return { ok: false, error: 'err.assignNotFound' }
-  const merged = await assignments.updateBatchMeta(prisma, ids, schoolId, userId, role, data)
+  // legacy 组(全员无 batchId,按「课程+标题」聚合)在改名时铸一个新 batchId:
+  // 组身份从易撞车的标题变成稳定 token——改名不再与同名 legacy 组融合,卡片 key
+  // 不随标题漂移,评阅配置同步也只按 batchId 认亲(复查 R9)。已有批次身份的组不动。
+  const mintBatchId = rows.every((r) => r.batchId == null) ? crypto.randomUUID() : undefined
+  const merged = await assignments.updateBatchMeta(prisma, ids, schoolId, userId, role, { ...data, batchId: mintBatchId })
   return { ok: true, merged }
 }
 

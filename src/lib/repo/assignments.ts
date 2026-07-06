@@ -221,7 +221,7 @@ export async function offeringsWithBatch(prisma: PrismaClient, batchId: string, 
 export function listCourseIdsForMerge(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findMany({
     where: { id: { in: ids }, offering: offeringScopeFor(schoolId, userId, role) },
-    select: { id: true, offering: { select: { courseId: true } } },
+    select: { id: true, batchId: true, offering: { select: { courseId: true } } },
   })
 }
 
@@ -317,11 +317,13 @@ export async function convertPhaseToPoll(prisma: PrismaClient, phaseId: number, 
 }
 
 // 编辑批次:批内所有成员统一改名 + 定性质(mode 四态,null = 清除)。Scoped;
-// `version + 1` 围栏在途编辑表单(同 mergeIntoBatch 的理由)。
-export async function updateBatchMeta(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role, data: { title: string; mode: string | null }): Promise<number> {
+// `version + 1` 围栏在途编辑表单(同 mergeIntoBatch 的理由)。batchId(可选)由 domain
+// 在目标是 legacy 组(全员无 batchId)时铸新传入——改名后组的身份从「课程+标题」变成
+// 稳定的 batchId,不再与同名 legacy 组融合、卡片 key 也不再随标题漂移(复查 R9)。
+export async function updateBatchMeta(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role, data: { title: string; mode: string | null; batchId?: string }): Promise<number> {
   const res = await prisma.assignment.updateMany({
     where: { id: { in: ids }, offering: offeringScopeFor(schoolId, userId, role) },
-    data: { title: data.title, mode: data.mode, version: { increment: 1 } },
+    data: { title: data.title, mode: data.mode, ...(data.batchId ? { batchId: data.batchId } : {}), version: { increment: 1 } },
   })
   return res.count
 }
@@ -416,7 +418,10 @@ export async function findSyncSiblings(prisma: PrismaClient, assignmentId: numbe
     where: {
       id: { not: assignmentId },
       offering: { ...offeringScopeFor(schoolId, userId, role), classId: { not: self.offering.classId }, courseId: self.offering.courseId },
-      OR: [...(self.batchId ? [{ batchId: self.batchId }] : []), { title: self.title }],
+      // 有批次身份的作业只按 batchId 认亲:同名兜底仅留给无 batchId 的 legacy 作业。
+      // 否则改名/归并后撞上同课程的无关同名作业,会被默认勾选进「同步评阅配置」,
+      // 一次保存静默改写别人作业的评分标准/模型(复查 R9);要认亲请先归并批次。
+      OR: self.batchId ? [{ batchId: self.batchId }] : [{ title: self.title }],
     },
     select: { id: true, offeringId: true, offering: { select: { class: { select: { name: true } } } } },
     orderBy: { createdAt: 'desc' },
