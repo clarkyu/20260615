@@ -126,6 +126,12 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
           label,
           count: subs.filter((s) => selectedOf(s).includes(label)).length,
           correct: isMulti ? correctNorm.has(label.trim()) : correct != null && label.trim() === correct,
+          // 归票留痕:这个选项名下由原文归入的票(学生 + 原始作答),可查可撤销。
+          notes: isMulti
+            ? []
+            : subs
+                .filter((s) => (s.recitedText ?? '').trim() === label.trim() && s.voteSourceText != null)
+                .map((s) => ({ submissionId: s.id, studentName: s.student.name ?? '', studentNo: s.student.studentNo ?? '', source: s.voteSourceText as string })),
         })),
       }
     })

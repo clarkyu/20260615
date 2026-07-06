@@ -462,6 +462,9 @@ model Submission {
 
   recitedText String?
   textSubmittedAt DateTime?
+  // 归票留痕:投票环节把作答归到某选项时,原始作答存这里(recitedText 改写为选项原文
+  // 以便计票);可空 = 未被归票改写过。有它即可无损撤销归票。
+  voteSourceText String?
 
   videoKey   String?
   audioKey   String?

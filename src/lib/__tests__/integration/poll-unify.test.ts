@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { unifyPhaseToPoll, unifyPollSiblings, assignPollVote } from '@/lib/domain/poll-unify'
+import { unifyPhaseToPoll, unifyPollSiblings, assignPollVote, unassignPollVote } from '@/lib/domain/poll-unify'
 import type { PrismaClient } from '@prisma/client'
 
 // 环节统一为单选投票:模板班(投票)的选项套到误配成默写文本的班上;学生作答零删除——
@@ -85,7 +85,9 @@ describe('unifyPhaseToPoll', () => {
     expect(asg.version).toBe(1) // in-flight edit forms fenced
 
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subExact.id } })).recitedText).toBe('英语口语大赛')
-    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subVariant.id } })).recitedText).toBe('英文歌曲比赛') // canonicalized
+    const variant = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subVariant.id } })
+    expect(variant.recitedText).toBe('英文歌曲比赛') // canonicalized
+    expect(variant.voteSourceText).toBe('　英文歌曲比赛 ') // 等价改写留痕原始写法 → 可撤销
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })).recitedText).toBe('想参加朗诵会') // preserved verbatim
     // Poll submissions never sit in the review queue, and no AI job may come back to score them.
     expect(await db.prisma.submission.count({ where: { phaseId: d.textPhase.id, needsReview: true } })).toBe(0)
@@ -164,7 +166,22 @@ describe('assignPollVote (人工归票)', () => {
 
     const good = await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id, '英语口语大赛')
     expect(good).toEqual({ ok: true, assignmentId: d.textAsg.id })
-    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })).recitedText).toBe('英语口语大赛')
+    let sub = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })
+    expect(sub.recitedText).toBe('英语口语大赛')
+    expect(sub.voteSourceText).toBe('想参加朗诵会') // 归票留痕原文
+
+    // 改票不覆盖首次留痕(撤销恢复的永远是学生的原始作答)。
+    await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id, '英文歌曲比赛')
+    sub = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })
+    expect(sub.recitedText).toBe('英文歌曲比赛')
+    expect(sub.voteSourceText).toBe('想参加朗诵会')
+
+    // 撤销:恢复原文、清留痕;再撤一次报「无留痕」。
+    expect(await unassignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id)).toEqual({ ok: true, assignmentId: d.textAsg.id })
+    sub = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })
+    expect(sub.recitedText).toBe('想参加朗诵会')
+    expect(sub.voteSourceText).toBeNull()
+    expect(await unassignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id)).toEqual({ ok: false, error: 'err.noVoteSource' })
   })
 
   it('is scoped: another teacher cannot assign votes on my submission', async () => {

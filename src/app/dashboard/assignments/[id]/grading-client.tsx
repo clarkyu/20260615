@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote, unifyPollSiblingsAction } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote, unassignPollVote, unifyPollSiblingsAction } from '@/actions/grading'
 import { estimateGrading, formatTokens } from '@/lib/ai/cost'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
@@ -50,10 +50,12 @@ interface PollResult {
   total: number
   correctChoice: string | null
   correctCount: number | null
-  options: { label: string; count: number; correct: boolean }[]
+  options: { label: string; count: number; correct: boolean; notes: VoteNote[] }[]
   // 原文与任何选项不符的作答(计入 total 但未落任何选项)——老师人工比对后归票。
   unmatched: { submissionId: number; studentName: string; studentNo: string; text: string }[]
 }
+// 归票留痕:该选项名下由原文归入的一票(学生 + 原始作答),可撤销。
+interface VoteNote { submissionId: number; studentName: string; studentNo: string; source: string }
 
 
 export function GradingClient(props: {
@@ -340,6 +342,16 @@ export function GradingClient(props: {
                     <div className="h-2 overflow-hidden rounded-full bg-secondary">
                       <div className={'h-full rounded-full ' + (o.correct ? 'bg-success' : 'bg-primary')} style={{ width: `${pct}%` }} />
                     </div>
+                    {o.notes.length > 0 ? (
+                      <details className="mt-1">
+                        <summary className="tap cursor-pointer text-xs text-muted-foreground">{t('poll.optionNotes', { n: o.notes.length })}</summary>
+                        <div className="mt-1 space-y-1.5">
+                          {o.notes.map((nt) => (
+                            <VoteNoteRow key={nt.submissionId} note={nt} />
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
                 )
               })
@@ -740,5 +752,39 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
         ) : null}
       </div>
     </details>
+  )
+}
+
+// 一条归票留痕:学生 + 原始作答 + 撤销。撤销后该票退出票数分布、回到「未归票作答」。
+function VoteNoteRow({ note }: { note: VoteNote }) {
+  const t = useT()
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div className="rounded-lg bg-secondary/50 p-2 text-xs">
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0 flex-1">
+          <span className="font-medium">{note.studentName || note.studentNo}</span>
+          <span className="ml-1 whitespace-pre-wrap break-words text-muted-foreground">{note.source.length > 120 ? `${note.source.slice(0, 120)}…` : note.source}</span>
+        </span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null)
+            startTransition(async () => {
+              const res = await unassignPollVote(note.submissionId)
+              if (res?.error) setError(res.error)
+              else router.refresh()
+            })
+          }}
+          className="tap shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+        >
+          {pending ? '…' : t('poll.undoAssign')}
+        </button>
+      </div>
+      {error ? <FormMessage>{error}</FormMessage> : null}
+    </div>
   )
 }
