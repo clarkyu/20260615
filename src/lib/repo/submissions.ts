@@ -102,7 +102,7 @@ export function acceptAiForAssignment(prisma: PrismaClient, assignmentId: number
 export function listForAssignmentStudents(prisma: PrismaClient, assignmentId: number, studentIds: number[]) {
   return prisma.submission.findMany({
     where: { assignmentId, studentId: { in: studentIds }, status: { not: 'DRAFT' } },
-    include: { phase: { select: { order: true, title: true, graded: true } } },
+    include: { phase: { select: { order: true, title: true, graded: true, weight: true } } },
     orderBy: [{ studentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
   })
 }

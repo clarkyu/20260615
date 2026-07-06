@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import * as assignmentRepo from '@/lib/repo/assignments'
-import * as classRepo from '@/lib/repo/classes'
+import * as offeringRepo from '@/lib/repo/offerings'
 import * as userRepo from '@/lib/repo/users'
 import * as submissionRepo from '@/lib/repo/submissions'
+import { weightedPhaseMean } from '@/lib/domain/analytics'
 import { buildScoreWorkbook, type ScoreExportRow } from '@/lib/roster'
 
 const STATUS: Record<string, string> = {
@@ -19,22 +20,25 @@ const STATUS: Record<string, string> = {
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const assignmentId = Number(id)
-  const classId = Number(req.nextUrl.searchParams.get('classId'))
 
   const user = await getCurrentUser()
   if (!user || user.role === 'STUDENT' || !user.schoolId) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
-  if (!Number.isInteger(assignmentId) || !Number.isInteger(classId)) {
+  if (!Number.isInteger(assignmentId)) {
     return new NextResponse('Bad request', { status: 400 })
   }
 
   const prisma = await getDb()
   const assignment = await assignmentRepo.findForSchool(prisma, assignmentId, user.schoolId, user.userId, user.role)
-  const cls = await classRepo.findClassForSchool(prisma, classId, user.schoolId)
-  if (!assignment || !cls) return new NextResponse('Not found', { status: 404 })
+  if (!assignment) return new NextResponse('Not found', { status: 404 })
+  // The class is the assignment's OWN offering's class — derived (role-scoped), never taken from
+  // a query param. (A `?classId=` could otherwise pull any same-school class's roster PII.)
+  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, assignment.offeringId, user.schoolId, user.userId, user.role)
+  if (!offering) return new NextResponse('Not found', { status: 404 })
+  const cls = offering.class
 
-  const students = await userRepo.listClassRoster(prisma, user.schoolId, classId)
+  const students = await userRepo.listClassRoster(prisma, user.schoolId, cls.id)
   const submissions = await submissionRepo.listForAssignmentStudents(prisma, assignmentId, students.map((s) => s.id))
 
   // Per-phase latest-first → keep the latest per (student, phase), grouped by student.
@@ -59,7 +63,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const phaseList = [...phaseMeta.entries()].map(([pid, m]) => ({ id: pid, ...m })).sort((a, b) => a.order - b.order)
   const multiPhase = phaseList.length > 1
 
-  const meanOf = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null)
+  // Round to 1 decimal for display. Score = WEIGHTED mean over graded phases (per-phase weight),
+  // matching collapsePhases so the export never disagrees with the dashboard/gradebook.
+  const round1 = (n: number | null) => (n == null ? null : Math.round(n * 10) / 10)
   const fmt = (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ')
 
   const rows: ScoreExportRow[] = students.map((st) => {
@@ -67,10 +73,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (phases.length === 0) {
       return { studentNo: st.studentNo ?? '', name: st.name ?? '', className: cls.name, status: STATUS.DRAFT, aiScore: null, finalScore: null, feedback: '', gradedAt: '' }
     }
-    // Score = mean over the GRADED phases — a multi-phase assignment's single score.
+    // Score = WEIGHTED mean over the GRADED phases — a multi-phase assignment's single score.
     const graded = phases.filter((p) => p.phase?.graded ?? true)
-    const finalScore = meanOf(graded.map((p) => p.finalScore).filter((v): v is number => v != null))
-    const aiScore = meanOf(graded.map((p) => p.aiScore).filter((v): v is number => v != null))
+    const finalScore = round1(weightedPhaseMean(graded.map((p) => ({ score: p.finalScore, weight: p.phase?.weight ?? 1 }))))
+    const aiScore = round1(weightedPhaseMean(graded.map((p) => ({ score: p.aiScore, weight: p.phase?.weight ?? 1 }))))
     const status = graded.length > 0 && graded.every((p) => p.status === 'GRADED') ? STATUS.GRADED : phases.some((p) => p.status === 'FLAGGED') ? STATUS.FLAGGED : STATUS.UPLOADED
     const multi = phases.length > 1
     const feedback = phases

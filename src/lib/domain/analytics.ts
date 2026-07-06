@@ -76,11 +76,20 @@ export function latestPhaseSubmissions(rows: RawPhaseRow[]): PhaseSubmission[] {
   return out
 }
 
+// THE weighted-mean formula for a multi-phase score: Σ(score × weight) / Σ weight over the
+// scored parts (each weight ≥ 1; all-1 degrades to a plain mean). The single definition of
+// "a multi-phase assignment's one score" — shared by collapsePhases AND the gradebook export
+// so the dashboard and the downloadable 成绩单 can never disagree.
+export function weightedPhaseMean(parts: { score: number | null; weight: number }[]): number | null {
+  const scored = parts.filter((p): p is { score: number; weight: number } => p.score != null)
+  const totalWeight = scored.reduce((a, p) => a + Math.max(1, p.weight), 0)
+  return totalWeight > 0 ? scored.reduce((a, p) => a + p.score * Math.max(1, p.weight), 0) / totalWeight : null
+}
+
 // Collapse the per-phase submissions of an assignment into ONE analytics row per
 // (student, assignment): score = WEIGHTED mean of the GRADED phases' final scores (each
 // phase carries a teacher-set weight, default 1 = equal); submitted if any phase is in;
-// needsReview if any phase needs review. This is the single place that defines "a
-// multi-phase assignment's one score".
+// needsReview if any phase needs review.
 export function collapsePhases(rows: PhaseSubmission[]): AnalyticsSubmission[] {
   const byPair = new Map<string, PhaseSubmission[]>()
   for (const r of rows) {
@@ -93,11 +102,7 @@ export function collapsePhases(rows: PhaseSubmission[]): AnalyticsSubmission[] {
   for (const group of byPair.values()) {
     const submitted = group.filter((g) => isSubmitted(g.status))
     // 加权平均：总分 = Σ(环节分 × 权重) / Σ权重。权重全为 1 时退化成等权（与历史一致）。
-    const graded = submitted.filter((g) => g.graded && g.finalScore != null)
-    const totalWeight = graded.reduce((a, g) => a + Math.max(1, g.weight), 0)
-    const finalScore = totalWeight > 0
-      ? graded.reduce((a, g) => a + (g.finalScore as number) * Math.max(1, g.weight), 0) / totalWeight
-      : null
+    const finalScore = weightedPhaseMean(submitted.filter((g) => g.graded).map((g) => ({ score: g.finalScore, weight: g.weight })))
     out.push({
       studentId: group[0].studentId,
       assignmentId: group[0].assignmentId,
