@@ -55,10 +55,11 @@ export function revertPollAnswer(prisma: PrismaClient, id: number, originalText:
 }
 
 // 批量归票的前置读(staff scoped):一组提交 + 各自环节的投票配置。越权的 id 直接
-// 查不出来(数量不齐 → 调用方整体拒绝)。
+// 查不出来(数量不齐 → 调用方整体拒绝)。草稿/缺交同责(复查 R19):草稿学生还在改、
+// 本就不计票;缺交没有作答,归票等于凭空造票。工作台不列这两类,只有伪造/过期请求会带进来。
 export function listPollAssignables(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.submission.findMany({
-    where: { id: { in: ids }, ...staffSub(schoolId, userId, role) },
+    where: { id: { in: ids }, status: { notIn: ['DRAFT', 'MISSING'] }, ...staffSub(schoolId, userId, role) },
     select: {
       id: true, assignmentId: true, recitedText: true, voteSourceText: true,
       phase: { select: { id: true, requireChoice: true, multiChoice: true, correctChoice: true, choicesJson: true } },

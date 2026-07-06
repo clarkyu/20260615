@@ -167,7 +167,8 @@ export async function assignPollVotesBulk(submissionIds: number[], choice: strin
   if (!Array.isArray(submissionIds) || submissionIds.length === 0 || !picked) return { error: t('err.badChoice') }
   const res = await assignPollVotesBulkService(prisma, user.schoolId, user.userId, user.role, submissionIds, picked)
   if (!res.ok) return { error: t(res.error) }
-  revalidatePath(`/dashboard/assignments/${res.assignmentId}`)
+  // 批量可跨作业:每个受影响的作业都要 revalidate,不止第一个(复查 R19)。
+  for (const id of res.assignmentIds ?? [res.assignmentId]) revalidatePath(`/dashboard/assignments/${id}`)
   return { success: true }
 }
 

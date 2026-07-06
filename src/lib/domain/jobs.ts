@@ -163,11 +163,12 @@ export async function claimAndRunDue(
   return { ran }
 }
 
-// 撤销一批提交的待跑评阅任务(环节改型为客观题/投票后,不该再有 AI 回来写分)。
+// 撤销一个环节全部提交的待跑评阅任务(环节改型为客观题/投票后,不该再有 AI 回来写分)。
 // 只删 PENDING——PROCESSING 的让它自然结束,其终态写入受提交状态围栏保护。
-export async function cancelPendingForSubmissions(prisma: PrismaClient, submissionIds: number[]): Promise<number> {
-  if (submissionIds.length === 0) return 0
-  const res = await prisma.gradingJob.deleteMany({ where: { submissionId: { in: submissionIds }, status: 'PENDING' } })
+// 按关系过滤(submission.phaseId)而非 id 列表:一次删净、不受 D1 绑定参数上限约束,
+// 也天然覆盖读计划与执行之间新入队的任务(复查 R18)。
+export async function cancelPendingForPhase(prisma: PrismaClient, phaseId: number): Promise<number> {
+  const res = await prisma.gradingJob.deleteMany({ where: { status: 'PENDING', submission: { phaseId } } })
   return res.count
 }
 

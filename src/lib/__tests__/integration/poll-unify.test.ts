@@ -303,7 +303,7 @@ describe('assignPollVote (人工归票)', () => {
     const twin = await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, offeringId: d.textAsg.offeringId, phaseId: d.textPhase.id, studentId: s4.id, status: 'UPLOADED', needsReview: false, recitedText: '想参加朗诵会' } })
 
     const res = await assignPollVotesBulk(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [d.subUnmatched.id, twin.id], '英语口语大赛')
-    expect(res).toEqual({ ok: true, assignmentId: d.textAsg.id })
+    expect(res).toEqual({ ok: true, assignmentId: d.textAsg.id, assignmentIds: [d.textAsg.id] }) // 去重后的受影响作业(供逐个 revalidate,复查 R19)
     for (const id of [d.subUnmatched.id, twin.id]) {
       const row = await db.prisma.submission.findUniqueOrThrow({ where: { id } })
       expect(row.recitedText).toBe('英语口语大赛')
@@ -315,5 +315,23 @@ describe('assignPollVote (人工归票)', () => {
     const bad = await assignPollVotesBulk(db.prisma, d.school.id, other.id, 'TEACHER', [d.subUnmatched.id, twin.id], '英文歌曲比赛')
     expect(bad).toEqual({ ok: false, error: 'err.subNoAccess' })
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: twin.id } })).recitedText).toBe('英语口语大赛') // 未被改动
+  })
+
+  it('rejects assigning a DRAFT or MISSING submission; a bulk with one such id rejects wholesale (复查 R19)', async () => {
+    const d = await seed(db.prisma)
+    await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
+    // 草稿(学生还在改)与缺交标记(没有作答)——工作台不列,只有伪造/过期请求会带到。
+    const s5 = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: '05', passwordHash: 'x' } })
+    const s6 = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: '06', passwordHash: 'x' } })
+    const draft = await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, offeringId: d.textAsg.offeringId, phaseId: d.textPhase.id, studentId: s5.id, status: 'DRAFT', recitedText: '草稿内容' } })
+    const missing = await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, offeringId: d.textAsg.offeringId, phaseId: d.textPhase.id, studentId: s6.id, status: 'MISSING', recitedText: null } })
+
+    expect(await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', draft.id, '英语口语大赛')).toEqual({ ok: false, error: 'err.subNoAccess' })
+    expect(await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', missing.id, '英语口语大赛')).toEqual({ ok: false, error: 'err.subNoAccess' })
+    // 组里混入一个草稿 → 整组拒绝,连合法那份也零写入。
+    const bulk = await assignPollVotesBulk(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [d.subUnmatched.id, draft.id], '英语口语大赛')
+    expect(bulk).toEqual({ ok: false, error: 'err.subNoAccess' })
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: draft.id } })).recitedText).toBe('草稿内容')
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })).recitedText).toBe('想参加朗诵会')
   })
 })

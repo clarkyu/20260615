@@ -1,7 +1,7 @@
 import type { PrismaClient, Role } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
-import { cancelPendingForSubmissions } from './jobs'
+import { cancelPendingForPhase } from './jobs'
 import { normalizeAnswer } from '@/lib/fill-blank'
 import { parseChoices } from '@/lib/choices'
 
@@ -126,8 +126,12 @@ function buildPlan(p: TargetPhaseRow, byNorm: Map<string, string>) {
 // (改写可逆:原始写法留痕 voteSourceText)→ ③清复核 → ④最后改型。每步幂等。
 async function applyPlans(prisma: PrismaClient, plans: ReturnType<typeof buildPlan>[], choicesJson: string, phaseOrder: number) {
   for (const { phase, rewrites } of plans) {
-    await cancelPendingForSubmissions(prisma, phase.submissions.map((s) => s.id))
-    for (const r of rewrites) await submissions.setPollAnswer(prisma, r.submissionId, r.canonical, r.sourceText)
+    await cancelPendingForPhase(prisma, phase.id)
+    // 规范化改写打成一个 batch(D1 支持非交互 $transaction):一班几十份逐条 round-trip
+    // 变一次;半途失败整批回滚,重跑仍从「未改型」状态从头补齐(复查 R18,不动 R3 顺序)。
+    if (rewrites.length > 0) {
+      await prisma.$transaction(rewrites.map((r) => submissions.setPollAnswer(prisma, r.submissionId, r.canonical, r.sourceText)))
+    }
     await submissions.clearNeedsReviewForPhase(prisma, phase.id)
     await assignments.convertPhaseToPoll(prisma, phase.id, phase.assignment.id, phaseOrder === 1, choicesJson)
   }
@@ -226,7 +230,7 @@ export async function unifyPollSiblings(
   }
 }
 
-export type AssignVoteResult = { ok: true; assignmentId: number } | { ok: false; error: string }
+export type AssignVoteResult = { ok: true; assignmentId: number; assignmentIds?: number[] } | { ok: false; error: string }
 
 // 人工归票:老师在评分页把一份「未归票作答」(与任何选项不符的原文)比对确认后归到某个
 // 选项——把 recitedText 改写为选项规范原文,票数分布即计入;原文存 voteSourceText 留痕
@@ -236,6 +240,10 @@ export async function assignPollVote(prisma: PrismaClient, schoolId: number | nu
   const sub = await submissions.findForStaff(prisma, submissionId, schoolId, userId, role)
   if (!sub || !sub.phase) return { ok: false, error: 'err.subNoAccess' }
   if (!sub.phase.requireChoice || sub.phase.multiChoice) return { ok: false, error: 'err.subNoAccess' }
+  // 草稿/缺交不可归票(复查 R19):草稿学生还在改,归票会被学生保存覆盖且本就不计票;
+  // 缺交是老师打的标记、没有作答,归票等于凭空造一票。工作台本就不列这两类——
+  // 只有伪造/过期请求会带进来。
+  if (sub.status === 'DRAFT' || sub.status === 'MISSING') return { ok: false, error: 'err.subNoAccess' }
   // 有正确答案的单选是客观判分题(quiz),不是投票:人工改写作答不会重跑判分,
   // 会让 答案/正确率/分数 互相矛盾——归票仅限纯投票(复查 R8)。
   if ((sub.phase.correctChoice ?? '').trim() !== '') return { ok: false, error: 'err.pollOnlyAssign' }
@@ -261,12 +269,18 @@ export async function assignPollVotesBulk(prisma: PrismaClient, schoolId: number
     if ((r.phase.correctChoice ?? '').trim() !== '') return { ok: false, error: 'err.pollOnlyAssign' }
     if (!parseChoices(r.phase.choicesJson).includes(choice)) return { ok: false, error: 'err.badChoice' }
   }
-  for (const r of rows) {
-    const current = r.recitedText ?? ''
-    const source = r.voteSourceText ?? (current !== choice ? current : null)
-    await submissions.setPollAnswer(prisma, r.id, choice, source)
-  }
-  return { ok: true, assignmentId: rows[0].assignmentId }
+  // 整组一个 batch(D1 非交互 $transaction):18 份「自我介绍」一次写入,半途失败整批回滚,
+  // 不会留下「归了一半」的组(复查 R18)。
+  await prisma.$transaction(
+    rows.map((r) => {
+      const current = r.recitedText ?? ''
+      const source = r.voteSourceText ?? (current !== choice ? current : null)
+      return submissions.setPollAnswer(prisma, r.id, choice, source)
+    }),
+  )
+  // 跨作业的批量归票要把每个受影响的作业都 revalidate(复查 R19)——只回第一个,
+  // 其它作业的评分页会显示旧票数。
+  return { ok: true, assignmentId: rows[0].assignmentId, assignmentIds: [...new Set(rows.map((r) => r.assignmentId))] }
 }
 
 // 撤销归票:作答恢复为留痕的原文、清掉留痕,该票随即退出票数分布(回到「未归票作答」)。
