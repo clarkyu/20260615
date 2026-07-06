@@ -7,35 +7,35 @@
 > **安全面单独结论:0 个 S1/S2** —— 所有 by-id 写都有上游 scope 门(双重把关),
 > 无跨租户 IDOR,无学生端 voteSourceText/他人数据泄漏,错误信息无内部泄漏。
 >
-> 「状态」:✅ = 已修（标 PR）· ⬜ = 未修。修复按 **R1 → S2 → S3 → S4** 逐条独立 PR。
+> 「状态」:✅ = 已修（标 PR 号）。**全部 23 项已修完**（R24 为记录在案的「明确不做」），修复按 R1 → S2 → S3 → S4 落于 #364–#381。
 
 ## 发现清单
 
 | # | 级 | 位置 | 一句话 | 状态 |
 |---|---|---|---|---|
-| R1 | **S1** | `assignments/[id]/page.tsx:46` | 重投草稿遮蔽已完成提交:已投票从分布消失、已交/已评行变「未提交」、误标「仅草稿」（违背 `submit.ts` 契约） | ✅ 本 PR（教师页复用 `representativeSubmission`:最新非草稿优先） |
-| R2 | **S2** | 同页 pollSubs | 缺交(MISSING)标记计入投票 total/voters,虚增票基数、清空未投票名单,且不可见不可撤 | ✅ 本 PR（pollSubs 排除 MISSING;被标缺交者回归「未投票·未提交」） |
-| R3 | **S2** | `poll-unify applyPlans` | 统一执行顺序不可安全重跑（改型最先写,中途失败→重跑跳过半成品班:幽灵待批 + 残留/在途 AI 任务可写分） | ✅ 本 PR（改型移到最后作提交点=重跑可修复;写作评阅入口加 objective 围栏,残留任务自弃不写分） |
-| R4 | **S2** | `poll-unify isTextTargetPhase`×2 | 目标判定漏 `requireFreeText`/`requireHandwriting`,混合环节被错误改型成矛盾杂交型 | ✅ 本 PR（谓词补两旗标 + 合并重复定义为单一来源） |
-| R5 | **S2** | `repo findDetailForStaff` | 评分页全量拉取每 attempt 全部字段（含 aiResult/transcript）≈ 每次点击 1–3.5MB D1 读,10–20× 过度 | ✅ 本 PR（提交行改显式 select、仅取页面消费的 18 字段;markMissing 同享收益） |
-| R6 | **S3** | `api/admin/unify-poll-phase` | 加固包:按标题全平台匹配可跨租户误伤（补 schoolId 必填+报告带学校）、phaseOrder 非整数静默取 1、守卫无测试、OPERATIONS.md 未记载 | ✅ 本 PR（schoolId 必填并钉进查询;phaseOrder 非法即 400;守卫入 describe.each;OPERATIONS §6 补维护端点表） |
-| R7 | **S3** | `poll-unify.ts:137,139` | 源文件含 2 个真实 NUL 字节 → git 视为二进制（不可 diff/blame/grep） | ✅ 本 PR（改写为 Unicode 转义序列,与 R4 同文件并修——不除 NUL 无法正常审 R4 的 diff） |
-| R8 | **S3** | `poll-unify assign*` + 页面 | 归票/工作台未排除带答案键的单选（quiz）:改票不重判分,答案/正确率/分数矛盾 | ✅ 本 PR（assign/bulk/undo 三写路径加 quiz 围栏 err.pollOnlyAssign;页面对 quiz 不再出工作台） |
-| R9 | **S3** | `findSyncSiblings` OR-title / `updateBatchMeta` | 改名标题连锁:泛匹配+默认全选可误写无关作业评阅配置;legacy 组改名可与同名组融合、卡片 remount 吞掉成功提示（修法:legacy 组批次写时铸新 batchId） | ✅ 本 PR（有批次身份只按 batchId 认亲;legacy 组改名铸新 batchId:不融合、key 稳定） |
-| R10 | **S3** | 发布 targets / 批次卡 | 一次发布可跨课程勾班 → 批次卡课程名错标 + 永久不可归并 | ✅ 本 PR（发布目标校验课程一致,跨课程整体拒绝 err.mixedCoursePublish;与批次族「同课程」前置约定对齐） |
-| R11 | **S3** | pollResults payload | 无上限文本载荷（20k 字 ×54×2 可至 MB 级）+ 最新文本前端不截断 | ✅ 本 PR（服务端统一截断:最新 400/历史 160/留痕 120,`lib/text.clip` 不劈代理对;聚组键带原文长度防截断误并;DB 原文与撤销留痕不动） |
-| R12 | **S3** | `listForStaff` + 两个 groupBy | 作业列表无分页 + 全史扫描,随学年数据积累degrade | ✅ 本 PR（列表取最新 400 份+截断提示;计数只扫可见 id 且按 ≤90 分块避 D1 参数上限;trimBoundaryBatch 防截断劈批——半批改名/归并会把一次发布劈成两批） |
-| R13 | **S3** | `merge-form.tsx:75` | 课程分节 key 用可重名的 courseName → React key 冲突 | ✅ 本 PR（分节键改 courseId,分节 Map 本就按 courseId 建、把 id 带出即可） |
-| R14 | **S3** | grading-client 组卡/UnifyPanel | 组卡 key 不稳定（首 submissionId）+ 预览报告不失效（误导） | ✅ 本 PR（组卡 key 用组身份=作答文本键;预览/执行分开转菊花;重预览重置已完成态;报告下注明「快照,执行时按最新数据重算」——执行本就服务端重算,纯展示诚实性） |
-| R15 | **S3** | poll-unify 报告 | 预览含空文本行（工作台不显示）、skipped 班级静默吞掉——报告与可操作数不一致 | ✅ 本 PR（空白作答单列 blank 不再虚增「待人工」,与工作台口径一致;skipped 班级在面板点名警示,i18n 三语 + sep.list 分隔符键） |
-| R16 | S4 | i18n / assignment-mode | 死键 `poll.pickOption`/`poll.assign` ×3 语言;死导出 `AssignmentMode`/`isAssignmentMode` | ✅ 本 PR（死键 ×3、死导出全删,`ASSIGNMENT_MODES` 常量保留） |
-| R17 | S4 | grading-client / merge-form | 硬编码中文顿号「、」与全角括号绕过 i18n | ✅ 本 PR（4 处 `join('、')` 改 `sep.list`(含 assignment-form/submission-flow 同类);全角括号折进 `merge.selectedN` 词条按语言取形） |
-| R18 | S4 | `applyPlans`/`assignPollVotesBulk`/`cancelPending` | 逐行写 → `$transaction` 单次 batch;cancelPending 改关系过滤（phaseId） | ✅ 本 PR（规范化改写/整组归票各打成一个 batch,半途失败整批回滚;cancelPendingForPhase 关系过滤,免 D1 参数上限并覆盖计划后新入队任务） |
-| R19 | S4 | `listPollAssignables`/`findForStaff` | 归票放行 DRAFT/MISSING 行（补 status 过滤）;bulk 跨作业只 revalidate 第一个 | ✅ 本 PR（repo 读排除 DRAFT/MISSING=整组拒绝;单条归票域内同守卫;bulk 返回去重 assignmentIds,action 逐个 revalidate） |
-| R20 | S4 | 同页 options.count | 选项计数 label 未 trim,与 notes/correct 口径不一 | ✅ 本 PR（count 两侧 trim,三处口径统一） |
-| R21 | S4 | `actions/assignments.ts:132` | 客户端 batchId 无格式校验（可伪造超长串/复用他人批次串卡） | ✅ 本 PR（只收 UUID 形状,其它当没带走服务端铸新） |
-| R22 | S4 | 看板 classesN | 「N 个班」= 待批班数,与列表页「发布班数」同键不同义 | ✅ 本 PR（看板改用 dash.pendingClassesN「{n} 个班待批」,三语） |
-| R23 | S4 | 多处 | 命名漂移（edit/update/merge 三动词）· OptionButtons 抽取 · 纯函数入 lib 补测 · 注释「完全可逆」过强 · ARCHITECTURE jobs 例外补记 · generateMetadata 重复取数 · commonTitlePrefix 代理对 · setTitle 在 updater 内 | ✅ 本 PR（action 改名 updateAssignmentBatch;MergeResult→BatchWriteResult;OptionButtons 共用;groupUnmatched/commonTitlePrefix 入 lib+单测(含代理对修复);「可逆」注释限定为文本;ARCHITECTURE 补 jobs 例外;详情读取 React cache 去重;toggle 副作用移出 updater） |
+| R1 | **S1** | `assignments/[id]/page.tsx:46` | 重投草稿遮蔽已完成提交:已投票从分布消失、已交/已评行变「未提交」、误标「仅草稿」（违背 `submit.ts` 契约） | ✅ #364（教师页复用 `representativeSubmission`:最新非草稿优先） |
+| R2 | **S2** | 同页 pollSubs | 缺交(MISSING)标记计入投票 total/voters,虚增票基数、清空未投票名单,且不可见不可撤 | ✅ #365（pollSubs 排除 MISSING;被标缺交者回归「未投票·未提交」） |
+| R3 | **S2** | `poll-unify applyPlans` | 统一执行顺序不可安全重跑（改型最先写,中途失败→重跑跳过半成品班:幽灵待批 + 残留/在途 AI 任务可写分） | ✅ #366（改型移到最后作提交点=重跑可修复;写作评阅入口加 objective 围栏,残留任务自弃不写分） |
+| R4 | **S2** | `poll-unify isTextTargetPhase`×2 | 目标判定漏 `requireFreeText`/`requireHandwriting`,混合环节被错误改型成矛盾杂交型 | ✅ #367（谓词补两旗标 + 合并重复定义为单一来源） |
+| R5 | **S2** | `repo findDetailForStaff` | 评分页全量拉取每 attempt 全部字段（含 aiResult/transcript）≈ 每次点击 1–3.5MB D1 读,10–20× 过度 | ✅ #368（提交行改显式 select、仅取页面消费的 18 字段;markMissing 同享收益） |
+| R6 | **S3** | `api/admin/unify-poll-phase` | 加固包:按标题全平台匹配可跨租户误伤（补 schoolId 必填+报告带学校）、phaseOrder 非整数静默取 1、守卫无测试、OPERATIONS.md 未记载 | ✅ #369（schoolId 必填并钉进查询;phaseOrder 非法即 400;守卫入 describe.each;OPERATIONS §6 补维护端点表） |
+| R7 | **S3** | `poll-unify.ts:137,139` | 源文件含 2 个真实 NUL 字节 → git 视为二进制（不可 diff/blame/grep） | ✅ #367（改写为 Unicode 转义序列,与 R4 同文件并修——不除 NUL 无法正常审 R4 的 diff） |
+| R8 | **S3** | `poll-unify assign*` + 页面 | 归票/工作台未排除带答案键的单选（quiz）:改票不重判分,答案/正确率/分数矛盾 | ✅ #370（assign/bulk/undo 三写路径加 quiz 围栏 err.pollOnlyAssign;页面对 quiz 不再出工作台） |
+| R9 | **S3** | `findSyncSiblings` OR-title / `updateBatchMeta` | 改名标题连锁:泛匹配+默认全选可误写无关作业评阅配置;legacy 组改名可与同名组融合、卡片 remount 吞掉成功提示（修法:legacy 组批次写时铸新 batchId） | ✅ #371（有批次身份只按 batchId 认亲;legacy 组改名铸新 batchId:不融合、key 稳定） |
+| R10 | **S3** | 发布 targets / 批次卡 | 一次发布可跨课程勾班 → 批次卡课程名错标 + 永久不可归并 | ✅ #372（发布目标校验课程一致,跨课程整体拒绝 err.mixedCoursePublish;与批次族「同课程」前置约定对齐） |
+| R11 | **S3** | pollResults payload | 无上限文本载荷（20k 字 ×54×2 可至 MB 级）+ 最新文本前端不截断 | ✅ #373（服务端统一截断:最新 400/历史 160/留痕 120,`lib/text.clip` 不劈代理对;聚组键带原文长度防截断误并;DB 原文与撤销留痕不动） |
+| R12 | **S3** | `listForStaff` + 两个 groupBy | 作业列表无分页 + 全史扫描,随学年数据积累degrade | ✅ #374（列表取最新 400 份+截断提示;计数只扫可见 id 且按 ≤90 分块避 D1 参数上限;trimBoundaryBatch 防截断劈批——半批改名/归并会把一次发布劈成两批） |
+| R13 | **S3** | `merge-form.tsx:75` | 课程分节 key 用可重名的 courseName → React key 冲突 | ✅ #375（分节键改 courseId,分节 Map 本就按 courseId 建、把 id 带出即可） |
+| R14 | **S3** | grading-client 组卡/UnifyPanel | 组卡 key 不稳定（首 submissionId）+ 预览报告不失效（误导） | ✅ #376（组卡 key 用组身份=作答文本键;预览/执行分开转菊花;重预览重置已完成态;报告下注明「快照,执行时按最新数据重算」——执行本就服务端重算,纯展示诚实性） |
+| R15 | **S3** | poll-unify 报告 | 预览含空文本行（工作台不显示）、skipped 班级静默吞掉——报告与可操作数不一致 | ✅ #377（空白作答单列 blank 不再虚增「待人工」,与工作台口径一致;skipped 班级在面板点名警示,i18n 三语 + sep.list 分隔符键） |
+| R16 | S4 | i18n / assignment-mode | 死键 `poll.pickOption`/`poll.assign` ×3 语言;死导出 `AssignmentMode`/`isAssignmentMode` | ✅ #378（死键 ×3、死导出全删,`ASSIGNMENT_MODES` 常量保留） |
+| R17 | S4 | grading-client / merge-form | 硬编码中文顿号「、」与全角括号绕过 i18n | ✅ #378（4 处 `join('、')` 改 `sep.list`(含 assignment-form/submission-flow 同类);全角括号折进 `merge.selectedN` 词条按语言取形） |
+| R18 | S4 | `applyPlans`/`assignPollVotesBulk`/`cancelPending` | 逐行写 → `$transaction` 单次 batch;cancelPending 改关系过滤（phaseId） | ✅ #379（规范化改写/整组归票各打成一个 batch,半途失败整批回滚;cancelPendingForPhase 关系过滤,免 D1 参数上限并覆盖计划后新入队任务） |
+| R19 | S4 | `listPollAssignables`/`findForStaff` | 归票放行 DRAFT/MISSING 行（补 status 过滤）;bulk 跨作业只 revalidate 第一个 | ✅ #379（repo 读排除 DRAFT/MISSING=整组拒绝;单条归票域内同守卫;bulk 返回去重 assignmentIds,action 逐个 revalidate） |
+| R20 | S4 | 同页 options.count | 选项计数 label 未 trim,与 notes/correct 口径不一 | ✅ #380（count 两侧 trim,三处口径统一） |
+| R21 | S4 | `actions/assignments.ts:132` | 客户端 batchId 无格式校验（可伪造超长串/复用他人批次串卡） | ✅ #380（只收 UUID 形状,其它当没带走服务端铸新） |
+| R22 | S4 | 看板 classesN | 「N 个班」= 待批班数,与列表页「发布班数」同键不同义 | ✅ #380（看板改用 dash.pendingClassesN「{n} 个班待批」,三语） |
+| R23 | S4 | 多处 | 命名漂移（edit/update/merge 三动词）· OptionButtons 抽取 · 纯函数入 lib 补测 · 注释「完全可逆」过强 · ARCHITECTURE jobs 例外补记 · generateMetadata 重复取数 · commonTitlePrefix 代理对 · setTitle 在 updater 内 | ✅ #381（action 改名 updateAssignmentBatch;MergeResult→BatchWriteResult;OptionButtons 共用;groupUnmatched/commonTitlePrefix 入 lib+单测(含代理对修复);「可逆」注释限定为文本;ARCHITECTURE 补 jobs 例外;详情读取 React cache 去重;toggle 副作用移出 updater） |
 | R24 | — | 明确不做 | batchId/title 索引（现规模无收益）、pollResults O(n²) 循环（<1ms）、rows RSC 载荷（≤60 人可接受）——防过度优化,留待规模触发 | 记录在案 |
 
 ## 审计过、确认干净
