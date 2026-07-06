@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, CheckCircle2, Check, UserCog, Library, Gauge, Coins } from 'lucide-react'
+import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, ChevronDown, CheckCircle2, Check, UserCog, Library, Gauge, Coins } from 'lucide-react'
 import { requireStaff, availablePanels } from '@/lib/auth'
 import { parseTzOffset, DAY_MS } from '@/lib/time'
 import { getDb } from '@/lib/db'
@@ -13,6 +13,7 @@ import * as dashboardRepo from '@/lib/repo/dashboard'
 import * as schoolRepo from '@/lib/repo/schools'
 import * as submissionRepo from '@/lib/repo/submissions'
 import { gradingCalibration, gradingCalibrationByTeacher, CALIBRATION_WINDOW_DAYS } from '@/lib/domain/analytics'
+import { groupAssignmentBatches } from '@/lib/assignment-batches'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CreateSchoolForm } from './create-school-form'
@@ -86,9 +87,17 @@ export default async function DashboardPage() {
     })),
   )
   const countById = new Map(pendingGroups.map((g) => [g.assignmentId, g._count._all]))
-  const needGrading = needRows
-    .map((a) => ({ id: a.id, title: a.title, category: a.category, course: a.offering.course.name, cls: a.offering.class.name, teacher: a.offering.teacher?.name ?? null, pending: countById.get(a.id) ?? 0 }))
-    .sort((a, b) => b.pending - a.pending)
+  // 待批列表按发布批次归拢(与作业列表页同一分组):批次卡汇总待批数、按待批降序;
+  // 展开为班级行(各自待批数,校管附教师名),点班级行进该班评分页。
+  const teacherById = new Map(needRows.map((a) => [a.id, a.offering.teacher?.name ?? null]))
+  const needBatches = groupAssignmentBatches(
+    needRows.map((a) => ({
+      id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,
+      phaseCount: 0, courseId: a.offering.courseId, courseName: a.offering.course.name, className: a.offering.class.name,
+    })),
+    new Map(),
+    countById,
+  ).sort((x, y) => y.totalPending - x.totalPending)
 
   const stats = [
     { label: t('dash.statStudents'), value: students, href: '/dashboard/students' },
@@ -214,30 +223,69 @@ export default async function DashboardPage() {
       {/* Needs-grading board */}
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">{t('dash.needGrading')}</h2>
-        {needGrading.length === 0 ? (
+        {needBatches.length === 0 ? (
           <Card>
             <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
               <CheckCircle2 className="h-5 w-5 text-success" />{t('dash.allClear')}
             </CardContent>
           </Card>
         ) : (
-          needGrading.map((a) => (
-            <Link key={a.id} href={`/dashboard/assignments/${a.id}`}>
-              <Card className="tap hover:shadow-card">
-                <CardContent className="flex items-center gap-3 p-4">
+          needBatches.map((b) => {
+            const badge = b.mode ? t(`mode.${b.mode}`) : b.category
+            // 单班批次:直达该班评分页的卡(与旧版单卡等价)。
+            if (b.classes.length === 1) {
+              const c = b.classes[0]
+              const teacher = isAdmin ? teacherById.get(c.assignmentId) : null
+              return (
+                <Link key={b.key} href={`/dashboard/assignments/${c.assignmentId}`}>
+                  <Card className="tap hover:shadow-card">
+                    <CardContent className="flex items-center gap-3 p-4">
+                      <div className="min-w-0 flex-1">
+                        {badge ? <Badge tone="primary" className="mb-1">{badge}</Badge> : null}
+                        <p className="truncate font-semibold leading-snug">{b.title}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.courseName} · {c.className}{teacher ? ` · ${teacher}` : ''}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                        {t('dash.pendingN', { n: c.pending })}
+                      </span>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            }
+            // 多班批次:汇总待批的可折叠卡,展开为班级行(按待批降序),各行进该班评分页。
+            return (
+              <details key={b.key} className="group rounded-2xl border border-border bg-card shadow-card">
+                <summary className="tap flex cursor-pointer list-none items-center gap-3 p-4">
                   <div className="min-w-0 flex-1">
-                    {a.category ? <Badge tone="primary" className="mb-1">{a.category}</Badge> : null}
-                    <p className="truncate font-semibold leading-snug">{a.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{a.course} · {a.cls}{isAdmin && a.teacher ? ` · ${a.teacher}` : ''}</p>
+                    {badge ? <Badge tone="primary" className="mb-1">{badge}</Badge> : null}
+                    <p className="truncate font-semibold leading-snug">{b.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.courseName} · {t('asgList.classesN', { n: b.classes.length })}</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
-                    {t('dash.pendingN', { n: a.pending })}
+                    {t('dash.pendingN', { n: b.totalPending })}
                   </span>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            </Link>
-          ))
+                  <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="space-y-1 border-t border-border/60 p-2">
+                  {[...b.classes].sort((x, y) => y.pending - x.pending).map((c) => {
+                    const teacher = isAdmin ? teacherById.get(c.assignmentId) : null
+                    return (
+                      <Link key={c.assignmentId} href={`/dashboard/assignments/${c.assignmentId}`} className="tap flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-accent">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {c.className}
+                          {teacher ? <span className="ml-1.5 text-xs font-normal text-muted-foreground">{teacher}</span> : null}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">{t('dash.pendingN', { n: c.pending })}</span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </Link>
+                    )
+                  })}
+                </div>
+              </details>
+            )
+          })
         )}
       </div>
 

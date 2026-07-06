@@ -29,11 +29,17 @@ export async function loadStaffDashboard(prisma: PrismaClient, schoolId: number,
     }),
   ])
 
+  // 待批作业的展示行:带批次分组所需字段(batchId/mode/courseId),按新→旧排序——
+  // groupAssignmentBatches 取每组首见(=最新)的展示字段,与作业列表页同契约。
   const ids = pendingGroups.map((g) => g.assignmentId)
   const needRows = ids.length
     ? await prisma.assignment.findMany({
         where: { id: { in: ids } },
-        select: { id: true, title: true, category: true, offering: { select: { course: { select: { name: true } }, class: { select: { name: true } }, teacher: { select: { name: true } } } } },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, title: true, category: true, mode: true, dueAt: true, batchId: true,
+          offering: { select: { courseId: true, course: { select: { name: true } }, class: { select: { name: true } }, teacher: { select: { name: true } } } },
+        },
       })
     : []
 
