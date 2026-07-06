@@ -23,6 +23,12 @@ export const PTS = {
 
 export const HIGH_SCORE_THRESHOLD = 90
 
+// The feedback point total, computed from raw counts against the single PTS policy above
+// (the feedback repo intentionally stores no rates — see repo/feedback.ts).
+export function feedbackPointsTotal(f: { submitted: number; adopted: number }): number {
+  return f.submitted * PTS.feedbackSubmit + f.adopted * PTS.feedbackAdopted
+}
+
 const DAY_MS = 86_400_000
 const dayKey = (d: Date) => d.toISOString().slice(0, 10)
 

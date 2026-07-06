@@ -30,7 +30,7 @@
 | A8 | **S3** | `ai/cost.ts` | Whisper 按分钟真实成本从不入库（`whisper-deepseek` 漏记转写费） | ✅ 本 PR（whisper 用 verbose_json 拿 duration，perceptionCostUsd 按分钟计价，grading/shadow/practice 三处接上） |
 | A9 | **S3** | `ai/providers/openai-compat.ts:154` | 感知发 OpenAI 不接受的 `video_url` → `gpt-4o` 感知必 400（潜伏） | ✅ 本 PR（gpt-4o 去掉 perception 能力，删孤儿 openaiPerception；Qwen 的 video_url 保留） |
 | A10 | **S3** | `domain/points.ts:89` | 老师标的 MISSING 缺交行虚增学生活跃天/连续打卡分 | ✅ 本 PR（活跃天循环跳过 MISSING） |
-| A11 | **S3** | `repo/feedback.ts:5` | 积分政策常量在 repo 层重复（与 `domain/points.ts` 的 `PTS` 分叉风险） | ⬜ |
+| A11 | **S3** | `repo/feedback.ts:5` | 积分政策常量在 repo 层重复（与 `domain/points.ts` 的 `PTS` 分叉风险） | ✅ 本 PR（repo 只返原始计数，总分由 domain `feedbackPointsTotal` 单源算） |
 | A12 | **S3** | `actions/grading.ts:124` | 逐句 take 预签失败被静默丢弃、无日志（复核里该句凭空消失） | ⬜ |
 | A13 | **S3** | `components/ui/confirm.tsx:70` | 最常用确认弹窗无可访问名 + 无焦点陷阱（另两弹窗都做了） | ⬜ |
 | A14 | **S3** | `components/assignment-form.tsx:246` | 环节重排后手风琴展开态不跟随（index key + 未同步 `openPhase`） | ⬜ |
