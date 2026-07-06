@@ -57,11 +57,35 @@ describe('submittedCountByAssignment (groupBy dedup — audit P1-3)', () => {
     const s3 = await p.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: 's3', passwordHash: 'x' } })
     await p.submission.create({ data: { assignmentId: d.assignment.id, phaseId: d.p1.id, studentId: s3.id, attempt: 1, status: 'DRAFT' } })
 
-    const asAdmin = await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'SCHOOL_ADMIN')
+    const ids = [d.assignment.id]
+    const asAdmin = await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'SCHOOL_ADMIN', ids)
     expect(asAdmin.get(d.assignment.id)).toBe(2) // s1 (deduped) + s2; DRAFT-only s3 excluded
 
     // The teacher who owns the offering sees the same; a different school sees nothing.
-    expect((await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'TEACHER')).get(d.assignment.id)).toBe(2)
-    expect((await submittedCountByAssignment(p, -999, d.teacher.id, 'SCHOOL_ADMIN')).get(d.assignment.id)).toBeUndefined()
+    expect((await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'TEACHER', ids)).get(d.assignment.id)).toBe(2)
+    expect((await submittedCountByAssignment(p, -999, d.teacher.id, 'SCHOOL_ADMIN', ids)).get(d.assignment.id)).toBeUndefined()
+  })
+
+  it('only scans the GIVEN assignments (复查 R12: bounded menu → bounded counts), incl. >90 ids across chunks', async () => {
+    const d = await seed(db.prisma)
+    const p = db.prisma
+    const other = await p.assignment.create({ data: { offeringId: d.assignment.offeringId, title: 'B' } })
+    await p.submission.create({ data: { assignmentId: d.assignment.id, phaseId: d.p1.id, studentId: d.s1.id, attempt: 1, status: 'GRADED' } })
+    await p.submission.create({ data: { assignmentId: other.id, phaseId: null, studentId: d.s2.id, attempt: 1, status: 'UPLOADED' } })
+
+    // Only d.assignment requested → `other` absent even though it has submissions.
+    const one = await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'TEACHER', [d.assignment.id])
+    expect(one.get(d.assignment.id)).toBe(1)
+    expect(one.get(other.id)).toBeUndefined()
+
+    // Empty id list → empty map, no rows leak in.
+    expect((await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'TEACHER', [])).size).toBe(0)
+
+    // >90 ids exercises the D1 bound-parameter chunking: both real assignments land in
+    // different chunks (real id, 89 fillers, real id) and must still both be counted.
+    const many = [d.assignment.id, ...Array.from({ length: 89 }, (_, i) => 900000 + i), other.id]
+    const chunked = await submittedCountByAssignment(p, d.school.id, d.teacher.id, 'TEACHER', many)
+    expect(chunked.get(d.assignment.id)).toBe(1)
+    expect(chunked.get(other.id)).toBe(1)
   })
 })

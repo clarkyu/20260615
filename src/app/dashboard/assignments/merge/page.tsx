@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db'
 import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as assignmentRepo from '@/lib/repo/assignments'
-import { groupAssignmentBatches } from '@/lib/assignment-batches'
+import { groupAssignmentBatches, trimBoundaryBatch } from '@/lib/assignment-batches'
 import { Card, CardContent } from '@/components/ui/card'
 import { MergeForm } from './merge-form'
 
@@ -21,9 +21,13 @@ export default async function MergeBatchesPage() {
   const prisma = await getDb()
   const { t } = await getT()
 
+  // 与作业列表同界(复查 R12)。trimBoundaryBatch 在这里更要紧:截断劈开的批次若
+  // 被选去归并,只会把可见的那一半并进新批次,把一次发布劈成两批。
+  const LIST_CAP = 400
   const groups = user.schoolId
     ? await (async () => {
-        const list = await assignmentRepo.listForStaff(prisma, user.schoolId, user.userId, user.role)
+        const fetched = await assignmentRepo.listForStaff(prisma, user.schoolId, user.userId, user.role, LIST_CAP + 1)
+        const { rows: list } = trimBoundaryBatch(fetched.map((a) => ({ ...a, courseId: a.offering.courseId })), LIST_CAP)
         return groupAssignmentBatches(
           list.map((a) => ({
             id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,

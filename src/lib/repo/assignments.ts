@@ -521,12 +521,25 @@ export function listForOfferingBrief(prisma: PrismaClient, offeringId: number) {
 // ── the staff "作业" menu: every assignment in the actor's scope ──────────────────
 const NEEDS_TEACHER: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
-// All assignments the staff member can see, newest first, with course/class, due
-// date, and phase count.
-export function listForStaff(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+// id-list (`in:`) queries chunk at ≤90 ids: D1 caps bound parameters at 100/query
+// (复查 R12;同 domain/roster 的导入分块)。Chunks partition the ids, so per-chunk
+// results never overlap and can be merged by concatenation.
+const ID_CHUNK = 90
+function idChunks(ids: number[]): number[][] {
+  const out: number[][] = []
+  for (let i = 0; i < ids.length; i += ID_CHUNK) out.push(ids.slice(i, i + ID_CHUNK))
+  return out
+}
+
+// The newest `limit` assignments the staff member can see, with course/class, due
+// date, and phase count. Bounded (复查 R12): the 作业 menu shows recent work; older
+// assignments stay reachable per class via the teaching pages. Callers fetch limit+1
+// to detect truncation.
+export function listForStaff(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, limit: number) {
   return prisma.assignment.findMany({
     where: { offering: offeringScopeFor(schoolId, userId, role) },
     orderBy: { createdAt: 'desc' },
+    take: limit,
     select: {
       id: true, title: true, category: true, mode: true, dueAt: true, monthLabel: true, batchId: true,
       offering: { select: { courseId: true, course: { select: { name: true } }, class: { select: { name: true } } } },
@@ -537,29 +550,38 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
 
 // How many DISTINCT students have submitted (any phase) per assignment — counts
 // students, not per-phase submission rows, so a multi-phase assignment isn't inflated
-// (20 students × 3 phases must read 20, not 60).
-export async function submittedCountByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<Map<number, number>> {
+// (20 students × 3 phases must read 20, not 60). Only the given assignments are
+// scanned (复查 R12: the menu is bounded, so its counts must not walk the teacher's
+// whole submission history either).
+export async function submittedCountByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, assignmentIds: number[]): Promise<Map<number, number>> {
   // GROUP BY (assignmentId, studentId) dedups a student's multiple attempts/phases IN SQL
   // and ships only the distinct pairs — whereas Prisma `distinct` on the D1 adapter fetches
   // every matching row and dedups in the query engine (the 作业 menu re-scanned a teacher's
   // whole submission history on each load). Then count distinct students per assignment.
-  const pairs = await prisma.submission.groupBy({
-    by: ['assignmentId', 'studentId'],
-    where: { status: { not: 'DRAFT' }, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
-  })
   const m = new Map<number, number>()
-  for (const p of pairs) m.set(p.assignmentId, (m.get(p.assignmentId) ?? 0) + 1)
+  for (const ids of idChunks(assignmentIds)) {
+    const pairs = await prisma.submission.groupBy({
+      by: ['assignmentId', 'studentId'],
+      where: { assignmentId: { in: ids }, status: { not: 'DRAFT' }, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
+    })
+    for (const p of pairs) m.set(p.assignmentId, (m.get(p.assignmentId) ?? 0) + 1)
+  }
   return m
 }
 
-// Pending-review count per assignment (the actionable chip on the 作业 menu).
-export async function pendingReviewByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<Map<number, number>> {
-  const groups = await prisma.submission.groupBy({
-    by: ['assignmentId'],
-    where: { needsReview: true, status: { in: NEEDS_TEACHER }, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
-    _count: { _all: true },
-  })
-  return new Map(groups.map((g) => [g.assignmentId, g._count._all]))
+// Pending-review count per assignment (the actionable chip on the 作业 menu),
+// restricted to the given assignments (复查 R12).
+export async function pendingReviewByAssignment(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, assignmentIds: number[]): Promise<Map<number, number>> {
+  const m = new Map<number, number>()
+  for (const ids of idChunks(assignmentIds)) {
+    const groups = await prisma.submission.groupBy({
+      by: ['assignmentId'],
+      where: { assignmentId: { in: ids }, needsReview: true, status: { in: NEEDS_TEACHER }, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
+      _count: { _all: true },
+    })
+    for (const g of groups) m.set(g.assignmentId, g._count._all)
+  }
+  return m
 }
 
 // Non-DRAFT submission count per PHASE of one assignment — the edit form uses it to
@@ -662,19 +684,23 @@ export function countPhaseSentences(prisma: PrismaClient, phaseId: number) {
 
 // The phases (submit type + rubric + sentence count) of a set of assignments — the batch
 // list shows a batch's 内容/评分标准 from its representative assignment. Keyed by caller
-// via assignmentId. Ordered by phase order.
-export function listPhaseSummariesForAssignments(prisma: PrismaClient, assignmentIds: number[]) {
-  if (assignmentIds.length === 0) return Promise.resolve([])
-  return prisma.phase.findMany({
-    where: { assignmentId: { in: assignmentIds } },
-    orderBy: [{ assignmentId: 'asc' }, { order: 'asc' }],
-    select: {
-      assignmentId: true, order: true, title: true, rubric: true, graded: true,
-      requireVideo: true, requireAudio: true, requireText: true, requireHandwriting: true,
-      requireChoice: true, requireFreeText: true, fillBlank: true,
-      _count: { select: { sentences: true } },
-    },
-  })
+// via assignmentId. Ordered by phase order (per chunk; chunks are consumed keyed, not by
+// global order).
+export async function listPhaseSummariesForAssignments(prisma: PrismaClient, assignmentIds: number[]) {
+  const out = []
+  for (const ids of idChunks(assignmentIds)) {
+    out.push(...await prisma.phase.findMany({
+      where: { assignmentId: { in: ids } },
+      orderBy: [{ assignmentId: 'asc' }, { order: 'asc' }],
+      select: {
+        assignmentId: true, order: true, title: true, rubric: true, graded: true,
+        requireVideo: true, requireAudio: true, requireText: true, requireHandwriting: true,
+        requireChoice: true, requireFreeText: true, fillBlank: true,
+        _count: { select: { sentences: true } },
+      },
+    }))
+  }
+  return out
 }
 
 // Sentence text for a set of assignments, keyed later by (assignmentId, phaseId, order)
