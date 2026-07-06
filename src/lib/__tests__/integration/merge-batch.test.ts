@@ -119,7 +119,45 @@ describe('updateAssignmentBatch (编辑批次:改名 + 定性质)', () => {
     const a1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: 'T', mode: 'EXAM' } })
     const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id], { title: 'T', mode: null })
     expect(res).toEqual({ ok: true, merged: 1 })
-    expect((await db.prisma.assignment.findUniqueOrThrow({ where: { id: a1.id } })).mode).toBeNull()
+    const row = await db.prisma.assignment.findUniqueOrThrow({ where: { id: a1.id } })
+    expect(row.mode).toBeNull()
+    expect(row.batchId).not.toBeNull() // legacy 单员组同样获得铸新批次身份(R9)
+  })
+
+  it('renaming a LEGACY group mints a fresh shared batchId — no fusing with a same-titled legacy group (审计 R9)', async () => {
+    const d = await seed(db.prisma)
+    // legacy 组 A(2 份,无 batchId,同名)+ 无关 legacy 组 B(1 份,标题恰为 A 的新名)。
+    const a1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: '背诵1' } })
+    const a2 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[1].id, title: '背诵1' } })
+    const b1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[2].id, title: '背诵2' } })
+
+    const res = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a2.id], { title: '背诵2', mode: null })
+    expect(res).toEqual({ ok: true, merged: 2 })
+    const rows = await db.prisma.assignment.findMany({ where: { id: { in: [a1.id, a2.id] } } })
+    const minted = new Set(rows.map((r) => r.batchId))
+    expect(minted.size).toBe(1)
+    expect([...minted][0]).not.toBeNull() // legacy 组获得稳定批次身份
+    // 无关的同名 legacy 组 B 不受影响,也不会与 A 融合(A 现在按 batchId 聚组)。
+    expect((await db.prisma.assignment.findUniqueOrThrow({ where: { id: b1.id } })).batchId).toBeNull()
+
+    // 已有 batchId 的组再改名:身份不变(不重铸)。
+    const res2 = await updateAssignmentBatch(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [a1.id, a2.id], { title: '背诵3', mode: null })
+    expect(res2.ok).toBe(true)
+    const after = await db.prisma.assignment.findMany({ where: { id: { in: [a1.id, a2.id] } } })
+    expect(new Set(after.map((r) => r.batchId))).toEqual(minted)
+  })
+
+  it('sync siblings: batchId identity matches by batchId ONLY; legacy identity keeps the same-title bridge (审计 R9)', async () => {
+    const d = await seed(db.prisma)
+    const { findSyncSiblings } = await import('@/lib/repo/assignments')
+    // 有批次身份的 mine + 同课程同名但不同批次的 stranger → 不再认亲。
+    const mine = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: '通用标题', batchId: crypto.randomUUID() } })
+    const stranger = await db.prisma.assignment.create({ data: { offeringId: d.offerings[1].id, title: '通用标题', batchId: crypto.randomUUID() } })
+    expect((await findSyncSiblings(db.prisma, mine.id, d.school.id, d.teacher.id, 'TEACHER')).map((s) => s.assignmentId)).not.toContain(stranger.id)
+    // legacy(无 batchId)的同名兜底保留。
+    const l1 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[0].id, title: '老作业' } })
+    const l2 = await db.prisma.assignment.create({ data: { offeringId: d.offerings[2].id, title: '老作业' } })
+    expect((await findSyncSiblings(db.prisma, l1.id, d.school.id, d.teacher.id, 'TEACHER')).map((s) => s.assignmentId)).toContain(l2.id)
   })
 
   it('rejects wholesale when any id is outside the actor scope — zero writes', async () => {

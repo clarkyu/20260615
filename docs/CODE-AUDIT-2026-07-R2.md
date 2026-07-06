@@ -21,7 +21,7 @@
 | R6 | **S3** | `api/admin/unify-poll-phase` | 加固包:按标题全平台匹配可跨租户误伤（补 schoolId 必填+报告带学校）、phaseOrder 非整数静默取 1、守卫无测试、OPERATIONS.md 未记载 | ✅ 本 PR（schoolId 必填并钉进查询;phaseOrder 非法即 400;守卫入 describe.each;OPERATIONS §6 补维护端点表） |
 | R7 | **S3** | `poll-unify.ts:137,139` | 源文件含 2 个真实 NUL 字节 → git 视为二进制（不可 diff/blame/grep） | ✅ 本 PR（改写为 Unicode 转义序列,与 R4 同文件并修——不除 NUL 无法正常审 R4 的 diff） |
 | R8 | **S3** | `poll-unify assign*` + 页面 | 归票/工作台未排除带答案键的单选（quiz）:改票不重判分,答案/正确率/分数矛盾 | ✅ 本 PR（assign/bulk/undo 三写路径加 quiz 围栏 err.pollOnlyAssign;页面对 quiz 不再出工作台） |
-| R9 | **S3** | `findSyncSiblings` OR-title / `updateBatchMeta` | 改名标题连锁:泛匹配+默认全选可误写无关作业评阅配置;legacy 组改名可与同名组融合、卡片 remount 吞掉成功提示（修法:legacy 组批次写时铸新 batchId） | ⬜ |
+| R9 | **S3** | `findSyncSiblings` OR-title / `updateBatchMeta` | 改名标题连锁:泛匹配+默认全选可误写无关作业评阅配置;legacy 组改名可与同名组融合、卡片 remount 吞掉成功提示（修法:legacy 组批次写时铸新 batchId） | ✅ 本 PR（有批次身份只按 batchId 认亲;legacy 组改名铸新 batchId:不融合、key 稳定） |
 | R10 | **S3** | 发布 targets / 批次卡 | 一次发布可跨课程勾班 → 批次卡课程名错标 + 永久不可归并 | ⬜ |
 | R11 | **S3** | pollResults payload | 无上限文本载荷（20k 字 ×54×2 可至 MB 级）+ 最新文本前端不截断 | ⬜ |
 | R12 | **S3** | `listForStaff` + 两个 groupBy | 作业列表无分页 + 全史扫描,随学年数据积累degrade | ⬜ |
