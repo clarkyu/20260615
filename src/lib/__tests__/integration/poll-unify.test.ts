@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { unifyPhaseToPoll, assignPollVote } from '@/lib/domain/poll-unify'
+import { unifyPhaseToPoll, unifyPollSiblings, assignPollVote } from '@/lib/domain/poll-unify'
 import type { PrismaClient } from '@prisma/client'
 
 // 环节统一为单选投票:模板班(投票)的选项套到误配成默写文本的班上;学生作答零删除——
@@ -95,6 +95,49 @@ describe('unifyPhaseToPoll', () => {
     const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
     expect(r.ok).toBe(false)
     expect((await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })).requireText).toBe(true) // untouched
+  })
+})
+
+describe('unifyPollSiblings (老师自助版,scoped)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('preview reports without writing; apply converts the sibling text phase', async () => {
+    const d = await seed(db.prisma)
+    const preview = await unifyPollSiblings(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.pollPhase.id, false)
+    if (!preview.ok) throw new Error(preview.error)
+    expect(preview.targets).toHaveLength(1)
+    expect(preview.targets[0]).toMatchObject({ className: '2531324', total: 3, alreadyCanonical: 1, autoMatched: 1 })
+    expect((await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })).requireText).toBe(true) // 零写入
+
+    const applied = await unifyPollSiblings(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.pollPhase.id, true)
+    if (!applied.ok) throw new Error(applied.error)
+    const phase = await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })
+    expect(phase).toMatchObject({ requireChoice: true, itemType: 'objective', choicesJson: OPTIONS })
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subVariant.id } })).recitedText).toBe('英文歌曲比赛')
+  })
+
+  it('rejects a non-poll source phase as the template', async () => {
+    const d = await seed(db.prisma)
+    const res = await unifyPollSiblings(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.textPhase.id, false)
+    expect(res).toEqual({ ok: false, error: 'err.pollUnifySource' })
+  })
+
+  it("is teacher-scoped: another teacher's same-title class is not a target, and a foreign source is unreachable", async () => {
+    const d = await seed(db.prisma)
+    const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T9', passwordHash: 'x' } })
+    // 另一位老师访问不到我的模板环节。
+    expect(await unifyPollSiblings(db.prisma, d.school.id, other.id, 'TEACHER', d.pollPhase.id, false)).toEqual({ ok: false, error: 'err.subNoAccess' })
+    // 我的统一也扫不到另一位老师名下的同名班。
+    const cls = await db.prisma.classGroup.create({ data: { schoolId: d.school.id, name: '2531399' } })
+    const course = await db.prisma.course.findFirstOrThrow()
+    const off = await db.prisma.courseOffering.create({ data: { schoolId: d.school.id, courseId: course.id, teacherId: other.id, classId: cls.id, year: 'Y', semester: '2' } })
+    const foreignAsg = await db.prisma.assignment.create({ data: { offeringId: off.id, title: TITLE, requireText: true } })
+    await db.prisma.phase.create({ data: { assignmentId: foreignAsg.id, order: 1, requireText: true, requireVideo: false, requireEyesClosed: false, itemType: 'writing', graded: true, maxAttempts: 1 } })
+    const res = await unifyPollSiblings(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.pollPhase.id, false)
+    if (!res.ok) throw new Error(res.error)
+    expect(res.targets.map((g) => g.className)).toEqual(['2531324']) // 不含 2531399
   })
 })
 

@@ -113,6 +113,9 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
             .map((s) => ({ submissionId: s.id, studentName: s.student.name ?? '', studentNo: s.student.studentNo ?? '', text: (s.recitedText ?? '').trim() }))
       return {
         unmatched,
+        phaseId: p.id,
+        // 可作「统一其它班」模板:纯单选投票(无答案键、≥2 选项)。
+        canUnify: !isMulti && !hasKey && parseChoices(p.choicesJson).length >= 2,
         phaseLabel: multiPhase ? (p.title?.trim() || t('phase.nth', { n: p.order })) : undefined,
         total: subs.length,
         correctChoice: correct,
