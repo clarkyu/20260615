@@ -97,6 +97,9 @@ function localToIso(local: string): string {
 
 // A phase as the form edits it (openAt/dueAt are local-wall-clock strings).
 interface PhaseState {
+  // Stable client-only key so React — and the DOM state it holds (<details> open, focus) —
+  // follows a phase across reorder instead of sticking to its slot. Never sent to the server.
+  uid: string
   id?: number // existing phase id (edit) so the server reconciles in place, not delete+recreate
   title: string
   category: string
@@ -143,6 +146,7 @@ interface PhaseState {
 // shapes it as an eyes-closed recitation rather than the default shadowing/video.
 function newPhase(bank: boolean, recite = false): PhaseState {
   return {
+    uid: crypto.randomUUID(),
     title: '',
     category: '',
     instructions: '',
@@ -224,7 +228,7 @@ export function AssignmentForm({
   // browser disagree at hydration on every edit of an assignment with times (audit A5).
   const [phases, setPhases] = useState<PhaseState[]>(() =>
     initial?.phases?.length
-      ? initial.phases.map((p) => ({ ...p, openAt: '', dueAt: '' }))
+      ? initial.phases.map((p) => ({ ...p, uid: crypto.randomUUID(), openAt: '', dueAt: '' }))
       : [newPhase(hasBank)],
   )
   useEffect(() => {
@@ -257,13 +261,16 @@ export function AssignmentForm({
     setOpenPhase((o) => (o >= i ? Math.max(0, o - 1) : o))
   }
   function movePhase(i: number, dir: -1 | 1) {
+    const j = i + dir
+    if (j < 0 || j >= phases.length) return
     setPhases((prev) => {
-      const j = i + dir
-      if (j < 0 || j >= prev.length) return prev
       const next = [...prev]
       ;[next[i], next[j]] = [next[j], next[i]]
       return next
     })
+    // The accordion open state is tracked by index — swap it too so the phase the teacher
+    // moved stays the expanded one (not whichever phase slid into the old open slot).
+    setOpenPhase((o) => (o === i ? j : o === j ? i : o))
   }
 
   function applyDraft(d: DraftFields) {
@@ -468,7 +475,7 @@ export function AssignmentForm({
               {phases.length > 1 ? <p className="text-xs text-muted-foreground">{t('asg.phasesPreviewHint')}</p> : null}
               {phases.map((p, i) => (
                 <PhaseCard
-                  key={i}
+                  key={p.uid}
                   index={i}
                   total={phases.length}
                   phase={p}
@@ -498,7 +505,7 @@ export function AssignmentForm({
                     <span className="text-muted-foreground">{t('asg.phases')}：</span>{phases.length} {t('asg.phaseUnit')}
                     <ul className="mt-1 space-y-1">
                       {phases.map((p, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs">
+                        <li key={p.uid} className="flex items-start gap-2 text-xs">
                           <span className="shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
                           <span className="min-w-0">
                             <span className="font-medium">{p.title.trim() || t('phase.nth', { n: i + 1 })}</span>
