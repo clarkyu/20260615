@@ -165,6 +165,23 @@ describe('unifyPollSiblings (老师自助版,scoped)', () => {
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subVariant.id } })).recitedText).toBe('英文歌曲比赛')
   })
 
+  it('a text+handwriting hybrid phase is NOT a conversion target (审计 R4) — it lands in skipped', async () => {
+    const d = await seed(db.prisma)
+    const cls = await db.prisma.classGroup.create({ data: { schoolId: d.school.id, name: '2531399' } })
+    const course = await db.prisma.course.findFirstOrThrow()
+    const off = await db.prisma.courseOffering.create({ data: { schoolId: d.school.id, courseId: course.id, teacherId: d.teacher.id, classId: cls.id, year: 'Y', semester: '2' } })
+    const hybridAsg = await db.prisma.assignment.create({ data: { offeringId: off.id, title: TITLE, requireText: true } })
+    const hybrid = await db.prisma.phase.create({ data: { assignmentId: hybridAsg.id, order: 1, requireText: true, requireHandwriting: true, requireVideo: false, requireEyesClosed: false, itemType: 'writing', graded: true, maxAttempts: 1 } })
+
+    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.targets.map((t) => t.className)).not.toContain('2531399')
+    expect(r.skipped.map((s) => s.className)).toContain('2531399')
+    const phase = await db.prisma.phase.findUniqueOrThrow({ where: { id: hybrid.id } })
+    expect(phase.requireChoice).toBe(false) // 未被改型
+    expect(phase.itemType).toBe('writing')
+  })
+
   it('rejects a non-poll source phase as the template', async () => {
     const d = await seed(db.prisma)
     const res = await unifyPollSiblings(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.textPhase.id, false)
