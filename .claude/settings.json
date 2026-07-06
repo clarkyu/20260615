@@ -4,7 +4,8 @@
     "claude-video": {
       "source": {
         "source": "github",
-        "repo": "bradautomates/claude-video"
+        "repo": "bradautomates/claude-video",
+        "sha": "83da59fa78c3eee9e20f515fe75c438bb5166efd"
       }
     }
   },
