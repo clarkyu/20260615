@@ -26,7 +26,7 @@ export default async function MergeBatchesPage() {
         const list = await assignmentRepo.listForStaff(prisma, user.schoolId, user.userId, user.role)
         return groupAssignmentBatches(
           list.map((a) => ({
-            id: a.id, title: a.title, category: a.category, dueAt: a.dueAt, batchId: a.batchId,
+            id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,
             phaseCount: a._count.phases, courseId: a.offering.courseId, courseName: a.offering.course.name, className: a.offering.class.name,
           })),
           new Map(),

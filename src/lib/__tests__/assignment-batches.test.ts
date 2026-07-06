@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { groupAssignmentBatches, type BatchAssignmentRow } from '@/lib/assignment-batches'
 
 const row = (over: Partial<BatchAssignmentRow> & { id: number }): BatchAssignmentRow => ({
-  title: 'A', category: null, dueAt: null, batchId: null, phaseCount: 1, courseId: 1, courseName: 'Eng', className: 'C1', ...over,
+  title: 'A', category: null, mode: null, dueAt: null, batchId: null, phaseCount: 1, courseId: 1, courseName: 'Eng', className: 'C1', ...over,
 })
 
 describe('groupAssignmentBatches', () => {

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from 'react'
 import { Sparkles, ImageUp, ChevronUp, ChevronDown, ChevronRight, Trash2, Plus, Check, Video, Eye, Mic, PenLine, Camera } from 'lucide-react'
 import { createAssignment, updateAssignment, deleteAssignment } from '@/actions/assignments'
 import { draftAssignmentAction, type DraftFields } from '@/actions/authoring'
+import { ASSIGNMENT_MODES } from '@/lib/assignment-mode'
 import { modelsForCapability } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -63,6 +64,7 @@ export interface AssignmentInitial {
   id?: number // present when editing; absent when prefilling a new publish from a template
   version?: number // optimistic-lock token loaded with the assignment (edit mode)
   title: string
+  mode?: string // 作业性质四态(HOMEWORK/…),'' = 未设置
   monthLabel: string
   chunkSetId: number | null
   chunkSetName: string | null
@@ -218,6 +220,8 @@ export function AssignmentForm({
 
   // Assignment-level fields (controlled so the AI draft can fill them).
   const [title, setTitle] = useState(initial?.title ?? '')
+  // 作业性质四态('' = 未设置),显示为列表批次卡的分类标签。
+  const [mode, setMode] = useState(initial?.mode ?? '')
   // Save-as-template (publish flow only).
   const [saveTemplate, setSaveTemplate] = useState(false)
   const [templateName, setTemplateName] = useState('')
@@ -455,6 +459,16 @@ export function AssignmentForm({
             <div className="space-y-1.5">
               <Label htmlFor="title">{t('asg.fTitle')}</Label>
               <Input id="title" name="title" required value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mode">{t('asg.fMode')}</Label>
+              <Select id="mode" name="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="">{t('asg.fModeNone')}</option>
+                {ASSIGNMENT_MODES.map((m) => (
+                  <option key={m} value={m}>{t(`mode.${m}`)}</option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">{t('asg.fModeHint')}</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="monthLabel">{t('asg.fMonth')}</Label>

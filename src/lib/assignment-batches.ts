@@ -7,6 +7,7 @@ export interface BatchAssignmentRow {
   id: number
   title: string
   category: string | null
+  mode: string | null // 作业性质四态(HOMEWORK/TRAINING/ASSESSMENT/EXAM),null = 未定
   dueAt: Date | null
   batchId: string | null
   phaseCount: number
@@ -19,6 +20,7 @@ export interface BatchGroup {
   key: string
   title: string
   category: string | null
+  mode: string | null
   courseId: number
   courseName: string
   dueAt: Date | null
@@ -40,7 +42,7 @@ export function groupAssignmentBatches(
     const key = a.batchId ? `batch:${a.batchId}` : `legacy:${a.courseId}:${a.title}`
     let g = groups.get(key)
     if (!g) {
-      g = { key, title: a.title, category: a.category, courseId: a.courseId, courseName: a.courseName, dueAt: a.dueAt, phaseCount: a.phaseCount, classes: [], totalSubmitted: 0, totalPending: 0 }
+      g = { key, title: a.title, category: a.category, mode: a.mode, courseId: a.courseId, courseName: a.courseName, dueAt: a.dueAt, phaseCount: a.phaseCount, classes: [], totalSubmitted: 0, totalPending: 0 }
       groups.set(key, g)
       order.push(key)
     }

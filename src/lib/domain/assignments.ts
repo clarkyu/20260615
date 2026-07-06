@@ -196,6 +196,25 @@ export async function mergeAssignmentBatch(
   return { ok: true, merged }
 }
 
+// 编辑批次:统一改名 + 定性质(mode 四态),一次写到批内所有成员。与归并同样的整体
+// 校验:每个 id 都必须在本人 scope 内,缺一整体拒绝、零写入。mode 由 action 层 zod
+// 校验为四态之一或空(空 = 清除)。
+export async function updateAssignmentBatch(
+  prisma: PrismaClient,
+  schoolId: number,
+  userId: number,
+  role: Role,
+  assignmentIds: number[],
+  data: { title: string; mode: string | null },
+): Promise<MergeResult> {
+  const ids = [...new Set(assignmentIds)].filter((n) => Number.isInteger(n) && n > 0)
+  if (ids.length === 0) return { ok: false, error: 'err.assignNotFound' }
+  const rows = await assignments.listCourseIdsForMerge(prisma, ids, schoolId, userId, role)
+  if (rows.length !== ids.length) return { ok: false, error: 'err.assignNotFound' }
+  const merged = await assignments.updateBatchMeta(prisma, ids, schoolId, userId, role, data)
+  return { ok: true, merged }
+}
+
 export type UpdateResult = { ok: true } | { ok: false; error: string }
 
 export async function updateAssignment(
