@@ -98,16 +98,27 @@ export async function offeringTeacher(prisma: PrismaClient, assignmentId: number
 
 // The grading screen: assignment + offering(course/class) + every submission with
 // its student, ordered so the latest attempt per student comes first.
+// 提交行用显式 select、只取页面实际消费的字段——一份作业动辄数百行提交(全 attempt),
+// 而 include 会连 aiResult/transcript 这类单行数 KB 的评阅大字段一起搬,评分页每次
+// 打开/每次评分点击都要为此白读 MB 级数据(复查 R5,10–20× 过度)。新增消费字段时
+// 在这里补 select,tsc 会替你把关。
 export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {
   return prisma.assignment.findFirst({
     where: { id, offering: offeringScopeFor(schoolId, userId, role) },
-    include: {
+    select: {
+      id: true, title: true, category: true, rubric: true, offeringId: true,
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
       phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireVideo: true, requireAudio: true, requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, requireFreeText: true, rubric: true, defaultPerceptionModel: true, defaultJudgeModel: true, _count: { select: { sentences: true } } } },
       submissions: {
-        include: { student: { select: { name: true, studentNo: true } }, phase: { select: { order: true, title: true } } },
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
+        select: {
+          id: true, studentId: true, phaseId: true, attempt: true, status: true, needsReview: true,
+          aiScore: true, finalScore: true, feedback: true, recitedText: true, voteSourceText: true,
+          videoKey: true, audioKey: true, imageKey: true, durationSec: true, violations: true,
+          student: { select: { name: true, studentNo: true } },
+          phase: { select: { order: true, title: true } },
+        },
       },
     },
   })
