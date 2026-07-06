@@ -62,10 +62,10 @@ export function listSiblingsForStaff(
   })
 }
 
-// Of the given offering ids, those that belong to the school (publish-target check).
-export async function findIdsForSchool(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role): Promise<number[]> {
-  const rows = await prisma.courseOffering.findMany({ where: { id: { in: ids }, ...offeringScopeFor(schoolId, userId, role) }, select: { id: true } })
-  return rows.map((o) => o.id)
+// Of the given offering ids, those that belong to the school (publish-target check),
+// with each offering's courseId so the domain can enforce single-course batches (复查 R10)。
+export async function findIdsForSchool(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role): Promise<{ id: number; courseId: number }[]> {
+  return prisma.courseOffering.findMany({ where: { id: { in: ids }, ...offeringScopeFor(schoolId, userId, role) }, select: { id: true, courseId: true } })
 }
 
 export function findForSchoolWithCourse(prisma: PrismaClient, id: number, schoolId: number | null | undefined, userId: number, role: Role) {

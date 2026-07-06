@@ -91,6 +91,22 @@ describe('sync 评阅配置 to sibling classes', () => {
     expect(await db.prisma.assignment.count()).toBe(6) // no idempotency key → two independent publishes
   })
 
+  it('rejects one publish spanning offerings of two DIFFERENT courses, creating nothing (复查 R10)', async () => {
+    const d = await seed(db.prisma)
+    // A second course taught by the same teacher — its offering must not mix into an E-course publish.
+    const math = await db.prisma.course.create({ data: { schoolId: d.school.id, name: 'M', code: 'M' } })
+    const mathOffering = await db.prisma.courseOffering.create({ data: { schoolId: d.school.id, courseId: math.id, teacherId: d.teacher.id, classId: (await db.prisma.classGroup.create({ data: { schoolId: d.school.id, name: 'C4' } })).id, year: 'Y', semester: '1' } })
+
+    const res = await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', { title: 'X', monthLabel: null }, [draft()], [d.offerings[0].id, mathOffering.id], null, null)
+    expect(res).toEqual({ ok: false, error: 'err.mixedCoursePublish' })
+    expect(await db.prisma.assignment.count()).toBe(0)
+
+    // Same-course multi-class publish still goes through untouched.
+    const ok = await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', { title: 'X', monthLabel: null }, [draft()], [d.offerings[0].id, d.offerings[1].id], null, null)
+    expect(ok.ok).toBe(true)
+    expect(await db.prisma.assignment.count()).toBe(2)
+  })
+
   it('persists the teacher-set per-phase weight through publish (feature ①)', async () => {
     const d = await seed(db.prisma)
     await createAssignments(db.prisma, d.school.id, d.teacher.id, 'TEACHER', { title: 'W', monthLabel: null }, [{ ...draft(), weight: 3 }], [d.offerings[0].id], null, null)
