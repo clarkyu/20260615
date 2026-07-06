@@ -108,7 +108,10 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   // 名册在此就取(下方「未提交」也用):投票卡按环节精确列「未投票」名单——
   // 交过别的环节、唯独没投本环节的学生,整作业维度的「未提交」看不出来。
   const roster = await userRepo.listClassRoster(prisma, user.schoolId, assignment.offering.class.id)
-  const pollSubs = [...latestByStudentPhase.values()].filter((s) => s.status !== 'DRAFT')
+  // 投票统计既排草稿也排缺交(MISSING):缺交是老师打的标记、不是学生的一票——计进去会
+  // 虚增票基数、压低各选项占比/正确率,还把被标缺交的学生从「未投票」名单里错误移除
+  // (复查 R2)。被标缺交的学生落回「未投票·未提交」,与事实一致。
+  const pollSubs = [...latestByStudentPhase.values()].filter((s) => s.status !== 'DRAFT' && s.status !== 'MISSING')
   const pollResults = assignment.phases
     .filter((p) => p.requireChoice)
     .map((p) => {
