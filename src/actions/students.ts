@@ -9,6 +9,7 @@ import { importRoster } from '@/lib/domain/roster'
 import * as classRepo from '@/lib/repo/classes'
 import * as userRepo from '@/lib/repo/users'
 import * as majorRepo from '@/lib/repo/majors'
+import * as departmentRepo from '@/lib/repo/departments'
 import { parseForm, reqText, optText, reqId, z } from '@/lib/validate'
 
 type PreviewState = {
@@ -106,6 +107,25 @@ export async function deleteClass(formData: FormData): Promise<void> {
   await classRepo.deleteWithStudents(cx.prisma, classId, cx.schoolId)
   revalidatePath('/dashboard/students')
   redirect('/dashboard/students')
+}
+
+// Delete an EMPTY 院系 (orphan cleanup). The repo guard only deletes when it has no majors
+// and no teachers; a since-populated one is a no-op (revalidate re-renders it). Admin-only.
+export async function deleteDepartment(formData: FormData): Promise<void> {
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return
+  const id = Number(formData.get('id'))
+  if (Number.isInteger(id)) await departmentRepo.deleteEmptyForSchool(cx.prisma, id, cx.schoolId)
+  revalidatePath('/dashboard/students')
+}
+
+// Delete an EMPTY 专业 (orphan cleanup). The repo guard only deletes when no class uses it.
+export async function deleteMajor(formData: FormData): Promise<void> {
+  const cx = await schoolAdminContext()
+  if (!cx.ok) return
+  const id = Number(formData.get('id'))
+  if (Number.isInteger(id)) await majorRepo.deleteEmptyForSchool(cx.prisma, id, cx.schoolId)
+  revalidatePath('/dashboard/students')
 }
 
 export async function addStudent(prevState: unknown, formData: FormData): Promise<MutState> {
