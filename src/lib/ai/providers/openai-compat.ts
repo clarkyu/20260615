@@ -90,7 +90,13 @@ type Content = string | Array<Record<string, unknown>>
 export function extractCompatUsage(data: unknown): TokenUsage | undefined {
   const u = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number } })?.usage
   if (!u) return undefined
-  return { inputTokens: Number(u.prompt_tokens) || 0, outputTokens: Number(u.completion_tokens) || 0 }
+  const inTok = Number(u.prompt_tokens)
+  const outTok = Number(u.completion_tokens)
+  // A usage envelope missing BOTH split fields (e.g. MiniMax's chatcompletion_v2, which reports
+  // only total_tokens) can't be priced by (input, output) rates — return undefined ("cost unknown")
+  // so the domain persists a NULL cost, not a fake $0 measurement that pollutes the spend dashboard.
+  if (!Number.isFinite(inTok) && !Number.isFinite(outTok)) return undefined
+  return { inputTokens: Number.isFinite(inTok) ? inTok : 0, outputTokens: Number.isFinite(outTok) ? outTok : 0 }
 }
 
 async function chat(cfg: CompatConfig, model: string, messages: { role: string; content: Content }[]): Promise<{ data: unknown; usage?: TokenUsage }> {

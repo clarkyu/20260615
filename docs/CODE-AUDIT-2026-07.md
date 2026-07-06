@@ -26,7 +26,7 @@
 | A4 | **S2** | `ai/providers/anthropic.ts:42` | Claude 评分 `max_tokens:1024`，长评语截断 → JSON 解析失败 → 提交 FAILED/死信 | ✅ 本 PR（提到 4096） |
 | A5 | **S2** | `components/assignment-form.tsx:221` | `toLocalInput` 在 SSR 用服务器时区算环节时间 → 编辑页水合不一致（仅显示） | ✅ 本 PR（时间改 mount 后 effect 里转本地，仿月份处理） |
 | A6 | **S3** | `assignments/[id]/export/route.ts:22` | 导出 `classId` 未校验属于该作业 offering → 可取本校任意班名单 PII | ✅ 本 PR（改由作业 offering 派生班级，弃用 query 参数） |
-| A7 | **S3** | `ai/providers/openai-compat.ts:90` | usage 缺 token 拆分时记成真实 $0（MiniMax 触发） | ⬜ |
+| A7 | **S3** | `ai/providers/openai-compat.ts:90` | usage 缺 token 拆分时记成真实 $0（MiniMax 触发） | ✅ 本 PR（两拆分都缺 → undefined，落 null 非 $0） |
 | A8 | **S3** | `ai/cost.ts` | Whisper 按分钟真实成本从不入库（`whisper-deepseek` 漏记转写费） | ⬜ |
 | A9 | **S3** | `ai/providers/openai-compat.ts:154` | 感知发 OpenAI 不接受的 `video_url` → `gpt-4o` 感知必 400（潜伏） | ⬜ |
 | A10 | **S3** | `domain/points.ts:89` | 老师标的 MISSING 缺交行虚增学生活跃天/连续打卡分 | ⬜ |
