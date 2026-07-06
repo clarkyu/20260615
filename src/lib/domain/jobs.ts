@@ -163,6 +163,14 @@ export async function claimAndRunDue(
   return { ran }
 }
 
+// 撤销一批提交的待跑评阅任务(环节改型为客观题/投票后,不该再有 AI 回来写分)。
+// 只删 PENDING——PROCESSING 的让它自然结束,其终态写入受提交状态围栏保护。
+export async function cancelPendingForSubmissions(prisma: PrismaClient, submissionIds: number[]): Promise<number> {
+  if (submissionIds.length === 0) return 0
+  const res = await prisma.gradingJob.deleteMany({ where: { submissionId: { in: submissionIds }, status: 'PENDING' } })
+  return res.count
+}
+
 // Keep a running job's row fresh so the stale-reclaim (which keys on `updatedAt`) never
 // treats a slow-but-alive run as orphaned and double-runs it (wasting AI spend). Fenced
 // to PROCESSING so it never disturbs a job another isolate has already settled or

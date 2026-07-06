@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote } from '@/actions/grading'
 import { estimateGrading, formatTokens } from '@/lib/ai/cost'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
@@ -42,7 +42,15 @@ interface Row {
 interface ModelOpt { id: string; label: string }
 // 一个可 AI 评阅的环节 + 它当前保存的批阅配置（评分标准 + 感知/评分模型）。
 interface PhaseCfg { id: number; label: string; rubric: string; perceptionModel: string; judgeModel: string; sentenceCount: number }
-interface PollResult { phaseLabel?: string; total: number; correctChoice: string | null; correctCount: number | null; options: { label: string; count: number; correct: boolean }[] }
+interface PollResult {
+  phaseLabel?: string
+  total: number
+  correctChoice: string | null
+  correctCount: number | null
+  options: { label: string; count: number; correct: boolean }[]
+  // 原文与任何选项不符的作答(计入 total 但未落任何选项)——老师人工比对后归票。
+  unmatched: { submissionId: number; studentName: string; studentNo: string; text: string }[]
+}
 
 
 export function GradingClient(props: {
@@ -333,6 +341,19 @@ export function GradingClient(props: {
                 )
               })
             )}
+            {poll.unmatched.length > 0 ? (
+              <details className="rounded-xl border border-warning/40 bg-warning/5">
+                <summary className="tap cursor-pointer p-3 text-sm font-medium text-warning">
+                  {t('poll.unmatched', { n: poll.unmatched.length })}
+                </summary>
+                <div className="space-y-2 border-t border-border/60 p-3">
+                  <p className="text-xs text-muted-foreground">{t('poll.unmatchedHint')}</p>
+                  {poll.unmatched.map((u) => (
+                    <UnmatchedVoteRow key={u.submissionId} row={u} options={poll.options.map((o) => o.label)} />
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </CardContent>
         </Card>
       ))}
@@ -591,6 +612,49 @@ function OverrideForm({ row, disabled, t, onSave }: { row: Row; disabled: boolea
       </div>
       <Textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={2} />
       <Button size="sm" disabled={disabled} onClick={() => onSave(score, feedback)}>{t('grade.saveScore')}</Button>
+    </div>
+  )
+}
+
+// 一条「未归票作答」:学生 + 原文 + 选项下拉 + 归票。归票把 recitedText 改写为所选
+// 选项的规范原文,票数分布随 revalidate 即时更新(行随之从本列表消失)。
+function UnmatchedVoteRow({ row, options }: { row: { submissionId: number; studentName: string; studentNo: string; text: string }; options: string[] }) {
+  const t = useT()
+  const router = useRouter()
+  const [choice, setChoice] = useState('')
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div className="space-y-1.5 rounded-xl bg-secondary/50 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="font-medium">{row.studentName || row.studentNo}</span>
+        {row.studentName && row.studentNo ? <span className="text-muted-foreground">{row.studentNo}</span> : null}
+      </div>
+      <p className="whitespace-pre-wrap break-words text-sm">{row.text}</p>
+      <div className="flex items-center gap-2">
+        <Select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={t('poll.pickOption')} className="h-9 flex-1 text-xs">
+          <option value="">{t('poll.pickOption')}</option>
+          {options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </Select>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!choice || pending}
+          onClick={() => {
+            setError(null)
+            startTransition(async () => {
+              const res = await assignPollVote(row.submissionId, choice)
+              if (res?.error) setError(res.error)
+              else router.refresh()
+            })
+          }}
+        >
+          {pending ? '…' : t('poll.assign')}
+        </Button>
+      </div>
+      {error ? <FormMessage>{error}</FormMessage> : null}
     </div>
   )
 }

@@ -226,6 +226,42 @@ export async function mergeIntoBatch(prisma: PrismaClient, ids: number[], school
   return res.count
 }
 
+// ── 环节统一为单选投票（维护工具,CRON_SECRET 路由专用） ─────────────────────────
+// 平台级读:同名作业在指定序号上的环节 + 各自班级 + 非草稿提交。不按租户 scope——
+// 调用方是 CRON_SECRET 守卫的维护端点(与 retention 同类,跨租户是其本职),不是用户请求。
+export function listPhaseGroupForUnify(prisma: PrismaClient, title: string, order: number) {
+  return prisma.phase.findMany({
+    where: { order, assignment: { title } },
+    select: {
+      id: true, order: true, requireText: true, requireChoice: true, requireFreeText: true,
+      requireAudio: true, requireVideo: true, requireHandwriting: true, fillBlank: true,
+      multiChoice: true, correctChoice: true, correctChoices: true, choicesJson: true, itemType: true,
+      assignment: { select: { id: true, title: true, offering: { select: { class: { select: { name: true } } } } } },
+      submissions: {
+        where: { status: { not: 'DRAFT' } },
+        select: { id: true, recitedText: true, status: true, needsReview: true, finalScore: true, student: { select: { name: true, studentNo: true } } },
+      },
+    },
+  })
+}
+
+// 把一个默写文本环节改型为单选投票(套用模板班的选项),itemType 同步 objective——
+// 存储列与 phaseItemType 推导必须一致。order=1 时同步 Assignment 上的 legacy 镜像列
+// (与 updateWithPhases 的 legacyColumnsFromPrimary 行为对齐);作业 version+1 围栏在途编辑。
+export async function convertPhaseToPoll(prisma: PrismaClient, phaseId: number, assignmentId: number, isPrimary: boolean, choicesJson: string) {
+  await prisma.phase.update({
+    where: { id: phaseId },
+    data: {
+      requireText: false, requireChoice: true, multiChoice: false,
+      correctChoice: null, correctChoices: null, choicesJson, itemType: 'objective',
+    },
+  })
+  await prisma.assignment.update({
+    where: { id: assignmentId },
+    data: { ...(isPrimary ? { requireText: false } : {}), version: { increment: 1 } },
+  })
+}
+
 // 编辑批次:批内所有成员统一改名 + 定性质(mode 四态,null = 清除)。Scoped;
 // `version + 1` 围栏在途编辑表单(同 mergeIntoBatch 的理由)。
 export async function updateBatchMeta(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role, data: { title: string; mode: string | null }): Promise<number> {
