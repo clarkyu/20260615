@@ -181,7 +181,9 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
           : null,
         options: parseChoices(p.choicesJson).map((label) => ({
           label,
-          count: subs.filter((s) => selectedOf(s).includes(label)).length,
+          // 计数与 notes/correct 同口径:两侧都 trim(复查 R20)——选项文本带首尾空白时,
+          // 三处口径不一会出现「计数 0、名下却有归票留痕」的自相矛盾。
+          count: subs.filter((s) => selectedOf(s).some((v) => v.trim() === label.trim())).length,
           correct: isMulti ? correctNorm.has(label.trim()) : correct != null && label.trim() === correct,
           // 归票留痕:这个选项名下由原文归入的票(学生 + 原始作答),可查可撤销。
           notes: isMulti
