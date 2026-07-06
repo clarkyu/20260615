@@ -10,6 +10,12 @@ describe('token usage extraction', () => {
       .toEqual({ inputTokens: 1200, outputTokens: 300 })
   })
 
+  it('gemini: folds thinking tokens into outputTokens (billed at the output rate, audit A3)', () => {
+    // Gemini 2.5/3 think by default; candidatesTokenCount is only the visible answer, thoughts are separate.
+    expect(extractUsage({ usageMetadata: { promptTokenCount: 1200, candidatesTokenCount: 300, thoughtsTokenCount: 900, totalTokenCount: 2400 } }))
+      .toEqual({ inputTokens: 1200, outputTokens: 1200 }) // 300 visible + 900 thoughts
+  })
+
   it('gemini: undefined when usageMetadata is absent', () => {
     expect(extractUsage({ candidates: [] })).toBeUndefined()
     expect(extractUsage(null)).toBeUndefined()
