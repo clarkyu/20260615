@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote, unassignPollVote, unifyPollSiblingsAction } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote, assignPollVotesBulk, unassignPollVote, unifyPollSiblingsAction } from '@/actions/grading'
 import { estimateGrading, formatTokens } from '@/lib/ai/cost'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
@@ -372,9 +372,14 @@ export function GradingClient(props: {
                 </summary>
                 <div className="space-y-2 border-t border-border/60 p-3">
                   <p className="text-xs text-muted-foreground">{t('poll.unmatchedHint')}</p>
-                  {poll.unmatched.map((u) => (
-                    <UnmatchedVoteRow key={u.submissionId} row={u} options={poll.options.map((o) => o.label)} />
-                  ))}
+                  {/* 相同作答聚成一组整组归票(人数降序);单独作答仍逐条(带历史)。 */}
+                  {groupUnmatched(poll.unmatched).map((g) =>
+                    g.rows.length === 1 ? (
+                      <UnmatchedVoteRow key={g.rows[0].submissionId} row={g.rows[0]} options={poll.options.map((o) => o.label)} />
+                    ) : (
+                      <GroupVoteRow key={`grp-${g.rows[0].submissionId}`} text={g.text} rows={g.rows} options={poll.options.map((o) => o.label)} />
+                    ),
+                  )}
                 </div>
               </details>
             ) : null}
@@ -812,6 +817,69 @@ function VoteNoteRow({ note }: { note: VoteNote }) {
         >
           {pending ? '…' : t('poll.undoAssign')}
         </button>
+      </div>
+      {error ? <FormMessage>{error}</FormMessage> : null}
+    </div>
+  )
+}
+
+// 相同作答聚组(按人数降序)——18 个「自我介绍」一组一次归完,不再逐条点。
+function groupUnmatched(rows: UnmatchedRow[]): { text: string; rows: UnmatchedRow[] }[] {
+  const m = new Map<string, UnmatchedRow[]>()
+  for (const r of rows) {
+    const a = m.get(r.text) ?? []
+    a.push(r)
+    m.set(r.text, a)
+  }
+  return [...m.entries()].map(([text, rs]) => ({ text, rows: rs })).sort((a, b) => b.rows.length - a.rows.length)
+}
+
+// 一组相同作答的批量归票行:左边作答原文 + 学生名单(可展开),右边选项按钮——
+// 点哪个就把整组一次归到哪个(每份各自留痕原文,撤销仍逐条可用)。
+function GroupVoteRow({ text, rows, options }: { text: string; rows: UnmatchedRow[]; options: string[] }) {
+  const t = useT()
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  const assign = (choice: string) => {
+    setError(null)
+    startTransition(async () => {
+      const res = await assignPollVotesBulk(rows.map((r) => r.submissionId), choice)
+      if (res?.error) setError(res.error)
+      else router.refresh()
+    })
+  }
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-secondary/50 p-2.5 text-xs">
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {/* 左:相同作答原文 + 学生名单 */}
+        <div className="min-w-0 space-y-1.5">
+          <span className="font-semibold text-primary">{t('poll.groupSame', { n: rows.length })}</span>
+          <p className="whitespace-pre-wrap break-words rounded-lg bg-background/60 p-2 text-sm">{text}</p>
+          <details>
+            <summary className="tap cursor-pointer text-muted-foreground">{t('poll.groupList', { n: rows.length })}</summary>
+            <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+              {rows.map((r) => r.studentName || r.studentNo).join('、')}
+            </p>
+          </details>
+        </div>
+        {/* 右:选项即按钮,整组一次归 */}
+        <div className="space-y-1.5">
+          <p className="text-muted-foreground">{t('poll.groupAssignTo', { n: rows.length })}</p>
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              disabled={pending}
+              onClick={() => assign(o)}
+              className="tap block w-full rounded-lg border border-input bg-background px-2.5 py-2 text-left hover:border-primary hover:bg-accent disabled:opacity-50"
+            >
+              {o}
+            </button>
+          ))}
+        </div>
       </div>
       {error ? <FormMessage>{error}</FormMessage> : null}
     </div>

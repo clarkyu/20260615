@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { unifyPhaseToPoll, unifyPollSiblings, assignPollVote, unassignPollVote } from '@/lib/domain/poll-unify'
+import { unifyPhaseToPoll, unifyPollSiblings, assignPollVote, assignPollVotesBulk, unassignPollVote } from '@/lib/domain/poll-unify'
 import type { PrismaClient } from '@prisma/client'
 
 // 环节统一为单选投票:模板班(投票)的选项套到误配成默写文本的班上;学生作答零删除——
@@ -190,5 +190,27 @@ describe('assignPollVote (人工归票)', () => {
     const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T2', passwordHash: 'x' } })
     const res = await assignPollVote(db.prisma, d.school.id, other.id, 'TEACHER', d.subUnmatched.id, '英语口语大赛')
     expect(res).toEqual({ ok: false, error: 'err.subNoAccess' })
+  })
+
+  it('bulk-assigns a group in one call, each keeping its own source trace; foreign id rejects wholesale', async () => {
+    const d = await seed(db.prisma)
+    await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    // 再造一份与 subUnmatched 相同作答的提交(另一个学生)。
+    const s4 = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: '04', name: '学生04', passwordHash: 'x' } })
+    const twin = await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, offeringId: d.textAsg.offeringId, phaseId: d.textPhase.id, studentId: s4.id, status: 'UPLOADED', needsReview: false, recitedText: '想参加朗诵会' } })
+
+    const res = await assignPollVotesBulk(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [d.subUnmatched.id, twin.id], '英语口语大赛')
+    expect(res).toEqual({ ok: true, assignmentId: d.textAsg.id })
+    for (const id of [d.subUnmatched.id, twin.id]) {
+      const row = await db.prisma.submission.findUniqueOrThrow({ where: { id } })
+      expect(row.recitedText).toBe('英语口语大赛')
+      expect(row.voteSourceText).toBe('想参加朗诵会') // 各自留痕
+    }
+
+    // 混入越权 id → 整体拒绝零写入。
+    const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T8', passwordHash: 'x' } })
+    const bad = await assignPollVotesBulk(db.prisma, d.school.id, other.id, 'TEACHER', [d.subUnmatched.id, twin.id], '英文歌曲比赛')
+    expect(bad).toEqual({ ok: false, error: 'err.subNoAccess' })
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: twin.id } })).recitedText).toBe('英语口语大赛') // 未被改动
   })
 })

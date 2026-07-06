@@ -54,6 +54,18 @@ export function revertPollAnswer(prisma: PrismaClient, id: number, originalText:
   return prisma.submission.update({ where: { id }, data: { recitedText: originalText, voteSourceText: null } })
 }
 
+// 批量归票的前置读(staff scoped):一组提交 + 各自环节的投票配置。越权的 id 直接
+// 查不出来(数量不齐 → 调用方整体拒绝)。
+export function listPollAssignables(prisma: PrismaClient, ids: number[], schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.submission.findMany({
+    where: { id: { in: ids }, ...staffSub(schoolId, userId, role) },
+    select: {
+      id: true, assignmentId: true, recitedText: true, voteSourceText: true,
+      phase: { select: { id: true, requireChoice: true, multiChoice: true, choicesJson: true } },
+    },
+  })
+}
+
 // 环节改型为投票后的清理:该环节全部提交退出复核队列(投票不复核;不清会出现
 // 待批徽章数得到、评分列表看不见的幽灵)。
 export function clearNeedsReviewForPhase(prisma: PrismaClient, phaseId: number) {
