@@ -911,6 +911,7 @@ const zh: Dict = {
   'err.needTerm': '请选择学年和学期',
   'err.offeringNotFound': '授课不存在',
   'err.needPublishTarget': '请至少选择一个班级发布',
+  'err.mixedCoursePublish': '一次只能发布到同一课程的班级；跨课程请分多次发布',
   // filters
   'filter.allClasses': '全部班级',
   'filter.allTerms': '全部学期',
@@ -1859,6 +1860,7 @@ const en: Dict = {
   'err.needTerm': 'Choose year and semester',
   'err.offeringNotFound': 'Offering not found',
   'err.needPublishTarget': 'Select at least one class to publish to',
+  'err.mixedCoursePublish': 'One publish can only target classes of the same course; publish separately per course',
   // filters
   'filter.allClasses': 'All classes',
   'filter.allTerms': 'All terms',
@@ -2806,6 +2808,7 @@ const es: Dict = {
   'err.needTerm': 'Elige año y semestre',
   'err.offeringNotFound': 'Asignación no encontrada',
   'err.needPublishTarget': 'Selecciona al menos una clase a la que publicar',
+  'err.mixedCoursePublish': 'Solo puedes publicar a clases del mismo curso a la vez; publica por separado para cada curso',
   'filter.allClasses': 'Todas las clases',
   'filter.allTerms': 'Todos los periodos',
   'filter.allStatus': 'Todos los estados',

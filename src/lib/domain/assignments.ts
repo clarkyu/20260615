@@ -142,8 +142,13 @@ export async function createAssignments(
 ): Promise<CreateResult> {
   if (offeringIds.length === 0) return { ok: false, error: 'err.needPublishTarget' }
   // Teacher-scoped: a teacher can only publish to their OWN offerings.
-  const validIds = await offerings.findIdsForSchool(prisma, offeringIds, schoolId, userId, role)
-  if (validIds.length === 0) return { ok: false, error: 'err.offeringNotFound' }
+  const validTargets = await offerings.findIdsForSchool(prisma, offeringIds, schoolId, userId, role)
+  if (validTargets.length === 0) return { ok: false, error: 'err.offeringNotFound' }
+  // 一个发布批次必须同课程:批次卡展示、归并、兄弟同步、统一为投票——整个批次家族都以
+  // 同课程为前提。跨课程混发会产出课程名错标、且永久不可归并的批次(复查 R10);
+  // 要发到别的课程,分开发布即可。
+  if (new Set(validTargets.map((t) => t.courseId)).size > 1) return { ok: false, error: 'err.mixedCoursePublish' }
+  const validIds = validTargets.map((t) => t.id)
 
   const resolved = await resolvePhases(prisma, schoolId, phaseDrafts, chunkSetId)
   if (!resolved.ok) return { ok: false, error: resolved.error }

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 // Mock the repos createAssignments/updateAssignment reach, so we can assert exactly
 // what phase shape the domain resolves and hands to the data layer.
 vi.mock('@/lib/repo/offerings', () => ({
-  findIdsForSchool: vi.fn(async (_p: unknown, ids: number[]) => ids),
+  findIdsForSchool: vi.fn(async (_p: unknown, ids: number[]) => ids.map((id) => ({ id, courseId: 1 }))),
 }))
 vi.mock('@/lib/repo/bank', () => ({
   findWithChunksVisible: vi.fn(async () => ({
@@ -23,6 +23,7 @@ vi.mock('@/lib/repo/assignments', () => ({
 
 import { createAssignments, updateAssignment, type PhaseDraft } from '@/lib/domain/assignments'
 import * as assignmentsRepo from '@/lib/repo/assignments'
+import * as offeringsRepo from '@/lib/repo/offerings'
 
 const prisma = {} as never
 const meta = { title: 'T', monthLabel: null }
@@ -112,6 +113,16 @@ describe('createAssignments — phase resolution', () => {
   it('rejects when no publish target resolves', async () => {
     const res = await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [draft({ requireAudio: true, typedSentences: ['a'] })], [], null, null)
     expect(res).toEqual({ ok: false, error: 'err.needPublishTarget' })
+  })
+
+  it('rejects a publish that mixes offerings of different courses, and writes nothing (复查 R10)', async () => {
+    ;(offeringsRepo.findIdsForSchool as Mock).mockResolvedValueOnce([
+      { id: 10, courseId: 1 },
+      { id: 11, courseId: 2 },
+    ])
+    const res = await createAssignments(prisma, 1, 9, 'SCHOOL_ADMIN', meta, [draft({ requireAudio: true, typedSentences: ['a'] })], [10, 11], null, null)
+    expect(res).toEqual({ ok: false, error: 'err.mixedCoursePublish' })
+    expect(created).not.toHaveBeenCalled()
   })
 })
 
