@@ -32,9 +32,9 @@
 | R17 | S4 | grading-client / merge-form | 硬编码中文顿号「、」与全角括号绕过 i18n | ✅ 本 PR（4 处 `join('、')` 改 `sep.list`(含 assignment-form/submission-flow 同类);全角括号折进 `merge.selectedN` 词条按语言取形） |
 | R18 | S4 | `applyPlans`/`assignPollVotesBulk`/`cancelPending` | 逐行写 → `$transaction` 单次 batch;cancelPending 改关系过滤（phaseId） | ✅ 本 PR（规范化改写/整组归票各打成一个 batch,半途失败整批回滚;cancelPendingForPhase 关系过滤,免 D1 参数上限并覆盖计划后新入队任务） |
 | R19 | S4 | `listPollAssignables`/`findForStaff` | 归票放行 DRAFT/MISSING 行（补 status 过滤）;bulk 跨作业只 revalidate 第一个 | ✅ 本 PR（repo 读排除 DRAFT/MISSING=整组拒绝;单条归票域内同守卫;bulk 返回去重 assignmentIds,action 逐个 revalidate） |
-| R20 | S4 | 同页 options.count | 选项计数 label 未 trim,与 notes/correct 口径不一 | ⬜ |
-| R21 | S4 | `actions/assignments.ts:132` | 客户端 batchId 无格式校验（可伪造超长串/复用他人批次串卡） | ⬜ |
-| R22 | S4 | 看板 classesN | 「N 个班」= 待批班数,与列表页「发布班数」同键不同义 | ⬜ |
+| R20 | S4 | 同页 options.count | 选项计数 label 未 trim,与 notes/correct 口径不一 | ✅ 本 PR（count 两侧 trim,三处口径统一） |
+| R21 | S4 | `actions/assignments.ts:132` | 客户端 batchId 无格式校验（可伪造超长串/复用他人批次串卡） | ✅ 本 PR（只收 UUID 形状,其它当没带走服务端铸新） |
+| R22 | S4 | 看板 classesN | 「N 个班」= 待批班数,与列表页「发布班数」同键不同义 | ✅ 本 PR（看板改用 dash.pendingClassesN「{n} 个班待批」,三语） |
 | R23 | S4 | 多处 | 命名漂移（edit/update/merge 三动词）· OptionButtons 抽取 · 纯函数入 lib 补测 · 注释「完全可逆」过强 · ARCHITECTURE jobs 例外补记 · generateMetadata 重复取数 · commonTitlePrefix 代理对 · setTitle 在 updater 内 | ⬜ |
 | R24 | — | 明确不做 | batchId/title 索引（现规模无收益）、pollResults O(n²) 循环（<1ms）、rows RSC 载荷（≤60 人可接受）——防过度优化,留待规模触发 | 记录在案 |
 

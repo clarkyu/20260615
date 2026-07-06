@@ -261,7 +261,9 @@ export default async function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     {badge ? <Badge tone="primary" className="mb-1">{badge}</Badge> : null}
                     <p className="truncate font-semibold leading-snug">{b.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.courseName} · {t('asgList.classesN', { n: b.classes.length })}</p>
+                    {/* 这里的 n = 有待批的班数(看板按待批分组),不是发布班数——
+                        与列表页的 asgList.classesN 同形不同义,各用各的键(复查 R22)。 */}
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.courseName} · {t('dash.pendingClassesN', { n: b.classes.length })}</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
                     {t('dash.pendingN', { n: b.totalPending })}

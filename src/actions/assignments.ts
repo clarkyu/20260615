@@ -129,7 +129,10 @@ export async function createAssignment(prevState: unknown, formData: FormData): 
   const chunkSetId = Number(formData.get('chunkSetId')) || null
   const primaryOfferingId = Number(formData.get('primaryOfferingId')) || null
   // Client idempotency key so a double-clicked / retried publish doesn't duplicate.
-  const batchId = String(formData.get('batchId') ?? '').trim() || undefined
+  // 只收 UUID 形状(客户端 crypto.randomUUID 产物):其它一律当没带、走服务端铸新——
+  // 伪造的超长串会原样入库,自选短串还可能撞上/复用既有批次身份(复查 R21)。
+  const rawBatchId = String(formData.get('batchId') ?? '').trim()
+  const batchId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawBatchId) ? rawBatchId : undefined
 
   const res = await createAssignments(cx.prisma, cx.schoolId, cx.user.userId, cx.user.role, fr.data.meta, fr.data.phases, offeringIds, chunkSetId, primaryOfferingId, batchId)
   if (!res.ok) return { error: cx.t(res.error) }
