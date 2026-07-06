@@ -30,8 +30,16 @@ describe('token usage extraction', () => {
     expect(extractCompatUsage({ choices: [] })).toBeUndefined()
   })
 
-  it('coerces missing/NaN counts to 0 rather than emitting NaN', () => {
+  it('gemini: coerces missing/NaN counts to 0 rather than emitting NaN', () => {
     expect(extractUsage({ usageMetadata: {} })).toEqual({ inputTokens: 0, outputTokens: 0 })
-    expect(extractCompatUsage({ usage: {} })).toEqual({ inputTokens: 0, outputTokens: 0 })
+  })
+
+  it('openai-compat: usage present but missing the token split → undefined, not a fake $0 (audit A7)', () => {
+    // MiniMax's chatcompletion_v2 reports only total_tokens; recording {0,0} would book its spend
+    // as a real $0. "Cost unknown" (undefined) → domain persists NULL cost.
+    expect(extractCompatUsage({ usage: {} })).toBeUndefined()
+    expect(extractCompatUsage({ usage: { total_tokens: 950 } })).toBeUndefined()
+    // At least one split field present → keep it, default the other to 0.
+    expect(extractCompatUsage({ usage: { prompt_tokens: 800 } })).toEqual({ inputTokens: 800, outputTokens: 0 })
   })
 })
