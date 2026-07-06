@@ -15,7 +15,7 @@
 |---|---|---|---|---|
 | R1 | **S1** | `assignments/[id]/page.tsx:46` | 重投草稿遮蔽已完成提交:已投票从分布消失、已交/已评行变「未提交」、误标「仅草稿」（违背 `submit.ts` 契约） | ✅ 本 PR（教师页复用 `representativeSubmission`:最新非草稿优先） |
 | R2 | **S2** | 同页 pollSubs | 缺交(MISSING)标记计入投票 total/voters,虚增票基数、清空未投票名单,且不可见不可撤 | ✅ 本 PR（pollSubs 排除 MISSING;被标缺交者回归「未投票·未提交」） |
-| R3 | **S2** | `poll-unify applyPlans` | 统一执行顺序不可安全重跑（改型最先写,中途失败→重跑跳过半成品班:幽灵待批 + 残留/在途 AI 任务可写分） | ⬜ |
+| R3 | **S2** | `poll-unify applyPlans` | 统一执行顺序不可安全重跑（改型最先写,中途失败→重跑跳过半成品班:幽灵待批 + 残留/在途 AI 任务可写分） | ✅ 本 PR（改型移到最后作提交点=重跑可修复;写作评阅入口加 objective 围栏,残留任务自弃不写分） |
 | R4 | **S2** | `poll-unify isTextTargetPhase`×2 | 目标判定漏 `requireFreeText`/`requireHandwriting`,混合环节被错误改型成矛盾杂交型 | ⬜ |
 | R5 | **S2** | `repo findDetailForStaff` | 评分页全量拉取每 attempt 全部字段（含 aiResult/transcript）≈ 每次点击 1–3.5MB D1 读,10–20× 过度 | ⬜ |
 | R6 | **S3** | `api/admin/unify-poll-phase` | 加固包:按标题全平台匹配可跨租户误伤（补 schoolId 必填+报告带学校）、phaseOrder 非整数静默取 1、守卫无测试、OPERATIONS.md 未记载 | ⬜ |

@@ -100,6 +100,42 @@ describe('unifyPhaseToPoll', () => {
     expect(again.templateClasses.sort()).toEqual(['2531323', '2531324'])
   })
 
+  it('repairs a mid-apply crash on rerun: conversion is the LAST write, so a half-done class is re-detected (审计 R3)', async () => {
+    const d = await seed(db.prisma)
+    const first = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    if (!first.ok) throw new Error(first.error)
+
+    // 模拟「改写/清理已做、但在改型前崩溃」的中间态:把环节退回默写型(其余产物保留)。
+    await db.prisma.phase.update({ where: { id: d.textPhase.id }, data: { requireText: true, requireChoice: false, choicesJson: null, itemType: 'writing' } })
+    await db.prisma.assignment.update({ where: { id: d.textAsg.id }, data: { requireText: true } })
+
+    // 重跑:该班必须再次被识别为目标并补齐(而不是被当成模板/已完成而跳过)。
+    const rerun = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    if (!rerun.ok) throw new Error(rerun.error)
+    expect(rerun.targets.map((t) => t.className)).toContain('2531324')
+    const phase = await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })
+    expect(phase).toMatchObject({ requireChoice: true, itemType: 'objective', choicesJson: OPTIONS })
+    // 已规范化的作答保持原样(此轮按「逐字命中」处理,留痕不被覆盖)。
+    const variant = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subVariant.id } })
+    expect(variant.recitedText).toBe('英文歌曲比赛')
+    expect(variant.voteSourceText).toBe('　英文歌曲比赛 ')
+    expect(await db.prisma.submission.count({ where: { phaseId: d.textPhase.id, needsReview: true } })).toBe(0)
+  })
+
+  it('a leftover writing job cannot score a converted poll vote (审计 R3 围栏)', async () => {
+    const d = await seed(db.prisma)
+    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    if (!r.ok) throw new Error(r.error)
+    // 直接调用写作评阅入口(模拟撤销窗口外残留/在途的任务落地)——必须自弃(null=就地了结),
+    // 且不写任何分数。
+    const { autoGradeWritingById } = await import('@/lib/domain/grading-writing')
+    expect(await autoGradeWritingById(db.prisma, d.subExact.id)).toBeNull()
+    const sub = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subExact.id } })
+    expect(sub.aiScore).toBeNull()
+    expect(sub.finalScore).toBeNull()
+    expect(sub.status).toBe('UPLOADED')
+  })
+
   it('refuses to apply when a target submission carries a score', async () => {
     const d = await seed(db.prisma)
     await db.prisma.submission.update({ where: { id: d.subExact.id }, data: { finalScore: 88 } })
