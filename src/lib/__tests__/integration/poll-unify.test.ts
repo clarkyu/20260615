@@ -50,7 +50,7 @@ describe('unifyPhaseToPoll', () => {
 
   it('dry-run reports the exact plan and writes nothing', async () => {
     const d = await seed(db.prisma)
-    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, false)
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, false)
     if (!r.ok) throw new Error(r.error)
     expect(r.applied).toBe(false)
     expect(r.options).toEqual(['英语口语大赛', '英文歌曲比赛'])
@@ -74,7 +74,7 @@ describe('unifyPhaseToPoll', () => {
 
   it('apply converts the phase, canonicalizes equivalent answers, keeps unmatched text, clears review + jobs', async () => {
     const d = await seed(db.prisma)
-    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     if (!r.ok) throw new Error(r.error)
     expect(r.applied).toBe(true)
 
@@ -94,7 +94,7 @@ describe('unifyPhaseToPoll', () => {
     expect(await db.prisma.gradingJob.count({ where: { status: 'PENDING' } })).toBe(0)
 
     // Idempotent: the converted phase now reads as a template; nothing left to do.
-    const again = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const again = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     if (!again.ok) throw new Error(again.error)
     expect(again.targets).toHaveLength(0)
     expect(again.templateClasses.sort()).toEqual(['2531323', '2531324'])
@@ -102,7 +102,7 @@ describe('unifyPhaseToPoll', () => {
 
   it('repairs a mid-apply crash on rerun: conversion is the LAST write, so a half-done class is re-detected (审计 R3)', async () => {
     const d = await seed(db.prisma)
-    const first = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const first = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     if (!first.ok) throw new Error(first.error)
 
     // 模拟「改写/清理已做、但在改型前崩溃」的中间态:把环节退回默写型(其余产物保留)。
@@ -110,7 +110,7 @@ describe('unifyPhaseToPoll', () => {
     await db.prisma.assignment.update({ where: { id: d.textAsg.id }, data: { requireText: true } })
 
     // 重跑:该班必须再次被识别为目标并补齐(而不是被当成模板/已完成而跳过)。
-    const rerun = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const rerun = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     if (!rerun.ok) throw new Error(rerun.error)
     expect(rerun.targets.map((t) => t.className)).toContain('2531324')
     const phase = await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })
@@ -124,7 +124,7 @@ describe('unifyPhaseToPoll', () => {
 
   it('a leftover writing job cannot score a converted poll vote (审计 R3 围栏)', async () => {
     const d = await seed(db.prisma)
-    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     if (!r.ok) throw new Error(r.error)
     // 直接调用写作评阅入口(模拟撤销窗口外残留/在途的任务落地)——必须自弃(null=就地了结),
     // 且不写任何分数。
@@ -136,10 +136,29 @@ describe('unifyPhaseToPoll', () => {
     expect(sub.status).toBe('UPLOADED')
   })
 
+  it('is pinned to the given school: an identically titled assignment in another school is untouched (审计 R6)', async () => {
+    const d = await seed(db.prisma)
+    // 别校同名作业 + 同序默写环节——绝不能被扫进目标。
+    const schoolB = await db.prisma.school.create({ data: { name: 'B', code: 'B' } })
+    const tB = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: schoolB.id, staffNo: 'TB', passwordHash: 'x' } })
+    const cB = await db.prisma.course.create({ data: { schoolId: schoolB.id, name: 'E', code: 'E' } })
+    const clsB = await db.prisma.classGroup.create({ data: { schoolId: schoolB.id, name: 'B1' } })
+    const offB = await db.prisma.courseOffering.create({ data: { schoolId: schoolB.id, courseId: cB.id, teacherId: tB.id, classId: clsB.id, year: 'Y', semester: '2' } })
+    const asgB = await db.prisma.assignment.create({ data: { offeringId: offB.id, title: TITLE, requireText: true } })
+    const phaseB = await db.prisma.phase.create({ data: { assignmentId: asgB.id, order: 1, requireText: true, requireVideo: false, requireEyesClosed: false, itemType: 'writing', graded: true, maxAttempts: 1 } })
+
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.targets.map((t) => t.className)).not.toContain('B1')
+    const untouched = await db.prisma.phase.findUniqueOrThrow({ where: { id: phaseB.id } })
+    expect(untouched.requireText).toBe(true)
+    expect(untouched.requireChoice).toBe(false)
+  })
+
   it('refuses to apply when a target submission carries a score', async () => {
     const d = await seed(db.prisma)
     await db.prisma.submission.update({ where: { id: d.subExact.id }, data: { finalScore: 88 } })
-    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     expect(r.ok).toBe(false)
     expect((await db.prisma.phase.findUniqueOrThrow({ where: { id: d.textPhase.id } })).requireText).toBe(true) // untouched
   })
@@ -173,7 +192,7 @@ describe('unifyPollSiblings (老师自助版,scoped)', () => {
     const hybridAsg = await db.prisma.assignment.create({ data: { offeringId: off.id, title: TITLE, requireText: true } })
     const hybrid = await db.prisma.phase.create({ data: { assignmentId: hybridAsg.id, order: 1, requireText: true, requireHandwriting: true, requireVideo: false, requireEyesClosed: false, itemType: 'writing', graded: true, maxAttempts: 1 } })
 
-    const r = await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     if (!r.ok) throw new Error(r.error)
     expect(r.targets.map((t) => t.className)).not.toContain('2531399')
     expect(r.skipped.map((s) => s.className)).toContain('2531399')
@@ -212,7 +231,7 @@ describe('assignPollVote (人工归票)', () => {
 
   it('writes the canonical option for a valid pick; rejects an off-list option', async () => {
     const d = await seed(db.prisma)
-    await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
 
     const bad = await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id, '不存在的选项')
     expect(bad).toEqual({ ok: false, error: 'err.badChoice' })
@@ -239,7 +258,7 @@ describe('assignPollVote (人工归票)', () => {
 
   it('is scoped: another teacher cannot assign votes on my submission', async () => {
     const d = await seed(db.prisma)
-    await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T2', passwordHash: 'x' } })
     const res = await assignPollVote(db.prisma, d.school.id, other.id, 'TEACHER', d.subUnmatched.id, '英语口语大赛')
     expect(res).toEqual({ ok: false, error: 'err.subNoAccess' })
@@ -247,7 +266,7 @@ describe('assignPollVote (人工归票)', () => {
 
   it('bulk-assigns a group in one call, each keeping its own source trace; foreign id rejects wholesale', async () => {
     const d = await seed(db.prisma)
-    await unifyPhaseToPoll(db.prisma, TITLE, 1, true)
+    await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
     // 再造一份与 subUnmatched 相同作答的提交(另一个学生)。
     const s4 = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: '04', name: '学生04', passwordHash: 'x' } })
     const twin = await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, offeringId: d.textAsg.offeringId, phaseId: d.textPhase.id, studentId: s4.id, status: 'UPLOADED', needsReview: false, recitedText: '想参加朗诵会' } })

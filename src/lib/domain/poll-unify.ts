@@ -130,8 +130,8 @@ async function applyPlans(prisma: PrismaClient, plans: ReturnType<typeof buildPl
 // title + phaseOrder 自发现:已是单选投票的班作模板(选项须一致),默写文本的班作目标。
 // apply=false 只出报告、零写入;apply=true 执行改型 + 规范化改写 + needsReview 清理 +
 // 取消挂起评阅任务(幂等:已改型的班会归入模板侧,重跑目标为空)。
-export async function unifyPhaseToPoll(prisma: PrismaClient, title: string, phaseOrder: number, apply: boolean): Promise<UnifyReport> {
-  const phases = await assignments.listPhaseGroupForUnify(prisma, title, phaseOrder)
+export async function unifyPhaseToPoll(prisma: PrismaClient, schoolId: number, title: string, phaseOrder: number, apply: boolean): Promise<UnifyReport> {
+  const phases = await assignments.listPhaseGroupForUnify(prisma, schoolId, title, phaseOrder)
   if (phases.length === 0) return { ok: false, error: `no phases found for title=${JSON.stringify(title)} order=${phaseOrder}` }
 
   const isPollTemplate = (p: (typeof phases)[number]) =>

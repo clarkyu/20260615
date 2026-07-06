@@ -18,7 +18,7 @@
 | R3 | **S2** | `poll-unify applyPlans` | 统一执行顺序不可安全重跑（改型最先写,中途失败→重跑跳过半成品班:幽灵待批 + 残留/在途 AI 任务可写分） | ✅ 本 PR（改型移到最后作提交点=重跑可修复;写作评阅入口加 objective 围栏,残留任务自弃不写分） |
 | R4 | **S2** | `poll-unify isTextTargetPhase`×2 | 目标判定漏 `requireFreeText`/`requireHandwriting`,混合环节被错误改型成矛盾杂交型 | ✅ 本 PR（谓词补两旗标 + 合并重复定义为单一来源） |
 | R5 | **S2** | `repo findDetailForStaff` | 评分页全量拉取每 attempt 全部字段（含 aiResult/transcript）≈ 每次点击 1–3.5MB D1 读,10–20× 过度 | ✅ 本 PR（提交行改显式 select、仅取页面消费的 18 字段;markMissing 同享收益） |
-| R6 | **S3** | `api/admin/unify-poll-phase` | 加固包:按标题全平台匹配可跨租户误伤（补 schoolId 必填+报告带学校）、phaseOrder 非整数静默取 1、守卫无测试、OPERATIONS.md 未记载 | ⬜ |
+| R6 | **S3** | `api/admin/unify-poll-phase` | 加固包:按标题全平台匹配可跨租户误伤（补 schoolId 必填+报告带学校）、phaseOrder 非整数静默取 1、守卫无测试、OPERATIONS.md 未记载 | ✅ 本 PR（schoolId 必填并钉进查询;phaseOrder 非法即 400;守卫入 describe.each;OPERATIONS §6 补维护端点表） |
 | R7 | **S3** | `poll-unify.ts:137,139` | 源文件含 2 个真实 NUL 字节 → git 视为二进制（不可 diff/blame/grep） | ✅ 本 PR（改写为 Unicode 转义序列,与 R4 同文件并修——不除 NUL 无法正常审 R4 的 diff） |
 | R8 | **S3** | `poll-unify assign*` + 页面 | 归票/工作台未排除带答案键的单选（quiz）:改票不重判分,答案/正确率/分数矛盾 | ⬜ |
 | R9 | **S3** | `findSyncSiblings` OR-title / `updateBatchMeta` | 改名标题连锁:泛匹配+默认全选可误写无关作业评阅配置;legacy 组改名可与同名组融合、卡片 remount 吞掉成功提示（修法:legacy 组批次写时铸新 batchId） | ⬜ |

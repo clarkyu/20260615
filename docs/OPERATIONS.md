@@ -75,7 +75,7 @@ npx wrangler secret put RESEND_API_KEY      # 邮件（可选）
 | `RESEND_API_KEY` | Worker secret | 邮件发送（验证/找回密码/邀请） | `email` 功能关闭：相关邮件不发 |
 | `EMAIL_FROM` | var / secret | 发件人地址 | 用 `onboarding@resend.dev` |
 | `ADMIN_EMAIL` | var / secret | 标识平台管理员邮箱 | 无 |
-| `CRON_SECRET` | Worker secret **+** GitHub secret | 保护 `/api/cron/*` 路由 | 两个定时任务全部跳过（drain/retention 不跑） |
+| `CRON_SECRET` | Worker secret **+** GitHub secret | 保护 `/api/cron/*` 定时路由 **与 `/api/admin/*` 维护路由**（见 §6 末） | 两个定时任务全部跳过（drain/retention 不跑）；维护端点 401 |
 | `VIDEO_RETENTION_DAYS` | var | 录像保留天数；`0`/未设/非法 = **永不删** | 保留清理不执行（数据无限留存） |
 | AI provider keys（见下） | Worker secret | AI 评阅 / 转写 | `ai` 功能关闭：评阅停在「待批」队列，老师手批 |
 
@@ -164,6 +164,12 @@ npm run cf:deploy         # 再部署
 - GitHub 定时是**尽力而为**（≈5–15 分钟漂移），评阅另有「提交后即时 kick」+「老师开面板自愈重扫」兜底，足够。
 - **手动触发**：Actions → 对应 workflow → `Run workflow`。
 - 未设 `CRON_SECRET` 时 workflow **主动跳过并成功退出**（不报红）。
+
+**维护端点（同一 `CRON_SECRET` 鉴权,人工 curl 触发,无定时器）**：
+
+| 端点 | 作用 | 注意 |
+|---|---|---|
+| `POST /api/admin/unify-poll-phase` | 把同名作业指定序号上误配成「默写文本」的环节统一改型为「单选投票」并自动归票（一次性数据修复;老师自助版在评分页「统一其它班为本投票」） | **`schoolId` 必填**（标题全平台不唯一,钉租户防误伤）；默认 dry-run 零写入,`"apply":true` 才执行；有评分即拒绝；可安全重跑。轮换 `CRON_SECRET` 时此端点同受影响 |
 
 排障见 §9。
 
