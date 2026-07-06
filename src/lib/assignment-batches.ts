@@ -30,6 +30,27 @@ export interface BatchGroup {
   totalPending: number
 }
 
+// 组键:batchId 精确(同一次发布);老作业无 batchId → 同课程 + 同标题 视为一批。
+export function batchKeyOf(a: { batchId: string | null; courseId: number; title: string }): string {
+  return a.batchId ? `batch:${a.batchId}` : `legacy:${a.courseId}:${a.title}`
+}
+
+// 列表截断防劈批(复查 R12):列表有界后,截断点可能落在一个批次中间——批次卡缺班,
+// 批次改名/归并还会只写可见的那一半。取 cap+1 行喂进来:若确有越界,把可见区尾部与
+// 越界首行同组的行一并裁掉,保证 batchId 批次(同次发布、行相邻)要么整组可见、要么
+// 整组不见。无 batchId 的 legacy 同名组行可能不相邻,仍有跨界残余(风险仅限「改名只
+// 改可见部分」,不损数据)——「归并批次」正把存量组收敛成 batchId 批次。
+export function trimBoundaryBatch<T extends { batchId: string | null; courseId: number; title: string }>(
+  fetched: T[],
+  cap: number,
+): { rows: T[]; truncated: boolean } {
+  if (fetched.length <= cap) return { rows: fetched, truncated: false }
+  const rows = fetched.slice(0, cap)
+  const extraKey = batchKeyOf(fetched[cap])
+  while (rows.length > 0 && batchKeyOf(rows[rows.length - 1]) === extraKey) rows.pop()
+  return { rows, truncated: true }
+}
+
 export function groupAssignmentBatches(
   list: BatchAssignmentRow[],
   submitted: Map<number, number>,
@@ -38,8 +59,7 @@ export function groupAssignmentBatches(
   const groups = new Map<string, BatchGroup>()
   const order: string[] = []
   for (const a of list) {
-    // batchId 精确(同一次发布);老作业无 batchId → 同课程 + 同标题 视为一批。
-    const key = a.batchId ? `batch:${a.batchId}` : `legacy:${a.courseId}:${a.title}`
+    const key = batchKeyOf(a)
     let g = groups.get(key)
     if (!g) {
       g = { key, title: a.title, category: a.category, mode: a.mode, courseId: a.courseId, courseName: a.courseName, dueAt: a.dueAt, phaseCount: a.phaseCount, classes: [], totalSubmitted: 0, totalPending: 0 }

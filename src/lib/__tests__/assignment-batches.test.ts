@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupAssignmentBatches, type BatchAssignmentRow } from '@/lib/assignment-batches'
+import { groupAssignmentBatches, trimBoundaryBatch, type BatchAssignmentRow } from '@/lib/assignment-batches'
 
 const row = (over: Partial<BatchAssignmentRow> & { id: number }): BatchAssignmentRow => ({
   title: 'A', category: null, mode: null, dueAt: null, batchId: null, phaseCount: 1, courseId: 1, courseName: 'Eng', className: 'C1', ...over,
@@ -43,5 +43,42 @@ describe('groupAssignmentBatches', () => {
   it('preserves list order (newest-first) for the groups', () => {
     const list = [row({ id: 1, batchId: 'newest' }), row({ id: 2, batchId: 'older' })]
     expect(groupAssignmentBatches(list, new Map(), new Map()).map((g) => g.key)).toEqual(['batch:newest', 'batch:older'])
+  })
+})
+
+describe('trimBoundaryBatch (复查 R12: bounded list must not split a batch)', () => {
+  it('passes an under-cap list through untouched', () => {
+    const fetched = [row({ id: 1, batchId: 'b1' }), row({ id: 2, batchId: 'b1' })]
+    expect(trimBoundaryBatch(fetched, 5)).toEqual({ rows: fetched, truncated: false })
+  })
+
+  it('drops the tail rows that share a batch with the first over-cap row (batch shows whole or not at all)', () => {
+    // cap=4 would cut batch b2 in half (rows 3,4 visible; row 5 beyond) → b2 dropped entirely.
+    const fetched = [
+      row({ id: 1, batchId: 'b1' }), row({ id: 2, batchId: 'b1' }),
+      row({ id: 3, batchId: 'b2' }), row({ id: 4, batchId: 'b2' }), row({ id: 5, batchId: 'b2' }),
+    ]
+    const { rows, truncated } = trimBoundaryBatch(fetched, 4)
+    expect(truncated).toBe(true)
+    expect(rows.map((r) => r.id)).toEqual([1, 2])
+  })
+
+  it('cap landing exactly on a batch boundary keeps the full visible batch', () => {
+    const fetched = [
+      row({ id: 1, batchId: 'b1' }), row({ id: 2, batchId: 'b1' }),
+      row({ id: 3, batchId: 'b2' }), // the over-cap row is a DIFFERENT batch
+    ]
+    const { rows, truncated } = trimBoundaryBatch(fetched, 2)
+    expect(truncated).toBe(true)
+    expect(rows.map((r) => r.id)).toEqual([1, 2])
+  })
+
+  it('legacy rows (no batchId) trim by same title+course too', () => {
+    const fetched = [
+      row({ id: 1, batchId: 'b1' }),
+      row({ id: 2, title: 'U3', courseId: 7 }), row({ id: 3, title: 'U3', courseId: 7 }),
+    ]
+    const { rows } = trimBoundaryBatch(fetched, 2)
+    expect(rows.map((r) => r.id)).toEqual([1])
   })
 })

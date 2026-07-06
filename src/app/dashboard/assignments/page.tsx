@@ -5,7 +5,7 @@ import { getDb } from '@/lib/db'
 import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as assignmentRepo from '@/lib/repo/assignments'
-import { groupAssignmentBatches } from '@/lib/assignment-batches'
+import { groupAssignmentBatches, trimBoundaryBatch } from '@/lib/assignment-batches'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LocalDate } from '@/components/local-date'
@@ -59,10 +59,19 @@ export default async function StaffAssignmentsPage() {
     )
   }
 
-  const [list, pending, submitted] = await Promise.all([
-    assignmentRepo.listForStaff(prisma, user.schoolId, user.userId, user.role),
-    assignmentRepo.pendingReviewByAssignment(prisma, user.schoolId, user.userId, user.role),
-    assignmentRepo.submittedCountByAssignment(prisma, user.schoolId, user.userId, user.role),
+  // 列表有界(复查 R12):只取最新 LIST_CAP 份(约一学年量),再把可见 id 传进两个
+  // 计数查询——不再随学年积累全史扫描。更早的作业仍可从「授课」按班进入。
+  // 取 cap+1 探测截断,trimBoundaryBatch 防止截断点劈开一个批次(改名只改一半)。
+  const LIST_CAP = 400
+  const fetched = await assignmentRepo.listForStaff(prisma, user.schoolId, user.userId, user.role, LIST_CAP + 1)
+  const { rows: list, truncated } = trimBoundaryBatch(
+    fetched.map((a) => ({ ...a, courseId: a.offering.courseId })),
+    LIST_CAP,
+  )
+  const visibleIds = list.map((a) => a.id)
+  const [pending, submitted] = await Promise.all([
+    assignmentRepo.pendingReviewByAssignment(prisma, user.schoolId, user.userId, user.role, visibleIds),
+    assignmentRepo.submittedCountByAssignment(prisma, user.schoolId, user.userId, user.role, visibleIds),
   ])
 
   const batches = groupAssignmentBatches(
@@ -172,6 +181,7 @@ export default async function StaffAssignmentsPage() {
           </details>
         )
       })}
+      {truncated ? <p className="py-2 text-center text-xs text-muted-foreground">{t('asgList.capped', { n: list.length })}</p> : null}
     </div>
   )
 }
