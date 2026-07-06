@@ -9,6 +9,7 @@ import { modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
 import { representativeSubmission } from '@/lib/domain/submit'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
+import { clip } from '@/lib/text'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
 import { GradingClient } from './grading-client'
@@ -133,24 +134,32 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
         ? []
         : subs
             .filter((s) => { const v = (s.recitedText ?? '').trim(); return v !== '' && !optionSet.has(v) })
-            .map((s) => ({
-              submissionId: s.id,
-              studentName: s.student.name ?? '',
-              studentNo: s.student.studentNo ?? '',
-              text: (s.recitedText ?? '').trim(),
-              history: assignment.submissions
-                .filter((h) => h.studentId === s.studentId && (h.phaseId ?? 0) === p.id && h.status !== 'DRAFT' && h.id !== s.id)
-                .map((h) => {
-                  const v = (h.recitedText ?? '').trim()
-                  return {
-                    attempt: h.attempt,
-                    // 旧次当前算哪个选项(命中即它的票面),不算票——统计只看最新一次。
-                    option: optionSet.has(v) ? v : null,
-                    text: h.voteSourceText ?? v,
-                  }
-                })
-                .sort((a, b) => b.attempt - a.attempt),
-            }))
+            .map((s) => {
+              // 发给前端的文本一律截断(复查 R11):长文作答(默写可达 2 万字)×几十学生
+              // ×历史多次,不截会把本页 RSC 载荷推到 MB 级。归票比对读开头就够;
+              // textLen 供前端聚组作组键——截断后相同的两篇长文不会误并成「相同作答」。
+              // 归票/撤销的留痕走服务端读库原文,与这里的展示截断无关。
+              const full = (s.recitedText ?? '').trim()
+              return {
+                submissionId: s.id,
+                studentName: s.student.name ?? '',
+                studentNo: s.student.studentNo ?? '',
+                text: clip(full, 400),
+                textLen: full.length,
+                history: assignment.submissions
+                  .filter((h) => h.studentId === s.studentId && (h.phaseId ?? 0) === p.id && h.status !== 'DRAFT' && h.id !== s.id)
+                  .map((h) => {
+                    const v = (h.recitedText ?? '').trim()
+                    return {
+                      attempt: h.attempt,
+                      // 旧次当前算哪个选项(命中即它的票面),不算票——统计只看最新一次。
+                      option: optionSet.has(v) ? v : null,
+                      text: clip(h.voteSourceText ?? v, 160),
+                    }
+                  })
+                  .sort((a, b) => b.attempt - a.attempt),
+              }
+            })
       // 按环节的「未投票」:名册里没有本环节非草稿提交的学生;有草稿的标出来
       // (打了字/选了项但没点最后提交——提醒学生点完即可计票)。
       const voters = new Set(subs.map((s) => s.studentId))
@@ -179,7 +188,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
             ? []
             : subs
                 .filter((s) => (s.recitedText ?? '').trim() === label.trim() && s.voteSourceText != null)
-                .map((s) => ({ submissionId: s.id, studentName: s.student.name ?? '', studentNo: s.student.studentNo ?? '', source: s.voteSourceText as string })),
+                .map((s) => ({ submissionId: s.id, studentName: s.student.name ?? '', studentNo: s.student.studentNo ?? '', source: clip(s.voteSourceText as string, 120) })),
         })),
       }
     })

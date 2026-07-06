@@ -23,7 +23,7 @@
 | R8 | **S3** | `poll-unify assign*` + 页面 | 归票/工作台未排除带答案键的单选（quiz）:改票不重判分,答案/正确率/分数矛盾 | ✅ 本 PR（assign/bulk/undo 三写路径加 quiz 围栏 err.pollOnlyAssign;页面对 quiz 不再出工作台） |
 | R9 | **S3** | `findSyncSiblings` OR-title / `updateBatchMeta` | 改名标题连锁:泛匹配+默认全选可误写无关作业评阅配置;legacy 组改名可与同名组融合、卡片 remount 吞掉成功提示（修法:legacy 组批次写时铸新 batchId） | ✅ 本 PR（有批次身份只按 batchId 认亲;legacy 组改名铸新 batchId:不融合、key 稳定） |
 | R10 | **S3** | 发布 targets / 批次卡 | 一次发布可跨课程勾班 → 批次卡课程名错标 + 永久不可归并 | ✅ 本 PR（发布目标校验课程一致,跨课程整体拒绝 err.mixedCoursePublish;与批次族「同课程」前置约定对齐） |
-| R11 | **S3** | pollResults payload | 无上限文本载荷（20k 字 ×54×2 可至 MB 级）+ 最新文本前端不截断 | ⬜ |
+| R11 | **S3** | pollResults payload | 无上限文本载荷（20k 字 ×54×2 可至 MB 级）+ 最新文本前端不截断 | ✅ 本 PR（服务端统一截断:最新 400/历史 160/留痕 120,`lib/text.clip` 不劈代理对;聚组键带原文长度防截断误并;DB 原文与撤销留痕不动） |
 | R12 | **S3** | `listForStaff` + 两个 groupBy | 作业列表无分页 + 全史扫描,随学年数据积累degrade | ⬜ |
 | R13 | **S3** | `merge-form.tsx:75` | 课程分节 key 用可重名的 courseName → React key 冲突 | ⬜ |
 | R14 | **S3** | grading-client 组卡/UnifyPanel | 组卡 key 不稳定（首 submissionId）+ 预览报告不失效（误导） | ⬜ |
