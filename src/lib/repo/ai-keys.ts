@@ -7,14 +7,6 @@ export function listForUser(prisma: PrismaClient, userId: number) {
   return prisma.aiKey.findMany({ where: { userId }, select: { provider: true, last4: true } })
 }
 
-// The encrypted secret for one slot (for the grading pipeline to decrypt).
-export function findSecret(prisma: PrismaClient, userId: number, provider: string) {
-  return prisma.aiKey.findUnique({
-    where: { userId_provider: { userId, provider } },
-    select: { ciphertext: true, iv: true },
-  })
-}
-
 // All of a teacher's encrypted keys (grading decrypts these to use the right key).
 export function listSecretsForUser(prisma: PrismaClient, userId: number) {
   return prisma.aiKey.findMany({ where: { userId }, select: { provider: true, ciphertext: true, iv: true } })

@@ -35,7 +35,7 @@
 | A13 | **S3** | `components/ui/confirm.tsx:70` | 最常用确认弹窗无可访问名 + 无焦点陷阱（另两弹窗都做了） | ✅ 本 PR（useId 的 aria-labelledby/describedby + Tab 焦点陷阱，对齐 RecordConsentNotice） |
 | A14 | **S3** | `components/assignment-form.tsx:246` | 环节重排后手风琴展开态不跟随（index key + 未同步 `openPhase`） | ✅ 本 PR（每环节加客户端 uid 作 React key，movePhase 同步 openPhase） |
 | A15 | **S4** | `fill-blank.ts:44` | `isGradableFillBlank` 把 `[[""]]` 空串答案键当可判分 | ✅ 本 PR（每空须有归一化后非空答案，`a.some(norm(x)!=='')`；补回归测试） |
-| A16 | **S4** | `repo/ai-keys.ts:11`、`repo/users.ts:28` | 死导出 `findSecret` / `setSchool` | ⬜ |
+| A16 | **S4** | `repo/ai-keys.ts:11`、`repo/users.ts:28` | 死导出 `findSecret` / `setSchool` | ✅ 本 PR（两个无调用方的导出删除；活路径分别是 `listSecretsForUser` / `setSchoolAsAdmin`） |
 | A17 | **S4** | `ai/providers/gemini.ts:214` | Gemini API key 走 URL query（建议改 `x-goog-api-key` 头） | ⬜ |
 | A18 | **S4** | `points.ts` / `retention/route.ts` 等 | 魔法值 `DAY_MS` / `180_000` 超时 / `MAX_SCORE` 声明序等一致性小项 | ⬜ |
 | A19 | **S4** | `student/.../shadow-submit.tsx:153` | `scrollIntoView` 写在 state updater 里（StrictMode 双触发） | ⬜ |
