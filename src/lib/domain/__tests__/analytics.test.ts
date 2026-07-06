@@ -9,6 +9,7 @@ import {
   parsePerSentence,
   latestPhaseSubmissions,
   collapsePhases,
+  weightedPhaseMean,
   gradingCalibration,
   gradingCalibrationByTeacher,
   CALIBRATION_AGREE_TOL,
@@ -16,6 +17,17 @@ import {
   type PhaseSubmission,
   type RawPhaseRow,
 } from '@/lib/domain/analytics'
+
+describe('weightedPhaseMean — the single multi-phase score formula (shared by collapsePhases + export)', () => {
+  it('weights by phase weight; all-1 degrades to a plain mean; nulls excluded; empty → null', () => {
+    expect(weightedPhaseMean([{ score: 90, weight: 3 }, { score: 50, weight: 1 }])).toBe((90 * 3 + 50) / 4) // 80
+    expect(weightedPhaseMean([{ score: 80, weight: 1 }, { score: 60, weight: 1 }])).toBe(70) // equal → mean
+    expect(weightedPhaseMean([{ score: 90, weight: 3 }, { score: null, weight: 5 }])).toBe(90) // null phase ignored (weight too)
+    expect(weightedPhaseMean([])).toBeNull()
+    expect(weightedPhaseMean([{ score: null, weight: 2 }])).toBeNull()
+    expect(weightedPhaseMean([{ score: 70, weight: 0 }])).toBe(70) // weight floored to 1
+  })
+})
 
 const phaseSub = (o: Partial<PhaseSubmission> & Pick<PhaseSubmission, 'studentId' | 'assignmentId'>): PhaseSubmission => ({
   phaseId: 1,
