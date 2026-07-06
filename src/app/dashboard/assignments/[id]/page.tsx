@@ -92,6 +92,9 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   // 选择环节的票数分布：每个环节统计每个选项被选了多少次（取每个学生该环节的最新一次）。
   // 单选（correctChoice）/ 多选（correctChoices，全对才算对）设了答案的当作有正确答案的题：
   // 标出正确项并算正确率。学生作答：多选是 JSON 数组、单选是选项文本。
+  // 名册在此就取(下方「未提交」也用):投票卡按环节精确列「未投票」名单——
+  // 交过别的环节、唯独没投本环节的学生,整作业维度的「未提交」看不出来。
+  const roster = await userRepo.listClassRoster(prisma, user.schoolId, assignment.offering.class.id)
   const pollSubs = [...latestByStudentPhase.values()].filter((s) => s.status !== 'DRAFT')
   const pollResults = assignment.phases
     .filter((p) => p.requireChoice)
@@ -130,8 +133,16 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
                 })
                 .sort((a, b) => b.attempt - a.attempt),
             }))
+      // 按环节的「未投票」:名册里没有本环节非草稿提交的学生;有草稿的标出来
+      // (打了字/选了项但没点最后提交——提醒学生点完即可计票)。
+      const voters = new Set(subs.map((s) => s.studentId))
+      const drafters = new Set(assignment.submissions.filter((s) => (s.phaseId ?? 0) === p.id && s.status === 'DRAFT').map((s) => s.studentId))
+      const nonVoters = roster
+        .filter((r) => !voters.has(r.id))
+        .map((r) => ({ name: r.name ?? '', studentNo: r.studentNo ?? '', draftOnly: drafters.has(r.id) }))
       return {
         unmatched,
+        nonVoters,
         phaseId: p.id,
         // 可作「统一其它班」模板:纯单选投票(无答案键、≥2 选项)。
         canUnify: !isMulti && !hasKey && parseChoices(p.choicesJson).length >= 2,
@@ -158,7 +169,6 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
   // Who hasn't handed anything in yet: the class roster minus everyone with a
   // non-DRAFT submission (any phase). Lets the teacher chase up missing students —
   // they never appear in the submissions list because they have no row.
-  const roster = await userRepo.listClassRoster(prisma, user.schoolId, assignment.offering.class.id)
   const submittedIds = new Set(assignment.submissions.filter((s) => s.status !== 'DRAFT').map((s) => s.studentId))
   const notSubmitted = roster
     .filter((r) => !submittedIds.has(r.id))

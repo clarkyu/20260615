@@ -54,6 +54,8 @@ interface PollResult {
   // 原文与任何选项不符的作答(计入 total 但未落任何选项)——老师人工比对后归票。
   // history = 该生本环节的其它提交(旧 attempt),只读展示;统计与归票都只作用于最新一次。
   unmatched: UnmatchedRow[]
+  // 按环节的「未投票」名单:名册里没有本环节非草稿提交的学生(仅草稿的标出来)。
+  nonVoters: { name: string; studentNo: string; draftOnly: boolean }[]
 }
 // 归票留痕:该选项名下由原文归入的一票(学生 + 原始作答),可撤销。
 interface VoteNote { submissionId: number; studentName: string; studentNo: string; source: string }
@@ -365,6 +367,26 @@ export function GradingClient(props: {
                 )
               })
             )}
+            {poll.nonVoters.length > 0 ? (
+              <details className="rounded-xl border border-border/70">
+                <summary className="tap cursor-pointer p-3 text-sm font-medium text-muted-foreground">
+                  {t('poll.nonVoters', { n: poll.nonVoters.length })}
+                </summary>
+                <div className="space-y-1 border-t border-border/60 p-3 text-xs">
+                  {poll.nonVoters.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate">
+                        {s.name || s.studentNo}
+                        {s.name && s.studentNo ? <span className="ml-1 text-muted-foreground">{s.studentNo}</span> : null}
+                      </span>
+                      <span className={'shrink-0 ' + (s.draftOnly ? 'font-medium text-warning' : 'text-muted-foreground')}>
+                        {s.draftOnly ? t('poll.draftOnly') : t('poll.neverVoted')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             {poll.unmatched.length > 0 ? (
               <details className="rounded-xl border border-warning/40 bg-warning/5">
                 <summary className="tap cursor-pointer p-3 text-sm font-medium text-warning">
