@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/domain/grading'
-import { assignPollVote as assignPollVoteService } from '@/lib/domain/poll-unify'
+import { assignPollVote as assignPollVoteService, unifyPollSiblings, type UnifyReport } from '@/lib/domain/poll-unify'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -133,6 +133,20 @@ export async function getShadowTakeUrls(submissionId: number): Promise<{ takes?:
     }),
   )
   return { takes: signed.filter((x): x is NonNullable<typeof x> => x !== null) }
+}
+
+// 统一其它班到本投票环节:apply=false 出预览报告(零写入),apply=true 执行改型 + 自动归票。
+// 错误统一翻译;成功把各目标班评分页与本页一并 revalidate。
+export async function unifyPollSiblingsAction(phaseId: number, apply: boolean): Promise<UnifyReport> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(phaseId)) return { ok: false, error: t('err.subNoAccess') }
+  const res = await unifyPollSiblings(prisma, user.schoolId, user.userId, user.role, phaseId, apply)
+  if (!res.ok) return { ok: false, error: t(res.error) }
+  if (apply) {
+    revalidatePath('/dashboard/assignments')
+    for (const tgt of res.targets) revalidatePath(`/dashboard/assignments/${tgt.assignmentId}`)
+  }
+  return res
 }
 
 // 人工归票:老师把投票环节里「未归票作答」(原文与任何选项不符)比对确认后归到某选项。

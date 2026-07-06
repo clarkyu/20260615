@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Play, FileSpreadsheet, Pencil, ClipboardCheck, CheckCheck, UserX, BarChart3, CheckCircle2 } from 'lucide-react'
-import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote } from '@/actions/grading'
+import { runGrading, overrideScore, getSubmissionMediaUrl, acceptAiForAssignment, markMissing as markMissingAction, batchOverride, savePhaseGradingConfig, assignPollVote, unifyPollSiblingsAction } from '@/actions/grading'
 import { estimateGrading, formatTokens } from '@/lib/ai/cost'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import { useT } from '@/components/i18n-provider'
@@ -43,6 +43,9 @@ interface ModelOpt { id: string; label: string }
 // 一个可 AI 评阅的环节 + 它当前保存的批阅配置（评分标准 + 感知/评分模型）。
 interface PhaseCfg { id: number; label: string; rubric: string; perceptionModel: string; judgeModel: string; sentenceCount: number }
 interface PollResult {
+  phaseId: number
+  // 可作「统一其它班」的模板:纯单选投票(无答案键、≥2 选项)。
+  canUnify: boolean
   phaseLabel?: string
   total: number
   correctChoice: string | null
@@ -354,6 +357,7 @@ export function GradingClient(props: {
                 </div>
               </details>
             ) : null}
+            {poll.canUnify ? <UnifyPollPanel phaseId={poll.phaseId} /> : null}
           </CardContent>
         </Card>
       ))}
@@ -656,5 +660,71 @@ function UnmatchedVoteRow({ row, options }: { row: { submissionId: number; stude
       </div>
       {error ? <FormMessage>{error}</FormMessage> : null}
     </div>
+  )
+}
+
+// 「统一其它班为本投票环节」面板:以本班这个纯单选投票环节为模板,把兄弟班同序的
+// 「默写文本」环节统一改型。先预览(零写入,逐班列出可自动归票/待人工数),确认后执行;
+// 执行后各班评分页的「未归票作答」承接剩余的人工归票。
+function UnifyPollPanel({ phaseId }: { phaseId: number }) {
+  const t = useT()
+  const confirm = useConfirm()
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [report, setReport] = useState<Awaited<ReturnType<typeof unifyPollSiblingsAction>> | null>(null)
+  const [done, setDone] = useState(false)
+
+  const run = (apply: boolean) =>
+    startTransition(async () => {
+      const r = await unifyPollSiblingsAction(phaseId, apply)
+      setReport(r)
+      if (apply && r.ok) {
+        setDone(true)
+        router.refresh()
+      }
+    })
+
+  return (
+    <details className="rounded-xl border border-input">
+      <summary className="tap cursor-pointer p-3 text-sm font-medium">
+        {t('poll.unify')}
+        <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t('poll.unifySummaryHint')}</span>
+      </summary>
+      <div className="space-y-2.5 border-t border-border/60 p-3">
+        <p className="text-xs text-muted-foreground">{t('poll.unifyHint')}</p>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => run(false)}>
+          {pending && !done ? '…' : t('poll.unifyPreview')}
+        </Button>
+        {report && !report.ok ? <FormMessage>{report.error}</FormMessage> : null}
+        {report?.ok ? (
+          report.targets.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t('poll.unifyNone')}</p>
+          ) : (
+            <div className="space-y-2">
+              {report.targets.map((g) => (
+                <div key={g.phaseId} className="rounded-xl bg-secondary/50 p-2.5 text-xs">
+                  <span className="font-medium">{g.className}</span>
+                  <span className="text-muted-foreground"> · {t('poll.unifyRow', { total: g.total, auto: g.alreadyCanonical + g.autoMatched, un: g.unmatched.length })}</span>
+                  {g.scored > 0 ? <span className="font-medium text-destructive"> · {t('poll.unifyScored', { n: g.scored })}</span> : null}
+                </div>
+              ))}
+              {done ? (
+                <FormMessage tone="success">{t('poll.unifyDone')}</FormMessage>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={pending || report.targets.some((g) => g.scored > 0)}
+                  onClick={async () => {
+                    if (await confirm({ body: t('poll.unifyConfirm', { n: report.targets.length }), danger: true, okLabel: t('poll.unifyApply') })) run(true)
+                  }}
+                >
+                  {t('poll.unifyApply')}
+                </Button>
+              )}
+            </div>
+          )
+        ) : null}
+      </div>
+    </details>
   )
 }

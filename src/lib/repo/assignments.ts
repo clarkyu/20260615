@@ -245,6 +245,49 @@ export function listPhaseGroupForUnify(prisma: PrismaClient, title: string, orde
   })
 }
 
+// 老师自助「统一题型到本投票环节」的源环节读(staff scoped):环节 + 其作业/授课定位字段。
+export function findPhaseForUnifySource(prisma: PrismaClient, phaseId: number, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.phase.findFirst({
+    where: { id: phaseId, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
+    select: {
+      id: true, order: true, requireText: true, requireChoice: true, multiChoice: true,
+      correctChoice: true, choicesJson: true, fillBlank: true, requireAudio: true, requireVideo: true,
+      assignment: { select: { id: true, title: true, batchId: true, offering: { select: { courseId: true, classId: true } } } },
+    },
+  })
+}
+
+// 兄弟作业同序环节(候选统一目标),识别口径与 findSyncSiblings 一致:同批次 batchId 或
+// 同课程同标题、不同班,本人 scope。带回配置 + 非草稿提交,供 domain 侧筛选与出报告。
+export function listSiblingPhasesForUnify(
+  prisma: PrismaClient,
+  source: { assignmentId: number; order: number; courseId: number; classId: number; batchId: string | null; title: string },
+  schoolId: number | null | undefined,
+  userId: number,
+  role: Role,
+) {
+  return prisma.phase.findMany({
+    where: {
+      order: source.order,
+      assignment: {
+        id: { not: source.assignmentId },
+        offering: { ...offeringScopeFor(schoolId, userId, role), courseId: source.courseId, classId: { not: source.classId } },
+        OR: [...(source.batchId ? [{ batchId: source.batchId }] : []), { title: source.title }],
+      },
+    },
+    select: {
+      id: true, order: true, requireText: true, requireChoice: true, requireFreeText: true,
+      requireAudio: true, requireVideo: true, requireHandwriting: true, fillBlank: true,
+      multiChoice: true, correctChoice: true, correctChoices: true, choicesJson: true, itemType: true,
+      assignment: { select: { id: true, title: true, offering: { select: { class: { select: { name: true } } } } } },
+      submissions: {
+        where: { status: { not: 'DRAFT' } },
+        select: { id: true, recitedText: true, status: true, needsReview: true, finalScore: true, student: { select: { name: true, studentNo: true } } },
+      },
+    },
+  })
+}
+
 // 把一个默写文本环节改型为单选投票(套用模板班的选项),itemType 同步 objective——
 // 存储列与 phaseItemType 推导必须一致。order=1 时同步 Assignment 上的 legacy 镜像列
 // (与 updateWithPhases 的 legacyColumnsFromPrimary 行为对齐);作业 version+1 围栏在途编辑。
