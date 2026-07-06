@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/domain/grading'
-import { assignPollVote as assignPollVoteService, unifyPollSiblings, type UnifyReport } from '@/lib/domain/poll-unify'
+import { assignPollVote as assignPollVoteService, unassignPollVote as unassignPollVoteService, unifyPollSiblings, type UnifyReport } from '@/lib/domain/poll-unify'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as userRepo from '@/lib/repo/users'
@@ -155,6 +155,16 @@ export async function assignPollVote(submissionId: number, choice: string): Prom
   const picked = (choice ?? '').trim()
   if (!Number.isInteger(submissionId) || !picked) return { error: t('err.badChoice') }
   const res = await assignPollVoteService(prisma, user.schoolId, user.userId, user.role, submissionId, picked)
+  if (!res.ok) return { error: t(res.error) }
+  revalidatePath(`/dashboard/assignments/${res.assignmentId}`)
+  return { success: true }
+}
+
+// 撤销归票:恢复留痕原文,该票退出票数分布、回到「未归票作答」。
+export async function unassignPollVote(submissionId: number): Promise<ActionState> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(submissionId)) return { error: t('err.subNoAccess') }
+  const res = await unassignPollVoteService(prisma, user.schoolId, user.userId, user.role, submissionId)
   if (!res.ok) return { error: t(res.error) }
   revalidatePath(`/dashboard/assignments/${res.assignmentId}`)
   return { success: true }

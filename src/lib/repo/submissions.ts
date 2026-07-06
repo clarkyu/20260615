@@ -40,9 +40,18 @@ export function listShadowTakes(prisma: PrismaClient, submissionId: number) {
 
 // 归票:把一份提交的作答改写为某个选项的规范原文(投票分布按 recitedText 与选项精确
 // 匹配计票)。needsReview 一并清掉——投票环节不进复核列表,留着会变成幽灵计数。
+// voteSourceText 归票留痕(原始作答,undefined = 不动该列):有它即可无损撤销。
 // 维护工具与 staff 路径都由调用方先做 scope/合法性校验,再按 id 写入。
-export function setPollAnswer(prisma: PrismaClient, id: number, choice: string) {
-  return prisma.submission.update({ where: { id }, data: { recitedText: choice, needsReview: false } })
+export function setPollAnswer(prisma: PrismaClient, id: number, choice: string, voteSourceText?: string | null) {
+  return prisma.submission.update({
+    where: { id },
+    data: { recitedText: choice, needsReview: false, ...(voteSourceText !== undefined ? { voteSourceText } : {}) },
+  })
+}
+
+// 撤销归票:作答恢复为归票留痕的原文,清掉留痕。调用方先校验 scope + 留痕存在。
+export function revertPollAnswer(prisma: PrismaClient, id: number, originalText: string) {
+  return prisma.submission.update({ where: { id }, data: { recitedText: originalText, voteSourceText: null } })
 }
 
 // 环节改型为投票后的清理:该环节全部提交退出复核队列(投票不复核;不清会出现
