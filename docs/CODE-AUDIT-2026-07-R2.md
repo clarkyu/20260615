@@ -27,7 +27,7 @@
 | R12 | **S3** | `listForStaff` + 两个 groupBy | 作业列表无分页 + 全史扫描,随学年数据积累degrade | ✅ 本 PR（列表取最新 400 份+截断提示;计数只扫可见 id 且按 ≤90 分块避 D1 参数上限;trimBoundaryBatch 防截断劈批——半批改名/归并会把一次发布劈成两批） |
 | R13 | **S3** | `merge-form.tsx:75` | 课程分节 key 用可重名的 courseName → React key 冲突 | ✅ 本 PR（分节键改 courseId,分节 Map 本就按 courseId 建、把 id 带出即可） |
 | R14 | **S3** | grading-client 组卡/UnifyPanel | 组卡 key 不稳定（首 submissionId）+ 预览报告不失效（误导） | ✅ 本 PR（组卡 key 用组身份=作答文本键;预览/执行分开转菊花;重预览重置已完成态;报告下注明「快照,执行时按最新数据重算」——执行本就服务端重算,纯展示诚实性） |
-| R15 | **S3** | poll-unify 报告 | 预览含空文本行（工作台不显示）、skipped 班级静默吞掉——报告与可操作数不一致 | ⬜ |
+| R15 | **S3** | poll-unify 报告 | 预览含空文本行（工作台不显示）、skipped 班级静默吞掉——报告与可操作数不一致 | ✅ 本 PR（空白作答单列 blank 不再虚增「待人工」,与工作台口径一致;skipped 班级在面板点名警示,i18n 三语 + sep.list 分隔符键） |
 | R16 | S4 | i18n / assignment-mode | 死键 `poll.pickOption`/`poll.assign` ×3 语言;死导出 `AssignmentMode`/`isAssignmentMode` | ⬜ |
 | R17 | S4 | grading-client / merge-form | 硬编码中文顿号「、」与全角括号绕过 i18n | ⬜ |
 | R18 | S4 | `applyPlans`/`assignPollVotesBulk`/`cancelPending` | 逐行写 → `$transaction` 单次 batch;cancelPending 改关系过滤（phaseId） | ⬜ |

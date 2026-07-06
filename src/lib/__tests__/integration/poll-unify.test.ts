@@ -207,6 +207,21 @@ describe('unifyPollSiblings (老师自助版,scoped)', () => {
     expect(res).toEqual({ ok: false, error: 'err.pollUnifySource' })
   })
 
+  it('blank answers (empty / whitespace-only) count as blank, NOT as 待人工 unmatched (复查 R15)', async () => {
+    const d = await seed(db.prisma)
+    // 评分页工作台只列非空文本(没内容无从比对归票)——报告把空白算进「待人工」,
+    // 老师会去找一条不存在的行。空白单列 blank,unmatched 口径与工作台一致。
+    const s4 = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: '04', passwordHash: 'x' } })
+    const s5 = await db.prisma.user.create({ data: { role: 'STUDENT', schoolId: d.school.id, studentNo: '05', passwordHash: 'x' } })
+    await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, phaseId: d.textPhase.id, studentId: s4.id, attempt: 1, status: 'UPLOADED', recitedText: '' } })
+    await db.prisma.submission.create({ data: { assignmentId: d.textAsg.id, phaseId: d.textPhase.id, studentId: s5.id, attempt: 1, status: 'UPLOADED', recitedText: '　 \t' } })
+
+    const r = await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, false)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.targets[0]).toMatchObject({ total: 5, blank: 2 })
+    expect(r.targets[0].unmatched.map((u) => u.studentNo)).toEqual(['03']) // 空白不冒充待人工
+  })
+
   it("is teacher-scoped: another teacher's same-title class is not a target, and a foreign source is unreachable", async () => {
     const d = await seed(db.prisma)
     const other = await db.prisma.user.create({ data: { role: 'TEACHER', schoolId: d.school.id, staffNo: 'T9', passwordHash: 'x' } })

@@ -27,6 +27,7 @@ export interface UnifyTargetReport {
   alreadyCanonical: number // 原文已与某选项逐字相同(计票本就命中),无需改写
   autoMatched: number // 归一化后等价 → 改写为选项规范原文(apply 时执行)
   unmatched: UnmatchedAnswer[] // 对不上任何选项 → 原样保留,人工归票
+  blank: number // 空白作答(trim 后为空):评分页工作台不显示、无从归票——单列,不算「待人工」(复查 R15)
   // 作答明细对比(按原文聚合、按人数降序):老师执行前就能看到学生写了什么、各归到哪。
   answers: { text: string; count: number; matchedOption: string | null }[]
   pendingReview: number // needsReview 待清(apply 时全环节清 0,含历史 attempt)
@@ -84,13 +85,17 @@ function buildPlan(p: TargetPhaseRow, byNorm: Map<string, string>) {
   const latest = [...latestByStudent.values()]
 
   let alreadyCanonical = 0
+  let blank = 0
   const rewrites: { submissionId: number; canonical: string; sourceText: string }[] = []
   const unmatched: UnmatchedAnswer[] = []
   const byText = new Map<string, { count: number; matchedOption: string | null }>()
   for (const s of latest) {
     const text = s.recitedText ?? ''
     const hit = text.trim() ? byNorm.get(normalizeAnswer(text)) : undefined
-    if (hit == null) unmatched.push({ submissionId: s.id, studentNo: s.student?.studentNo ?? '', studentName: s.student?.name ?? '', text })
+    // 空白作答不入 unmatched:评分页的「未归票作答」工作台只列非空文本(没内容就没得
+    // 比对归票),报告若把空白算进「待人工」,老师会去找一条根本不存在的行(复查 R15)。
+    if (text.trim() === '') blank++
+    else if (hit == null) unmatched.push({ submissionId: s.id, studentNo: s.student?.studentNo ?? '', studentName: s.student?.name ?? '', text })
     else if (text === hit) alreadyCanonical++
     else rewrites.push({ submissionId: s.id, canonical: hit, sourceText: text })
     const key = text.trim()
@@ -106,6 +111,7 @@ function buildPlan(p: TargetPhaseRow, byNorm: Map<string, string>) {
     alreadyCanonical,
     autoMatched: rewrites.length,
     unmatched,
+    blank,
     answers: [...byText.entries()].map(([text, e]) => ({ text, ...e })).sort((a, b) => b.count - a.count),
     pendingReview: p.submissions.filter((s) => s.needsReview).length,
     scored: p.submissions.filter((s) => s.finalScore != null).length,

@@ -772,6 +772,11 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
           {pending && !applying ? '…' : t('poll.unifyPreview')}
         </Button>
         {report && !report.ok ? <FormMessage>{report.error}</FormMessage> : null}
+        {/* 被跳过的班必须点名(复查 R15):同序环节类型不符的班不会被统一,静默吞掉
+            会让老师以为「全都统一了」。 */}
+        {report?.ok && report.skipped.length > 0 ? (
+          <p className="text-xs font-medium text-warning">{t('poll.unifySkipped', { n: report.skipped.length, classes: report.skipped.map((s) => s.className).join(t('sep.list')) })}</p>
+        ) : null}
         {report?.ok ? (
           report.targets.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t('poll.unifyNone')}</p>
@@ -782,6 +787,7 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
                   <summary className="tap cursor-pointer p-2.5 text-xs">
                     <span className="font-medium">{g.className}</span>
                     <span className="text-muted-foreground"> · {t('poll.unifyRow', { total: g.total, auto: g.alreadyCanonical + g.autoMatched, un: g.unmatched.length })}</span>
+                    {g.blank > 0 ? <span className="text-muted-foreground"> · {t('poll.unifyBlank', { n: g.blank })}</span> : null}
                     {g.scored > 0 ? <span className="font-medium text-destructive"> · {t('poll.unifyScored', { n: g.scored })}</span> : null}
                   </summary>
                   {/* 作答明细对比:原文 × 人数 → 命中的选项 / 未匹配。执行前就能看到学生写了什么。 */}
