@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge, statusTone } from '@/components/ui/badge'
 import { useConfirm } from '@/components/ui/confirm'
+import { groupUnmatched, type UnmatchedRow } from '@/lib/poll-workbench'
 import { GradeFocus } from './grade-focus'
 
 interface Row {
@@ -59,17 +60,8 @@ interface PollResult {
 }
 // 归票留痕:该选项名下由原文归入的一票(学生 + 原始作答),可撤销。
 interface VoteNote { submissionId: number; studentName: string; studentNo: string; source: string }
-// 一条未归票作答:最新一次提交(可归票)+ 历史提交(只读:各写了什么/当前归在哪)。
-// text 是服务端截断后的展示文本(载荷上限,复查 R11);textLen 是原文长度,
-// 与 text 合成聚组键——截断后相同、原文不同的长文不会误并成「相同作答」。
-interface UnmatchedRow {
-  submissionId: number
-  studentName: string
-  studentNo: string
-  text: string
-  textLen: number
-  history: { attempt: number; option: string | null; text: string }[]
-}
+// UnmatchedRow(未归票作答行)与 groupUnmatched(相同作答聚组)在 lib/poll-workbench
+// ——纯函数入 lib 单测(复查 R23)。
 
 
 export function GradingClient(props: {
@@ -714,20 +706,7 @@ function UnmatchedVoteRow({ row, options }: { row: UnmatchedRow; options: string
           ) : null}
         </div>
         {/* 右:选项即按钮,点了就归 */}
-        <div className="space-y-1.5">
-          <p className="text-muted-foreground">{t('poll.assignTo')}</p>
-          {options.map((o) => (
-            <button
-              key={o}
-              type="button"
-              disabled={pending}
-              onClick={() => assign(o)}
-              className="tap block w-full rounded-lg border border-input bg-background px-2.5 py-2 text-left hover:border-primary hover:bg-accent disabled:opacity-50"
-            >
-              {o}
-            </button>
-          ))}
-        </div>
+        <OptionButtons heading={t('poll.assignTo')} options={options} pending={pending} onPick={assign} />
       </div>
       {error ? <FormMessage>{error}</FormMessage> : null}
     </div>
@@ -863,19 +842,24 @@ function VoteNoteRow({ note }: { note: VoteNote }) {
   )
 }
 
-// 相同作答聚组(按人数降序)——18 个「自我介绍」一组一次归完,不再逐条点。
-// 组键 = 原文长度 + 截断文本:等长且前 400 字相同才算「相同作答」。key 一并返回,
-// 供 React 作组卡 key(复查 R14:用首行 submissionId 当 key,首行变了整卡重挂,
-// 展开态/报错提示被吞;组的身份是「作答文本」,不是恰好排第一的那条提交)。
-function groupUnmatched(rows: UnmatchedRow[]): { key: string; text: string; rows: UnmatchedRow[] }[] {
-  const m = new Map<string, UnmatchedRow[]>()
-  for (const r of rows) {
-    const key = `${r.textLen}:${r.text}`
-    const a = m.get(key) ?? []
-    a.push(r)
-    m.set(key, a)
-  }
-  return [...m.entries()].map(([key, rs]) => ({ key, text: rs[0].text, rows: rs })).sort((a, b) => b.rows.length - a.rows.length)
+// 归票选项列(单条行与组行共用,复查 R23):标题 + 每个选项一枚整宽按钮,点即归票。
+function OptionButtons({ heading, options, pending, onPick }: { heading: string; options: string[]; pending: boolean; onPick: (option: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-muted-foreground">{heading}</p>
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          disabled={pending}
+          onClick={() => onPick(o)}
+          className="tap block w-full rounded-lg border border-input bg-background px-2.5 py-2 text-left hover:border-primary hover:bg-accent disabled:opacity-50"
+        >
+          {o}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 // 一组相同作答的批量归票行:左边作答原文 + 学生名单(可展开),右边选项按钮——
@@ -910,20 +894,7 @@ function GroupVoteRow({ text, rows, options }: { text: string; rows: UnmatchedRo
           </details>
         </div>
         {/* 右:选项即按钮,整组一次归 */}
-        <div className="space-y-1.5">
-          <p className="text-muted-foreground">{t('poll.groupAssignTo', { n: rows.length })}</p>
-          {options.map((o) => (
-            <button
-              key={o}
-              type="button"
-              disabled={pending}
-              onClick={() => assign(o)}
-              className="tap block w-full rounded-lg border border-input bg-background px-2.5 py-2 text-left hover:border-primary hover:bg-accent disabled:opacity-50"
-            >
-              {o}
-            </button>
-          ))}
-        </div>
+        <OptionButtons heading={t('poll.groupAssignTo', { n: rows.length })} options={options} pending={pending} onPick={assign} />
       </div>
       {error ? <FormMessage>{error}</FormMessage> : null}
     </div>

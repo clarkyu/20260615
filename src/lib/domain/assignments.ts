@@ -172,7 +172,9 @@ export async function createAssignments(
   return { ok: true, redirectTo: `/dashboard/teaching/${target}` }
 }
 
-export type MergeResult = { ok: true; merged: number } | { ok: false; error: string }
+// 批次级写操作(归并/批量改元数据)的统一结果:count = 实际写到的成员数。
+// (原名 MergeResult 只贴切其一,复查 R23。)
+export type BatchWriteResult = { ok: true; count: number } | { ok: false; error: string }
 
 // 归并批次:把误分开发布的同课程作业写上同一个「新」batchId + 统一标题,列表随即合并为
 // 一张按班级展开的卡(与一次发布勾多班的效果一致),评阅配置同步也随之互认兄弟。
@@ -185,7 +187,7 @@ export async function mergeAssignmentBatch(
   role: Role,
   assignmentIds: number[],
   title: string,
-): Promise<MergeResult> {
+): Promise<BatchWriteResult> {
   const ids = [...new Set(assignmentIds)].filter((n) => Number.isInteger(n) && n > 0)
   if (ids.length < 2) return { ok: false, error: 'err.mergeNeedTwo' }
 
@@ -197,8 +199,8 @@ export async function mergeAssignmentBatch(
   if (rows.length !== ids.length) return { ok: false, error: 'err.assignNotFound' }
   if (new Set(rows.map((r) => r.offering.courseId)).size > 1) return { ok: false, error: 'err.mergeSameCourse' }
 
-  const merged = await assignments.mergeIntoBatch(prisma, ids, schoolId, userId, role, crypto.randomUUID(), title)
-  return { ok: true, merged }
+  const count = await assignments.mergeIntoBatch(prisma, ids, schoolId, userId, role, crypto.randomUUID(), title)
+  return { ok: true, count }
 }
 
 // 编辑批次:统一改名 + 定性质(mode 四态),一次写到批内所有成员。与归并同样的整体
@@ -211,7 +213,7 @@ export async function updateAssignmentBatch(
   role: Role,
   assignmentIds: number[],
   data: { title: string; mode: string | null },
-): Promise<MergeResult> {
+): Promise<BatchWriteResult> {
   const ids = [...new Set(assignmentIds)].filter((n) => Number.isInteger(n) && n > 0)
   if (ids.length === 0) return { ok: false, error: 'err.assignNotFound' }
   const rows = await assignments.listCourseIdsForMerge(prisma, ids, schoolId, userId, role)
@@ -220,8 +222,8 @@ export async function updateAssignmentBatch(
   // 组身份从易撞车的标题变成稳定 token——改名不再与同名 legacy 组融合,卡片 key
   // 不随标题漂移,评阅配置同步也只按 batchId 认亲(复查 R9)。已有批次身份的组不动。
   const mintBatchId = rows.every((r) => r.batchId == null) ? crypto.randomUUID() : undefined
-  const merged = await assignments.updateBatchMeta(prisma, ids, schoolId, userId, role, { ...data, batchId: mintBatchId })
-  return { ok: true, merged }
+  const count = await assignments.updateBatchMeta(prisma, ids, schoolId, userId, role, { ...data, batchId: mintBatchId })
+  return { ok: true, count }
 }
 
 export type UpdateResult = { ok: true } | { ok: false; error: string }

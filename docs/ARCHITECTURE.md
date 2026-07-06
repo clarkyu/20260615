@@ -28,8 +28,9 @@
 - 接收 `prisma` + 普通入参，返回数据/结果；错误用 i18n key 字符串，导航目标交回 action。
 - 无 `requireXxx`、无 `getT`、无 `cookies()`/`redirect()`——便于单测与复用（如批改既被
   action 调用，也被异步任务队列调用）。
-- 数据访问走 `lib/repo`。**例外**：批量 roster 导入（`domain/roster.ts`）是一个内聚的
-  数据编排单元，直连 prisma——刻意保留，避免拆成十几个一次性 micro-repo。
+- 数据访问走 `lib/repo`。**例外**：批量 roster 导入（`domain/roster.ts`）与评阅任务队列
+  （`domain/jobs.ts`，自有 `GradingJob` 表的队列机械）是内聚的数据编排单元，直连
+  prisma——刻意保留，避免拆成十几个一次性 micro-repo。其余（含批改状态机）一律走 repo。
 
 ### `lib/repo/**`（仓储）
 - 每个聚合一个文件，函数签名形如 `(prisma, …args)`。

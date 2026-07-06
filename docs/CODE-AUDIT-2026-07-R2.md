@@ -35,7 +35,7 @@
 | R20 | S4 | 同页 options.count | 选项计数 label 未 trim,与 notes/correct 口径不一 | ✅ 本 PR（count 两侧 trim,三处口径统一） |
 | R21 | S4 | `actions/assignments.ts:132` | 客户端 batchId 无格式校验（可伪造超长串/复用他人批次串卡） | ✅ 本 PR（只收 UUID 形状,其它当没带走服务端铸新） |
 | R22 | S4 | 看板 classesN | 「N 个班」= 待批班数,与列表页「发布班数」同键不同义 | ✅ 本 PR（看板改用 dash.pendingClassesN「{n} 个班待批」,三语） |
-| R23 | S4 | 多处 | 命名漂移（edit/update/merge 三动词）· OptionButtons 抽取 · 纯函数入 lib 补测 · 注释「完全可逆」过强 · ARCHITECTURE jobs 例外补记 · generateMetadata 重复取数 · commonTitlePrefix 代理对 · setTitle 在 updater 内 | ⬜ |
+| R23 | S4 | 多处 | 命名漂移（edit/update/merge 三动词）· OptionButtons 抽取 · 纯函数入 lib 补测 · 注释「完全可逆」过强 · ARCHITECTURE jobs 例外补记 · generateMetadata 重复取数 · commonTitlePrefix 代理对 · setTitle 在 updater 内 | ✅ 本 PR（action 改名 updateAssignmentBatch;MergeResult→BatchWriteResult;OptionButtons 共用;groupUnmatched/commonTitlePrefix 入 lib+单测(含代理对修复);「可逆」注释限定为文本;ARCHITECTURE 补 jobs 例外;详情读取 React cache 去重;toggle 副作用移出 updater） |
 | R24 | — | 明确不做 | batchId/title 索引（现规模无收益）、pollResults O(n²) 循环（<1ms）、rows RSC 载荷（≤60 人可接受）——防过度优化,留待规模触发 | 记录在案 |
 
 ## 审计过、确认干净

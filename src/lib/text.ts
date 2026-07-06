@@ -7,3 +7,20 @@ export function clip(text: string, max: number): string {
   if (hi >= 0xd800 && hi <= 0xdbff) cut -= 1 // 截点落在代理对中间则整对丢弃
   return `${text.slice(0, cut)}…`
 }
+
+// 归并预填标题:选中各卡标题的最长公共前缀,去掉结尾的分隔符/空白(「期末考核：一班」
+// ×8 → 「期末考核」)。空前缀(标题完全不同)→ 空串,调用方不预填、老师自己起名。
+export function commonTitlePrefix(titles: string[]): string {
+  if (titles.length === 0) return ''
+  let p = titles[0]
+  for (const t of titles.slice(1)) {
+    let i = 0
+    while (i < p.length && i < t.length && p[i] === t[i]) i++
+    p = p.slice(0, i)
+  }
+  // 分歧点若落在代理对中间(两标题共享 emoji 高位码元、低位不同),丢掉孤立高位码元,
+  // 预填不出现乱码(复查 R23)。
+  const last = p.charCodeAt(p.length - 1)
+  if (last >= 0xd800 && last <= 0xdbff) p = p.slice(0, -1)
+  return p.replace(/[\s:：\-—–·、]+$/u, '').trim()
+}

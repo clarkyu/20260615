@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { Pencil } from 'lucide-react'
-import { editAssignmentBatch } from '@/actions/assignments'
+import { updateAssignmentBatch } from '@/actions/assignments'
 import { ASSIGNMENT_MODES } from '@/lib/assignment-mode'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
@@ -15,7 +15,7 @@ import { Select } from '@/components/ui/select'
 // 所有班的作业。保存成功后 revalidate 刷新列表,卡片标题/标签即时更新。
 export function BatchEditForm({ assignmentIds, title, mode }: { assignmentIds: number[]; title: string; mode: string | null }) {
   const t = useT()
-  const [state, action, pending] = useActionState(editAssignmentBatch, null)
+  const [state, action, pending] = useActionState(updateAssignmentBatch, null)
   const [name, setName] = useState(title)
   const [kind, setKind] = useState(mode ?? '')
 
