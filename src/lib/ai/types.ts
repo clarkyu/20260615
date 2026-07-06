@@ -68,6 +68,9 @@ export interface PerceptionResult {
   pronunciationImpression?: string
   observations: PerceptionObservation
   usage?: TokenUsage
+  // Audio duration in seconds, for per-minute-billed perception models (Whisper). Undefined
+  // for token-billed models; the cost path prices Whisper by this instead of tokens.
+  audioSeconds?: number
   raw?: unknown
 }
 

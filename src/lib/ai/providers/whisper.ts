@@ -57,7 +57,9 @@ export const whisperPerception: PerceptionProvider = {
     const form = new FormData()
     form.append('file', blob, 'recording.webm')
     form.append('model', modelId)
-    form.append('response_format', 'json')
+    // verbose_json carries `duration` (audio seconds) — Whisper is billed per audio minute, so
+    // the real cost path needs it (a plain `json` response omits it → transcription cost unrecorded).
+    form.append('response_format', 'verbose_json')
     const res = await fetch(`${base}/audio/transcriptions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey()}` },
@@ -65,8 +67,9 @@ export const whisperPerception: PerceptionProvider = {
       signal: AbortSignal.timeout(180_000),
     })
     if (!res.ok) throw new Error(`whisper ${res.status}: ${(await res.text()).slice(0, 300)}`)
-    const data = (await res.json()) as { text?: string }
+    const data = (await res.json()) as { text?: string; duration?: number }
     const transcript = (data.text ?? '').trim()
+    const audioSeconds = Number(data.duration)
 
     return {
       transcript,
@@ -76,6 +79,7 @@ export const whisperPerception: PerceptionProvider = {
         continuousTake: true,
         notes: 'Whisper 仅转写音频，无画面/防作弊观测；逐句分基于转写文本匹配。',
       },
+      audioSeconds: Number.isFinite(audioSeconds) ? audioSeconds : undefined,
       raw: data,
     }
   },
