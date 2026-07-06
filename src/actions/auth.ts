@@ -79,21 +79,20 @@ export async function register(prevState: unknown, formData: FormData): Promise<
   const { value: name, error: nameError } = validateName(formData.get('name') as string | null)
   if (nameError) return { error: t(nameError) }
 
+  // Any existing account owning this email blocks signup — NEVER overwrite it. Email
+  // verification is disabled, so provisioned accounts (roster students, added teachers) stay
+  // emailVerified=null forever; the old `if (existing) update(...)` branch therefore let an
+  // ANONYMOUS register request seize such an account — resetting its password and role — which
+  // for a roster student is a STUDENT→TEACHER privilege escalation. Refuse for any existing row.
   const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing?.emailVerified) return { error: t('err.emailTaken') }
+  if (existing) return { error: t('err.emailTaken') }
 
   const passwordHash = await hashPassword((formData.get('password') as string) ?? '')
   const isSuperAdmin = email === normalizeEmail(config.adminEmail() ?? '')
   const role = isSuperAdmin ? 'SUPER_ADMIN' : 'TEACHER'
 
-  // Email verification is disabled — accounts are usable immediately, so mark the
-  // address verified on sign-up rather than emailing a confirmation link.
-  const now = new Date()
-  if (existing) {
-    await prisma.user.update({ where: { id: existing.id }, data: { passwordHash, name, role, emailVerified: now } })
-  } else {
-    await prisma.user.create({ data: { email, passwordHash, name, role, emailVerified: now } })
-  }
+  // Accounts are usable immediately (verification disabled) → mark verified on sign-up.
+  await prisma.user.create({ data: { email, passwordHash, name, role, emailVerified: new Date() } })
   return { success: true }
 }
 
