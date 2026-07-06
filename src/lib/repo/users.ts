@@ -25,10 +25,6 @@ export function createTeacher(prisma: PrismaClient, data: NewTeacher) {
   return prisma.user.create({ data: { role: 'TEACHER', mustChangePassword: true, ...data } })
 }
 
-export function setSchool(prisma: PrismaClient, userId: number, schoolId: number) {
-  return prisma.user.update({ where: { id: userId }, data: { schoolId } })
-}
-
 // Founder of a school becomes its admin — bind the school AND promote to SCHOOL_ADMIN.
 export function setSchoolAsAdmin(prisma: PrismaClient, userId: number, schoolId: number) {
   return prisma.user.update({ where: { id: userId }, data: { schoolId, role: 'SCHOOL_ADMIN' } })
