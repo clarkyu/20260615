@@ -145,6 +145,20 @@ export function costMicroUsd(modelId: string, inputTokens: number, outputTokens:
   return Math.round(costUsd(modelId, inputTokens, outputTokens) * 1_000_000)
 }
 
+// Real cost of ONE perception call. Per-minute-billed models (Whisper) are priced by audio
+// duration — their token rates are 0, so token costing books them as free; everyone else is
+// priced by tokens. `audioSeconds` comes from the provider (Whisper's verbose_json `duration`);
+// undefined for token models. Fixes the Whisper transcription cost that was never recorded.
+export function perceptionCostUsd(modelId: string, inputTokens: number, outputTokens: number, audioSeconds: number | undefined): number {
+  const r = MODEL_RATES[modelId]
+  if (r?.perMinuteUsd) return (Math.max(0, audioSeconds ?? 0) / 60) * r.perMinuteUsd // perMinuteUsd is always USD
+  return costUsd(modelId, inputTokens, outputTokens)
+}
+
+export function perceptionCostMicroUsd(modelId: string, inputTokens: number, outputTokens: number, audioSeconds: number | undefined): number {
+  return Math.round(perceptionCostUsd(modelId, inputTokens, outputTokens, audioSeconds) * 1_000_000)
+}
+
 // 紧凑展示 token 数（语言中立，避免在 en/es 里出现中文「万」）：≥1M → X.XM，≥1k → Xk。
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

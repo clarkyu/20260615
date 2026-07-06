@@ -10,7 +10,7 @@ import type { TokenUsage } from '@/lib/ai/types'
 import { logError } from '../log'
 import { config } from '@/lib/config'
 import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
-import { costUsd, costMicroUsd } from '@/lib/ai/cost'
+import { perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { withAiKeys } from '@/lib/ai/key-context'
@@ -23,7 +23,7 @@ import { unavailable } from '@/lib/ai/errors'
 // Score one sentence's audio: weighted accuracy + completeness, 0..100. The accuracy
 // weight is operator-tunable (`config.calibration().shadowAccuracyWeight`, default 0.7);
 // completeness takes the remainder so the two always sum to 1.
-export async function gradeShadowTake(audioUrl: string, sentenceText: string, perceptionModelId: string): Promise<{ score: number; spokenText: string; usage?: TokenUsage }> {
+export async function gradeShadowTake(audioUrl: string, sentenceText: string, perceptionModelId: string): Promise<{ score: number; spokenText: string; usage?: TokenUsage; audioSeconds?: number }> {
   const model = getModel(perceptionModelId)
   if (!model || !model.capabilities.includes('perception')) throw unavailable('感知 provider 未实现')
   const provider = getPerceptionProvider(model.provider)
@@ -36,7 +36,7 @@ export async function gradeShadowTake(audioUrl: string, sentenceText: string, pe
   const accuracy = clamp01(ps?.accuracy)
   const completeness = clamp01(ps?.completeness)
   const wA = config.calibration().shadowAccuracyWeight
-  return { score: Math.round((accuracy * wA + completeness * (1 - wA)) * 100), spokenText: ps?.spokenText || perception.transcript || '', usage: perception.usage }
+  return { score: Math.round((accuracy * wA + completeness * (1 - wA)) * 100), spokenText: ps?.spokenText || perception.transcript || '', usage: perception.usage, audioSeconds: perception.audioSeconds }
 }
 
 // Default auto-pass thresholds: above this overall score (and with no terribly weak
@@ -102,7 +102,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     // call). Reused takes from a prior interrupted run aren't re-fetched, so this can
     // undercount cost across retries — acceptable for observability; the dedup below keeps
     // re-grading (and thus double-spend) to a minimum anyway.
-    let usedIn = 0, usedOut = 0, gotUsage = false
+    let usedIn = 0, usedOut = 0, usedAudioSec = 0, gotUsage = false
     // Whether any pending take failed to score this run (transient model/network error,
     // not a missing-key sentinel). If so we must NOT finalize an average over the takes
     // that happened to succeed — the missing (often weakest) sentence would be silently
@@ -126,7 +126,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
           const url = await presignDownload(tk.audioKey)
           const r = await gradeShadowTake(url, text, perceptionModel)
           await submissionRepo.setShadowTakeScore(prisma, tk.id, { aiScore: r.score, spokenText: r.spokenText })
-          return { order: tk.order, score: r.score, usage: r.usage }
+          return { order: tk.order, score: r.score, usage: r.usage, audioSeconds: r.audioSeconds }
         }),
       )
       for (const res of results) {
@@ -134,6 +134,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
           if (res.value) {
             scoreByOrder.set(res.value.order, res.value.score)
             if (res.value.usage) { gotUsage = true; usedIn += res.value.usage.inputTokens ?? 0; usedOut += res.value.usage.outputTokens ?? 0 }
+            if (res.value.audioSeconds) { gotUsage = true; usedAudioSec += res.value.audioSeconds } // per-minute (Whisper) cost
           }
         } else {
           const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
@@ -169,8 +170,8 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       feedback,
       inputTokens: gotUsage ? usedIn : null,
       outputTokens: gotUsage ? usedOut : null,
-      costUsd: gotUsage ? costUsd(perceptionModel, usedIn, usedOut) : null,
-      costMicroUsd: gotUsage ? costMicroUsd(perceptionModel, usedIn, usedOut) : null,
+      costUsd: gotUsage ? perceptionCostUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : null,
+      costMicroUsd: gotUsage ? perceptionCostMicroUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : null,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''

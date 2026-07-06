@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { estimateGrading, formatTokens, MODEL_RATES, costUsd, costMicroUsd } from '../cost'
+import { estimateGrading, formatTokens, MODEL_RATES, costUsd, costMicroUsd, perceptionCostUsd, perceptionCostMicroUsd } from '../cost'
 import { PRESETS, DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '../registry'
 
 const sub = (over: Partial<{ hasVideo: boolean; hasAudio: boolean; hasImage: boolean; durationSec: number; recitedLen: number }> = {}) => ({
@@ -97,6 +97,23 @@ describe('costMicroUsd (real usage → integer µUSD)', () => {
     expect(costMicroUsd('whisper-1', 5000, 5000)).toBe(0)
     expect(costMicroUsd('nope', 1000, 1000)).toBe(0)
     expect(costMicroUsd('gemini-3.5-flash', -100, -100)).toBe(0)
+  })
+})
+
+describe('perceptionCostUsd — per-minute (Whisper) priced by audio duration (audit A8)', () => {
+  it('prices a per-minute model by audio seconds, not tokens', () => {
+    // whisper-1: $0.006/min. 120s = 2 min → $0.012. Tokens are ignored for a per-minute model.
+    expect(perceptionCostUsd('whisper-1', 0, 0, 120)).toBeCloseTo(0.012, 6)
+    expect(perceptionCostUsd('whisper-1', 9999, 9999, 30)).toBeCloseTo(0.003, 6) // 30s = 0.5 min
+    expect(perceptionCostMicroUsd('whisper-1', 0, 0, 120)).toBe(12_000) // integer µUSD
+  })
+  it('no/zero audio seconds → 0 (not NaN)', () => {
+    expect(perceptionCostUsd('whisper-1', 0, 0, undefined)).toBe(0)
+    expect(perceptionCostUsd('whisper-1', 0, 0, 0)).toBe(0)
+  })
+  it('falls through to token pricing for a token-billed model (audioSeconds ignored)', () => {
+    expect(perceptionCostUsd('gemini-3.5-flash', 1_000_000, 1_000_000, 120)).toBeCloseTo(10.5, 5)
+    expect(perceptionCostUsd('nope', 100, 100, 120)).toBe(0)
   })
 })
 

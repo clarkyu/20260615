@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { recitationTokens, alignToReference } from '../providers/whisper'
+import { describe, it, expect, vi } from 'vitest'
+import { recitationTokens, alignToReference, whisperPerception } from '../providers/whisper'
 
 describe('recitationTokens', () => {
   it('splits latin into lowercased words and CJK into per-char tokens', () => {
@@ -37,5 +37,30 @@ describe('alignToReference', () => {
   it('returns 0 for an empty transcript and handles empty references', () => {
     expect(alignToReference([{ order: 1, text: 'anything' }], '')[0].accuracy).toBe(0)
     expect(alignToReference([{ order: 1, text: '' }], 'hi')[0].accuracy).toBe(0)
+  })
+})
+
+describe('whisperPerception.perceive — surfaces audio duration for per-minute cost (audit A8)', () => {
+  it('reads verbose_json `duration` into audioSeconds', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    // First fetch = pull the recording (blob); second = the transcription POST (json with duration).
+    const fetchMock = vi.fn(async (_url: string, opts?: RequestInit) =>
+      !opts || opts.method !== 'POST'
+        ? new Response(new Blob(['audio-bytes']), { status: 200 })
+        : new Response(JSON.stringify({ text: 'hello world', duration: 123.4 }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const res = await whisperPerception.perceive(
+        { audioUrl: 'https://signed/audio', referenceSentences: [{ order: 1, text: 'Hello world' }], requireEyesClosed: false },
+        'whisper-1',
+      )
+      expect(res.transcript).toBe('hello world')
+      expect(res.audioSeconds).toBe(123.4) // ← the per-minute cost driver
+      const post = fetchMock.mock.calls.find(([, o]) => (o as RequestInit)?.method === 'POST')
+      expect(post![0] as string).toContain('/audio/transcriptions')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

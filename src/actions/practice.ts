@@ -6,7 +6,7 @@ import { presignUpload, presignDownload, storageConfigured, practiceMediaKey } f
 import { gradePractice } from '@/lib/domain/practice'
 import { DEFAULT_RUBRIC } from '@/lib/domain/grading'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
-import { costUsd, costMicroUsd } from '@/lib/ai/cost'
+import { costUsd, costMicroUsd, perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { rateLimitPractice } from '@/lib/rate-limit'
@@ -104,14 +104,16 @@ export async function gradePracticeAttempt(
   const r = outcome.status === 'graded' ? outcome.result : null
   const pu = r?.perception.usage
   const ju = r?.judge.usage
-  const hasUsage = Boolean(pu || ju)
+  const perAudioSec = r?.perception.audioSeconds
+  // Whisper reports audio seconds but no token usage — count it so its per-minute cost is recorded.
+  const hasUsage = Boolean(pu || ju || perAudioSec)
   const cost = r
-    ? costUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+    ? perceptionCostUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
       costUsd(r.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     : 0
   // Bill-grade: two integer µUSD costs sum exactly (no Float accumulation drift).
   const costMicro = r
-    ? costMicroUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+    ? perceptionCostMicroUsd(r.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
       costMicroUsd(r.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     : 0
 

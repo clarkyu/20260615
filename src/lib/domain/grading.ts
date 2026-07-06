@@ -10,7 +10,7 @@ import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
 import { config } from '@/lib/config'
 import { gradeSubmission } from '@/lib/ai/grade'
-import { costUsd, costMicroUsd } from '@/lib/ai/cost'
+import { costUsd, costMicroUsd, perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { presignDownload, storageConfigured } from '@/lib/storage'
@@ -191,14 +191,16 @@ export async function autoGradeSubmission(
     const ju = result.judge.usage
     const inputTokens = (pu?.inputTokens ?? 0) + (ju?.inputTokens ?? 0)
     const outputTokens = (pu?.outputTokens ?? 0) + (ju?.outputTokens ?? 0)
+    const perAudioSec = result.perception.audioSeconds
     const cost =
-      costUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+      perceptionCostUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
       costUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     // Bill-grade: two integer µUSD costs sum exactly (no Float accumulation drift).
     const costMicro =
-      costMicroUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0) +
+      perceptionCostMicroUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
       costMicroUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
-    const hasUsage = Boolean(pu || ju)
+    // Whisper reports no token usage but does have audio seconds — count it so its (per-minute) cost is persisted.
+    const hasUsage = Boolean(pu || ju || perAudioSec)
 
     await submissionRepo.applyGradeResult(prisma, submission.id, {
       status: decision.status,
