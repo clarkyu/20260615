@@ -33,7 +33,7 @@
 | A11 | **S3** | `repo/feedback.ts:5` | 积分政策常量在 repo 层重复（与 `domain/points.ts` 的 `PTS` 分叉风险） | ✅ 本 PR（repo 只返原始计数，总分由 domain `feedbackPointsTotal` 单源算） |
 | A12 | **S3** | `actions/grading.ts:124` | 逐句 take 预签失败被静默丢弃、无日志（复核里该句凭空消失） | ✅ 本 PR（catch 里 logError 记 submissionId+order，留痕不再静默） |
 | A13 | **S3** | `components/ui/confirm.tsx:70` | 最常用确认弹窗无可访问名 + 无焦点陷阱（另两弹窗都做了） | ✅ 本 PR（useId 的 aria-labelledby/describedby + Tab 焦点陷阱，对齐 RecordConsentNotice） |
-| A14 | **S3** | `components/assignment-form.tsx:246` | 环节重排后手风琴展开态不跟随（index key + 未同步 `openPhase`） | ⬜ |
+| A14 | **S3** | `components/assignment-form.tsx:246` | 环节重排后手风琴展开态不跟随（index key + 未同步 `openPhase`） | ✅ 本 PR（每环节加客户端 uid 作 React key，movePhase 同步 openPhase） |
 | A15 | **S4** | `fill-blank.ts:44` | `isGradableFillBlank` 把 `[[""]]` 空串答案键当可判分 | ⬜ |
 | A16 | **S4** | `repo/ai-keys.ts:11`、`repo/users.ts:28` | 死导出 `findSecret` / `setSchool` | ⬜ |
 | A17 | **S4** | `ai/providers/gemini.ts:214` | Gemini API key 走 URL query（建议改 `x-goog-api-key` 头） | ⬜ |
