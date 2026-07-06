@@ -702,11 +702,25 @@ function UnifyPollPanel({ phaseId }: { phaseId: number }) {
           ) : (
             <div className="space-y-2">
               {report.targets.map((g) => (
-                <div key={g.phaseId} className="rounded-xl bg-secondary/50 p-2.5 text-xs">
-                  <span className="font-medium">{g.className}</span>
-                  <span className="text-muted-foreground"> · {t('poll.unifyRow', { total: g.total, auto: g.alreadyCanonical + g.autoMatched, un: g.unmatched.length })}</span>
-                  {g.scored > 0 ? <span className="font-medium text-destructive"> · {t('poll.unifyScored', { n: g.scored })}</span> : null}
-                </div>
+                <details key={g.phaseId} className="rounded-xl bg-secondary/50">
+                  <summary className="tap cursor-pointer p-2.5 text-xs">
+                    <span className="font-medium">{g.className}</span>
+                    <span className="text-muted-foreground"> · {t('poll.unifyRow', { total: g.total, auto: g.alreadyCanonical + g.autoMatched, un: g.unmatched.length })}</span>
+                    {g.scored > 0 ? <span className="font-medium text-destructive"> · {t('poll.unifyScored', { n: g.scored })}</span> : null}
+                  </summary>
+                  {/* 作答明细对比:原文 × 人数 → 命中的选项 / 未匹配。执行前就能看到学生写了什么。 */}
+                  <div className="space-y-1.5 border-t border-border/40 p-2.5 text-xs">
+                    {g.answers.map((a, i) => (
+                      <div key={i} className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{a.text.length > 160 ? `${a.text.slice(0, 160)}…` : a.text || '—'}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">×{a.count}</span>
+                        <span className={'max-w-[9rem] shrink-0 truncate ' + (a.matchedOption ? 'text-success' : 'text-warning')}>
+                          {a.matchedOption ? `→ ${a.matchedOption}` : t('poll.unifyNoMatch')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               ))}
               {done ? (
                 <FormMessage tone="success">{t('poll.unifyDone')}</FormMessage>

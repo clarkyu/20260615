@@ -239,7 +239,7 @@ export function listPhaseGroupForUnify(prisma: PrismaClient, title: string, orde
       assignment: { select: { id: true, title: true, offering: { select: { class: { select: { name: true } } } } } },
       submissions: {
         where: { status: { not: 'DRAFT' } },
-        select: { id: true, recitedText: true, status: true, needsReview: true, finalScore: true, student: { select: { name: true, studentNo: true } } },
+        select: { id: true, studentId: true, attempt: true, recitedText: true, status: true, needsReview: true, finalScore: true, student: { select: { name: true, studentNo: true } } },
       },
     },
   })
@@ -282,7 +282,7 @@ export function listSiblingPhasesForUnify(
       assignment: { select: { id: true, title: true, offering: { select: { class: { select: { name: true } } } } } },
       submissions: {
         where: { status: { not: 'DRAFT' } },
-        select: { id: true, recitedText: true, status: true, needsReview: true, finalScore: true, student: { select: { name: true, studentNo: true } } },
+        select: { id: true, studentId: true, attempt: true, recitedText: true, status: true, needsReview: true, finalScore: true, student: { select: { name: true, studentNo: true } } },
       },
     },
   })
