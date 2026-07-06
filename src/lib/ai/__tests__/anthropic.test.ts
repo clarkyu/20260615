@@ -34,5 +34,8 @@ describe('claudeJudge', () => {
     // regression guard: the prompt must ask for `confidence`, else decideReview treats
     // every submission as needs-review and auto-approval silently dies (audit P0-3).
     expect(opts.body as string).toContain('confidence')
+    // regression guard (audit A4): enough output headroom that a detailed grade JSON isn't
+    // truncated mid-string → JSON.parse throw → FAILED/dead-letter.
+    expect((JSON.parse(opts.body as string) as { max_tokens: number }).max_tokens).toBeGreaterThanOrEqual(4096)
   })
 })
