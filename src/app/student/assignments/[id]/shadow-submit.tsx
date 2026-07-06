@@ -151,13 +151,14 @@ export function ShadowSubmit(props: {
   const doneCount = recorded.size
   // Auto-advance: after a sentence is recorded, scroll the next unrecorded one into view.
   const markRecorded = useCallback((order: number) => {
-    setRecorded((s) => {
-      const next = new Set(s).add(order)
-      const nextIdx = props.chunks.findIndex((_, i) => !next.has(i + 1))
-      if (nextIdx >= 0) setTimeout(() => document.getElementById(`shadow-s-${nextIdx + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
-      return next
-    })
-  }, [props.chunks])
+    setRecorded((s) => new Set(s).add(order))
+    // Scroll OUTSIDE the state updater — updaters must be pure, and StrictMode double-invokes
+    // them in dev, which would fire (and double-schedule) the scroll twice. Derive the next
+    // target from the current `recorded` (this callback is recreated whenever it changes).
+    const next = new Set(recorded).add(order)
+    const nextIdx = props.chunks.findIndex((_, i) => !next.has(i + 1))
+    if (nextIdx >= 0) setTimeout(() => document.getElementById(`shadow-s-${nextIdx + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
+  }, [recorded, props.chunks])
 
   function submit() {
     setPhase('finishing'); setError(null)
