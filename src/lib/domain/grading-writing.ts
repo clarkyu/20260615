@@ -14,6 +14,7 @@ import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import { phaseItemType } from '@/lib/phase-item-type'
 import {
   decideReview,
   hasAntiCheatViolation,
@@ -139,6 +140,9 @@ export async function autoGradeWritingById(prisma: PrismaClient, submissionId: n
   // Already finalized (a teacher graded it first, or a prior run finished) — don't clobber.
   if (submission.status === 'GRADED') return null
   if (!submission.recitedText?.trim()) return null // no text — settle
+  // 环节已是客观题/投票(如「统一为单选投票」改型后遗留或在途的 writing 任务):
+  // 绝不给一张选票写 AI 分——落地前自弃,任务就地了结(复查 R3)。
+  if (submission.phase && phaseItemType(submission.phase) === 'objective') return null
 
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   const phase = submission.phase
