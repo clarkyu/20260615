@@ -30,8 +30,8 @@
 | R15 | **S3** | poll-unify 报告 | 预览含空文本行（工作台不显示）、skipped 班级静默吞掉——报告与可操作数不一致 | ✅ 本 PR（空白作答单列 blank 不再虚增「待人工」,与工作台口径一致;skipped 班级在面板点名警示,i18n 三语 + sep.list 分隔符键） |
 | R16 | S4 | i18n / assignment-mode | 死键 `poll.pickOption`/`poll.assign` ×3 语言;死导出 `AssignmentMode`/`isAssignmentMode` | ✅ 本 PR（死键 ×3、死导出全删,`ASSIGNMENT_MODES` 常量保留） |
 | R17 | S4 | grading-client / merge-form | 硬编码中文顿号「、」与全角括号绕过 i18n | ✅ 本 PR（4 处 `join('、')` 改 `sep.list`(含 assignment-form/submission-flow 同类);全角括号折进 `merge.selectedN` 词条按语言取形） |
-| R18 | S4 | `applyPlans`/`assignPollVotesBulk`/`cancelPending` | 逐行写 → `$transaction` 单次 batch;cancelPending 改关系过滤（phaseId） | ⬜ |
-| R19 | S4 | `listPollAssignables`/`findForStaff` | 归票放行 DRAFT/MISSING 行（补 status 过滤）;bulk 跨作业只 revalidate 第一个 | ⬜ |
+| R18 | S4 | `applyPlans`/`assignPollVotesBulk`/`cancelPending` | 逐行写 → `$transaction` 单次 batch;cancelPending 改关系过滤（phaseId） | ✅ 本 PR（规范化改写/整组归票各打成一个 batch,半途失败整批回滚;cancelPendingForPhase 关系过滤,免 D1 参数上限并覆盖计划后新入队任务） |
+| R19 | S4 | `listPollAssignables`/`findForStaff` | 归票放行 DRAFT/MISSING 行（补 status 过滤）;bulk 跨作业只 revalidate 第一个 | ✅ 本 PR（repo 读排除 DRAFT/MISSING=整组拒绝;单条归票域内同守卫;bulk 返回去重 assignmentIds,action 逐个 revalidate） |
 | R20 | S4 | 同页 options.count | 选项计数 label 未 trim,与 notes/correct 口径不一 | ⬜ |
 | R21 | S4 | `actions/assignments.ts:132` | 客户端 batchId 无格式校验（可伪造超长串/复用他人批次串卡） | ⬜ |
 | R22 | S4 | 看板 classesN | 「N 个班」= 待批班数,与列表页「发布班数」同键不同义 | ⬜ |
