@@ -256,6 +256,22 @@ describe('assignPollVote (人工归票)', () => {
     expect(await unassignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id)).toEqual({ ok: false, error: 'err.noVoteSource' })
   })
 
+  it('rejects assign/bulk/undo on a keyed single-choice quiz (审计 R8)', async () => {
+    const d = await seed(db.prisma)
+    await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)
+    // 先正常归一票制造留痕,再把环节配上答案键变成 quiz。
+    await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id, '英语口语大赛')
+    await db.prisma.phase.update({ where: { id: d.textPhase.id }, data: { correctChoice: '英语口语大赛' } })
+
+    expect(await assignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subVariant.id, '英语口语大赛')).toEqual({ ok: false, error: 'err.pollOnlyAssign' })
+    expect(await assignPollVotesBulk(db.prisma, d.school.id, d.teacher.id, 'TEACHER', [d.subVariant.id], '英语口语大赛')).toEqual({ ok: false, error: 'err.pollOnlyAssign' })
+    expect(await unassignPollVote(db.prisma, d.school.id, d.teacher.id, 'TEACHER', d.subUnmatched.id)).toEqual({ ok: false, error: 'err.pollOnlyAssign' })
+    // 均零写入:留痕与作答保持原状。
+    const sub = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.subUnmatched.id } })
+    expect(sub.recitedText).toBe('英语口语大赛')
+    expect(sub.voteSourceText).toBe('想参加朗诵会')
+  })
+
   it('is scoped: another teacher cannot assign votes on my submission', async () => {
     const d = await seed(db.prisma)
     await unifyPhaseToPoll(db.prisma, d.school.id, TITLE, 1, true)

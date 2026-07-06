@@ -61,7 +61,7 @@ export function listPollAssignables(prisma: PrismaClient, ids: number[], schoolI
     where: { id: { in: ids }, ...staffSub(schoolId, userId, role) },
     select: {
       id: true, assignmentId: true, recitedText: true, voteSourceText: true,
-      phase: { select: { id: true, requireChoice: true, multiChoice: true, choicesJson: true } },
+      phase: { select: { id: true, requireChoice: true, multiChoice: true, correctChoice: true, choicesJson: true } },
     },
   })
 }

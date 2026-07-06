@@ -230,6 +230,9 @@ export async function assignPollVote(prisma: PrismaClient, schoolId: number | nu
   const sub = await submissions.findForStaff(prisma, submissionId, schoolId, userId, role)
   if (!sub || !sub.phase) return { ok: false, error: 'err.subNoAccess' }
   if (!sub.phase.requireChoice || sub.phase.multiChoice) return { ok: false, error: 'err.subNoAccess' }
+  // 有正确答案的单选是客观判分题(quiz),不是投票:人工改写作答不会重跑判分,
+  // 会让 答案/正确率/分数 互相矛盾——归票仅限纯投票(复查 R8)。
+  if ((sub.phase.correctChoice ?? '').trim() !== '') return { ok: false, error: 'err.pollOnlyAssign' }
   const options = parseChoices(sub.phase.choicesJson)
   if (!options.includes(choice)) return { ok: false, error: 'err.badChoice' }
   const current = sub.recitedText ?? ''
@@ -248,6 +251,8 @@ export async function assignPollVotesBulk(prisma: PrismaClient, schoolId: number
   if (rows.length !== ids.length) return { ok: false, error: 'err.subNoAccess' }
   for (const r of rows) {
     if (!r.phase || !r.phase.requireChoice || r.phase.multiChoice) return { ok: false, error: 'err.subNoAccess' }
+    // quiz(有答案键)不接受人工归票——同 assignPollVote 的理由(复查 R8)。
+    if ((r.phase.correctChoice ?? '').trim() !== '') return { ok: false, error: 'err.pollOnlyAssign' }
     if (!parseChoices(r.phase.choicesJson).includes(choice)) return { ok: false, error: 'err.badChoice' }
   }
   for (const r of rows) {
@@ -262,6 +267,8 @@ export async function assignPollVotesBulk(prisma: PrismaClient, schoolId: number
 export async function unassignPollVote(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, submissionId: number): Promise<AssignVoteResult> {
   const sub = await submissions.findForStaff(prisma, submissionId, schoolId, userId, role)
   if (!sub || !sub.phase) return { ok: false, error: 'err.subNoAccess' }
+  // 环节若已被配上答案键(quiz),撤销归票同样会绕过判分——一并拒绝(复查 R8)。
+  if ((sub.phase.correctChoice ?? '').trim() !== '') return { ok: false, error: 'err.pollOnlyAssign' }
   if (sub.voteSourceText == null) return { ok: false, error: 'err.noVoteSource' }
   await submissions.revertPollAnswer(prisma, sub.id, sub.voteSourceText)
   return { ok: true, assignmentId: sub.assignmentId }
