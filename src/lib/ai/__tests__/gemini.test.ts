@@ -8,6 +8,8 @@ import {
   normalizeAuthorDraft,
   normalizePerSentence,
   buildAuthorPrompt,
+  isTransientUploadStatus,
+  uploadInitBackoffMs,
 } from '@/lib/ai/providers/gemini'
 
 const refs = [
@@ -128,5 +130,39 @@ describe('buildAuthorPrompt', () => {
     expect(buildAuthorPrompt('Unit 3 重点句', false)).toContain('Unit 3 重点句')
     expect(buildAuthorPrompt('', true)).toContain('图片')
     expect(buildAuthorPrompt('x', false)).not.toContain('所附图片')
+  })
+})
+
+// The File API upload-init retry policy — the fix for the 221 large videos that were
+// stuck on "文件上传初始化失败 429" (rate-limited, previously thrown on first try).
+describe('isTransientUploadStatus', () => {
+  it('treats 429 and 5xx as transient (retry), other 4xx as terminal (give up)', () => {
+    expect(isTransientUploadStatus(429)).toBe(true)
+    expect(isTransientUploadStatus(500)).toBe(true)
+    expect(isTransientUploadStatus(503)).toBe(true)
+    // Terminal — retrying a bad request / auth / not-found only wastes attempts.
+    expect(isTransientUploadStatus(400)).toBe(false)
+    expect(isTransientUploadStatus(403)).toBe(false)
+    expect(isTransientUploadStatus(404)).toBe(false)
+  })
+})
+
+describe('uploadInitBackoffMs', () => {
+  it('backs off exponentially when no Retry-After header is present', () => {
+    expect(uploadInitBackoffMs(1, null)).toBe(2000)
+    expect(uploadInitBackoffMs(2, null)).toBe(4000)
+    expect(uploadInitBackoffMs(3, null)).toBe(8000)
+  })
+
+  it('honors a server Retry-After (seconds), capped at 30s', () => {
+    expect(uploadInitBackoffMs(1, '5')).toBe(5000)
+    expect(uploadInitBackoffMs(1, '120')).toBe(30_000) // capped
+    expect(uploadInitBackoffMs(5, null)).toBe(30_000) // exponential also capped
+  })
+
+  it('ignores a garbage / non-positive Retry-After and falls back to exponential', () => {
+    expect(uploadInitBackoffMs(1, 'soon')).toBe(2000)
+    expect(uploadInitBackoffMs(2, '0')).toBe(4000)
+    expect(uploadInitBackoffMs(2, '-3')).toBe(4000)
   })
 })
