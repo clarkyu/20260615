@@ -13,7 +13,7 @@ import { gradeSubmission } from '@/lib/ai/grade'
 import { costUsd, costMicroUsd, perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
-import { presignDownload, storageConfigured } from '@/lib/storage'
+import { presignDownload, probeObject, storageConfigured } from '@/lib/storage'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
@@ -159,6 +159,20 @@ export async function autoGradeSubmission(
     if (claimed.count === 0) return { ok: true, needsReview: false }
   } else {
     await submissionRepo.markProcessing(prisma, submission.id)
+  }
+
+  // 评前预检(期末考核复盘):对象缺失/空文件时不进感知阶段——不白烧 AI 调用,也把
+  // 「无法获取视频(404)」这类流水线深处的报错变成入口处的明确失败态(评阅失败,可见、
+  // 可重试)。'unknown'(网络抖动)放行,交给感知阶段自己的错误处理。
+  if (storageConfigured()) {
+    for (const key of [submission.videoKey, submission.audioKey]) {
+      if (!key) continue
+      const health = await probeObject(key)
+      if (health === 'missing' || health === 'empty') {
+        await submissionRepo.markFailed(prisma, submission.id)
+        return { ok: false, error: 'err.mediaUnavailable' }
+      }
+    }
   }
 
   // Grade on the assignment-owning teacher's own API keys (BYOK); empty → platform key.

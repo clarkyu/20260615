@@ -47,3 +47,47 @@ export async function backfillWritingGrading(prisma: PrismaClient, schoolId: num
   await kickDrain()
   return { ok: true, applied: true, writingCandidates: rows.length, perAssignment, jobsCreated: created, jobsReset: reset, ghostReview: cleared.count }
 }
+
+// ── 媒体重评(期末考核修复 ③) ────────────────────────────────────────────────
+//
+// 媒体探针证实:449 份「评阅失败/卡死/未评」的视频里 98% 的对象完好——历史 404 是
+// 暂时性取件失败,不是数据丢失。本函数把这批行的评阅任务批量重置入队(kind
+// 'submission',重跑=重置)。卡在 PROCESSING 的行不用单独解套:claimForProcessing
+// 现在会接管过期的 PROCESSING(claim 陷阱已修),重评任务跑到它们时自然接管。
+// 真正缺失/空文件的少数行会在评前预检下快速走到「评阅失败」,老师人工处理。
+
+export type RequeueReport =
+  | {
+      ok: true
+      applied: boolean
+      targets: number
+      perPhaseOrder: { phaseOrder: number; count: number }[]
+      jobsCreated: number
+      jobsReset: number
+    }
+  | { ok: false; error: string }
+
+export async function requeueMediaGrading(prisma: PrismaClient, schoolId: number, title: string, apply: boolean): Promise<RequeueReport> {
+  // 与媒体探针同口径(同一个 repo 读),游标翻页取全量 id。
+  const ids: number[] = []
+  const byPhase = new Map<number, number>()
+  let after = 0
+  for (;;) {
+    const rows = await submissions.listMediaProbeTargets(prisma, schoolId, title, after, 500)
+    for (const r of rows) {
+      ids.push(r.id)
+      const order = r.phase?.order ?? 0
+      byPhase.set(order, (byPhase.get(order) ?? 0) + 1)
+    }
+    if (rows.length < 500) break
+    after = rows[rows.length - 1].id
+  }
+  if (ids.length === 0) return { ok: false, error: 'no requeue targets for this school+title' }
+  const perPhaseOrder = [...byPhase.entries()].map(([phaseOrder, count]) => ({ phaseOrder, count })).sort((a, b) => a.phaseOrder - b.phaseOrder)
+
+  if (!apply) return { ok: true, applied: false, targets: ids.length, perPhaseOrder, jobsCreated: 0, jobsReset: 0 }
+
+  const { created, reset } = await enqueueGradingBulk(prisma, ids, 'submission')
+  await kickDrain()
+  return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
+}

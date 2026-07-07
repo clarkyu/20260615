@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { logError } from '@/lib/log'
 import { studentContext } from '@/lib/action-context'
-import { presignUpload, presignDownload, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
+import { presignUpload, presignDownload, probeObject, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
-import { resolveAttempt, missingRequiredPart } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy } from '@/lib/domain/submit'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
@@ -83,6 +83,13 @@ export async function finishSubmission(phaseId: number) {
   // submissions have no size/duration and pass through.
   if (mediaExceedsLimit(submission.sizeBytes, submission.durationSec)) {
     return { error: t('err.mediaTooLarge') }
+  }
+
+  // 上传完整性门(期末考核复盘):键在库里 ≠ 对象真的传完了——上传中断/空录像留下的
+  // 空挂键进了评阅队列只会反复失败。提交前验证要求的媒体对象在且非空,不完整就当场
+  // 让学生重录/重传,而不是事后在评阅里神秘 404。
+  if (storageConfigured() && (await requiredMediaUnhealthy(resolved.requirements, submission, probeObject))) {
+    return { error: t('err.uploadIncomplete') }
   }
 
   // 按环节类型路由（判别式来自 ① 的 phaseItemType）。

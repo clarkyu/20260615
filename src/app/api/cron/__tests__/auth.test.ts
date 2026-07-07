@@ -5,6 +5,7 @@ import { POST as retentionPOST } from '../retention/route'
 import { POST as unifyPOST } from '../../admin/unify-poll-phase/route'
 import { POST as backfillPOST } from '../../admin/backfill-writing-grading/route'
 import { POST as probePOST } from '../../admin/probe-media/route'
+import { POST as requeuePOST } from '../../admin/requeue-media-grading/route'
 
 // Minimal request stub — both handlers only read the Authorization header before the gate.
 function req(auth?: string): any {
@@ -21,6 +22,7 @@ describe.each([
   ['admin/unify-poll-phase', unifyPOST],
   ['admin/backfill-writing-grading', backfillPOST],
   ['admin/probe-media', probePOST],
+  ['admin/requeue-media-grading', requeuePOST],
 ])('POST /api/%s — auth gate', (_name, POST) => {
   it('401 when CRON_SECRET is not configured (even with a bearer)', async () => {
     expect((await POST(req('Bearer anything'))).status).toBe(401)

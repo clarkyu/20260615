@@ -46,6 +46,23 @@ export async function deleteObject(key: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error(`R2 delete failed: ${res.status}`)
 }
 
+// 对象健康探测(服务端签名请求,只取 1 字节):'ok' 在且非空;'empty' 在但 0 字节
+// (bytes=0-0 对空对象 → 416);'missing' 不存在(404);'unknown' 其它(网络/5xx)——
+// 调用方应把 unknown 当「暂时无法判断」放行,别把偶发故障当缺失。
+export type ObjectHealth = 'ok' | 'empty' | 'missing' | 'unknown'
+export async function probeObject(key: string): Promise<ObjectHealth> {
+  try {
+    const res = await client().fetch(objectUrl(key), { headers: { range: 'bytes=0-0' } })
+    try { await res.body?.cancel() } catch { /* 已消费/已关闭 */ }
+    if (res.ok) return 'ok'
+    if (res.status === 416) return 'empty'
+    if (res.status === 404) return 'missing'
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 // Media keys carry the phaseId so the per-phase submissions of one assignment never
 // collide on the same attempt number. (A single-phase assignment still has exactly
 // one phase, so this is just an extra path segment.)

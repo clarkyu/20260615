@@ -98,3 +98,24 @@ export function missingRequiredPart(assignment: Requirements, submission: Parts)
 export function isPollOnly(r: Requirements): boolean {
   return phaseItemType(r) === 'objective'
 }
+
+// 提交完整性门(期末考核复盘):键在库里 ≠ 对象在存储里——上传中断/空录像同样会留下键,
+// 这样的行进了评阅队列只会反复 404/空内容直到死信。环节要求的媒体逐个探测:缺失或空
+// → 拦下提交,让学生当场重录/重传。'unknown'(网络抖动/5xx)放行——偶发故障不该
+// 卡住全班提交,真有问题还有评前预检兜底。probe 注入便于测试(生产用 storage.probeObject)。
+export async function requiredMediaUnhealthy(
+  requirements: Pick<Requirements, 'requireVideo' | 'requireAudio'>,
+  submission: Pick<Parts, 'videoKey' | 'audioKey'>,
+  probe: (key: string) => Promise<'ok' | 'empty' | 'missing' | 'unknown'>,
+): Promise<boolean> {
+  const checks: [boolean | null | undefined, string | null][] = [
+    [requirements.requireVideo, submission.videoKey],
+    [requirements.requireAudio, submission.audioKey],
+  ]
+  for (const [required, key] of checks) {
+    if (!required || !key) continue // 键都没有的走 missingRequiredPart 的既有提示
+    const health = await probe(key)
+    if (health === 'missing' || health === 'empty') return true
+  }
+  return false
+}

@@ -414,14 +414,28 @@ export function markProcessing(prisma: PrismaClient, id: number) {
   return prisma.submission.update({ where: { id }, data: { status: 'PROCESSING' } })
 }
 
+// 一次评阅运行的合理寿命上限:PROCESSING 超过它即视为死运行遗留(单次评分远短于此)。
+export const PROCESSING_STALE_MS = 15 * 60 * 1000
+
 // GUARDED entry claim for BACKGROUND (durable-queue) runs. Only reopens a still-gradeable
 // submission (UPLOADED / FLAGGED); returns count 0 when a teacher (or another run) already
 // finalized it in the race window between the grader's status read and this claim. The
 // background run must bail on count 0 — otherwise an unconditional reopen (→ PROCESSING)
 // would let its later fenced applyGradeResult silently overwrite the teacher's manual grade.
+//
+// 卡死回收(期末考核复盘):运行中途死掉会把提交永远留在 PROCESSING,而本认领原来只认
+// UPLOADED/FLAGGED——这样的行从此无法被后台重评(claim 陷阱,生产一度积压 217 份)。
+// 现在允许接管 updatedAt 已过期的 PROCESSING 行;活跃运行会持续更新行(认领本身就会
+// bump updatedAt),不会被抢。
 export function claimForProcessing(prisma: PrismaClient, id: number) {
   return prisma.submission.updateMany({
-    where: { id, status: { in: ['UPLOADED', 'FLAGGED'] } },
+    where: {
+      id,
+      OR: [
+        { status: { in: ['UPLOADED', 'FLAGGED'] } },
+        { status: 'PROCESSING', updatedAt: { lt: new Date(Date.now() - PROCESSING_STALE_MS) } },
+      ],
+    },
     data: { status: 'PROCESSING' },
   })
 }
