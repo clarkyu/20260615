@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { backfillWritingGrading } from '@/lib/domain/grading-backfill'
+import { backfillWritingGrading, requeueMediaGrading } from '@/lib/domain/grading-backfill'
+import { claimForProcessing } from '@/lib/repo/submissions'
 import type { PrismaClient } from '@prisma/client'
 
 // 评阅补登(维护):写作类提交补建 writing 任务 + 纯投票环节清幽灵复核。
@@ -99,5 +100,76 @@ describe('backfillWritingGrading', () => {
     const d = await seed(db.prisma)
     const r = await backfillWritingGrading(db.prisma, d.school.id, '不存在的标题', true)
     expect(r.ok).toBe(false)
+  })
+})
+
+// ── 修复 ③:媒体重评 + claim 陷阱 ────────────────────────────────────────────
+
+async function seedSpeech(p: PrismaClient) {
+  const school = await p.school.create({ data: { name: 'S', code: 'S' } })
+  const teacher = await p.user.create({ data: { role: 'TEACHER', schoolId: school.id, staffNo: 'T1', passwordHash: 'x' } })
+  const course = await p.course.create({ data: { schoolId: school.id, name: 'E', code: 'E' } })
+  const cls = await p.classGroup.create({ data: { schoolId: school.id, name: 'C1' } })
+  const offering = await p.courseOffering.create({ data: { schoolId: school.id, courseId: course.id, teacherId: teacher.id, classId: cls.id, year: 'Y', semester: '2' } })
+  const asg = await p.assignment.create({ data: { offeringId: offering.id, title: TITLE } })
+  const phase = await p.phase.create({ data: { assignmentId: asg.id, order: 3, requireVideo: true, requireText: false, requireEyesClosed: false, itemType: 'speech', graded: true, maxAttempts: 3 } })
+  const student = async (no: string) => p.user.create({ data: { role: 'STUDENT', schoolId: school.id, studentNo: no, passwordHash: 'x' } })
+  const sub = (studentId: number, over: object) =>
+    p.submission.create({ data: { assignmentId: asg.id, offeringId: offering.id, phaseId: phase.id, studentId, attempt: 1, ...over } })
+  return { school, asg, phase, student, sub }
+}
+
+describe('requeueMediaGrading (修复 ③)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('dry-run 报目标数;apply 重置/新建 kind=submission 的任务,GRADED/有分/无媒体的不碰', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03', '04', '05', '06'].map(d.student))
+    const failed = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'k/1', needsReview: true })
+    const stuck = await d.sub(s[1].id, { status: 'PROCESSING', videoKey: 'k/2', needsReview: true })
+    const uploaded = await d.sub(s[2].id, { status: 'UPLOADED', videoKey: 'k/3', needsReview: true })
+    await d.sub(s[3].id, { status: 'GRADED', videoKey: 'k/4', finalScore: 90 }) // 已定稿不碰
+    await d.sub(s[4].id, { status: 'FLAGGED', videoKey: 'k/5', aiScore: 70 }) // 有 AI 分不碰
+    await d.sub(s[5].id, { status: 'UPLOADED', recitedText: '无媒体' }) // 无媒体指针不碰
+    // failed 行已有一个耗尽的死信任务——重评必须把它重置(attempts 归零),不是新建。
+    await db.prisma.gradingJob.create({ data: { submissionId: failed.id, kind: 'submission', status: 'FAILED', attempts: 4, lastError: '无法获取视频（404）' } })
+
+    const dry = await requeueMediaGrading(db.prisma, d.school.id, TITLE, false)
+    if (!dry.ok) throw new Error(dry.error)
+    expect(dry).toMatchObject({ applied: false, targets: 3, jobsCreated: 0, jobsReset: 0 })
+    expect(dry.perPhaseOrder).toEqual([{ phaseOrder: 3, count: 3 }])
+    expect(await db.prisma.gradingJob.count()).toBe(1) // 零写入
+
+    const r = await requeueMediaGrading(db.prisma, d.school.id, TITLE, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, targets: 3, jobsCreated: 2, jobsReset: 1 })
+    const jobs = await db.prisma.gradingJob.findMany({ orderBy: { submissionId: 'asc' } })
+    expect(jobs.map((j) => j.submissionId).sort((a, b) => a - b)).toEqual([failed.id, stuck.id, uploaded.id].sort((a, b) => a - b))
+    for (const j of jobs) expect(j).toMatchObject({ kind: 'submission', status: 'PENDING', attempts: 0 })
+  })
+})
+
+describe('claimForProcessing — 卡死回收(claim 陷阱修复)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('新鲜的 PROCESSING(活跃运行)不可抢;过期的可接管;GRADED 永远不可', async () => {
+    const d = await seedSpeech(db.prisma)
+    const st = await d.student('01')
+    const fresh = await d.sub(st.id, { status: 'PROCESSING', videoKey: 'k/f' })
+    expect((await claimForProcessing(db.prisma, fresh.id)).count).toBe(0) // 活跃运行,不抢
+
+    // 把 updatedAt 倒回 16 分钟前(@updatedAt 无法经 prisma 写,用原生 SQL 模拟死运行)。
+    await db.prisma.$executeRawUnsafe(
+      `UPDATE Submission SET updatedAt = datetime('now', '-16 minutes') WHERE id = ${fresh.id}`,
+    )
+    expect((await claimForProcessing(db.prisma, fresh.id)).count).toBe(1) // 死运行遗留,接管
+
+    const st2 = await d.student('02')
+    const graded = await d.sub(st2.id, { status: 'GRADED', videoKey: 'k/g', finalScore: 88 })
+    expect((await claimForProcessing(db.prisma, graded.id)).count).toBe(0) // 定稿不可重开
   })
 })

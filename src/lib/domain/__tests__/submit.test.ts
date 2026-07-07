@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveAttempt, missingRequiredPart, isPollOnly } from '../submit'
+import { resolveAttempt, missingRequiredPart, isPollOnly, requiredMediaUnhealthy } from '../submit'
 
 // ── missingRequiredPart (pure) ───────────────────────────────────────────────
 
@@ -92,5 +92,26 @@ describe('resolveAttempt', () => {
       phaseId: 5,
       requirements: REQS,
     })
+  })
+})
+
+describe('requiredMediaUnhealthy — 提交完整性门(期末考核复盘)', () => {
+  const probe = (table: Record<string, 'ok' | 'empty' | 'missing' | 'unknown'>) => async (key: string) => table[key] ?? 'missing'
+
+  it('要求的媒体对象缺失或为空 → 拦下', async () => {
+    expect(await requiredMediaUnhealthy({ requireVideo: true, requireAudio: false }, { videoKey: 'k/v', audioKey: null }, probe({ 'k/v': 'missing' }))).toBe(true)
+    expect(await requiredMediaUnhealthy({ requireVideo: true, requireAudio: false }, { videoKey: 'k/v', audioKey: null }, probe({ 'k/v': 'empty' }))).toBe(true)
+    expect(await requiredMediaUnhealthy({ requireVideo: false, requireAudio: true }, { videoKey: null, audioKey: 'k/a' }, probe({ 'k/a': 'missing' }))).toBe(true)
+  })
+
+  it('对象健康 → 放行;unknown(网络抖动)也放行,不卡全班提交', async () => {
+    expect(await requiredMediaUnhealthy({ requireVideo: true, requireAudio: false }, { videoKey: 'k/v', audioKey: null }, probe({ 'k/v': 'ok' }))).toBe(false)
+    expect(await requiredMediaUnhealthy({ requireVideo: true, requireAudio: false }, { videoKey: 'k/v', audioKey: null }, probe({ 'k/v': 'unknown' }))).toBe(false)
+  })
+
+  it('不要求的媒体不探测;要求但连键都没有的走 missingRequiredPart 既有提示(此处放行)', async () => {
+    // requireVideo=false:即便 videoKey 指向缺失对象也不探测(比如文本环节的历史遗留键)。
+    expect(await requiredMediaUnhealthy({ requireVideo: false, requireAudio: false }, { videoKey: 'k/gone', audioKey: null }, probe({}))).toBe(false)
+    expect(await requiredMediaUnhealthy({ requireVideo: true, requireAudio: false }, { videoKey: null, audioKey: null }, probe({}))).toBe(false)
   })
 })

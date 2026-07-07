@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 vi.mock('@/lib/storage', () => ({
   storageConfigured: () => true,
   presignDownload: vi.fn(async () => 'https://signed/url'),
+  probeObject: vi.fn(async () => 'ok'), // 评前预检默认健康;预检用例单独改写
 }))
 vi.mock('@/lib/ai/grade', () => ({ gradeSubmission: vi.fn() }))
 vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_keys: unknown, fn: () => unknown) => fn() }))
@@ -32,7 +33,7 @@ import {
   type GradableSubmission,
 } from '@/lib/domain/grading'
 import { gradeSubmission } from '@/lib/ai/grade'
-import { presignDownload } from '@/lib/storage'
+import { presignDownload, probeObject } from '@/lib/storage'
 import * as subRepo from '@/lib/repo/submissions'
 import { unavailable } from '@/lib/ai/errors'
 
@@ -130,6 +131,22 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
     expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
     expect(gradeSubmission).not.toHaveBeenCalled()
     expect(subRepo.applyGradeResult).not.toHaveBeenCalled()
+  })
+
+  it('评前预检:对象缺失/空文件 → FAILED,一分钱 AI 都不花(期末考核复盘)', async () => {
+    for (const health of ['missing', 'empty'] as const) {
+      vi.clearAllMocks()
+      ;(probeObject as Mock).mockResolvedValueOnce(health)
+      const res = await autoGradeSubmission(prisma, sub(), opts)
+      expect(res).toEqual({ ok: false, error: 'err.mediaUnavailable' })
+      expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
+      expect(gradeSubmission).not.toHaveBeenCalled()
+    }
+    // 'unknown'(网络抖动)放行,照常进入感知阶段。
+    vi.clearAllMocks()
+    ;(probeObject as Mock).mockResolvedValueOnce('unknown')
+    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 70, confidence: 0.9, feedback: 'ok' }))
+    expect((await autoGradeSubmission(prisma, sub(), opts)).ok).toBe(true)
   })
 
   it('persists a confident grade as GRADED with no review needed', async () => {

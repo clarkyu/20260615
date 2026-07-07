@@ -10,6 +10,7 @@ import { freshDb, type TestDb } from './harness'
 vi.mock('@/lib/storage', () => ({
   storageConfigured: () => true,
   presignDownload: vi.fn(async () => 'https://signed/url'),
+  probeObject: vi.fn(async () => 'ok'), // 评前预检默认健康
 }))
 vi.mock('@/lib/ai/grade', () => ({ gradeSubmission: vi.fn() }))
 vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_k: unknown, fn: () => unknown) => fn() }))
