@@ -85,6 +85,26 @@ export function listWritingBackfillCandidates(prisma: PrismaClient, schoolId: nu
   })
 }
 
+// 媒体探针目标(维护读,平台级按 schoolId+标题 钉租户):还等着评阅、但带着视频指针的
+// 行——评阅失败/卡处理中/未评,以及标记了却没有 AI 分的。id 游标分页:探测要对每个
+// 对象发一次网络请求,Workers 免费档每请求 ≤50 子请求,必须分批。
+export function listMediaProbeTargets(prisma: PrismaClient, schoolId: number, title: string, afterId: number, limit: number) {
+  return prisma.submission.findMany({
+    where: {
+      id: { gt: afterId },
+      videoKey: { not: null },
+      assignment: { title, offering: { schoolId } },
+      OR: [
+        { status: { in: ['FAILED', 'PROCESSING', 'UPLOADED'] } },
+        { status: 'FLAGGED', aiScore: null },
+      ],
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, videoKey: true, durationSec: true, status: true, phase: { select: { order: true } } },
+  })
+}
+
 // 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是
 // 历史遗留,只虚增看板「待批」数。谓词必须钉死「无答案键」——带答案键的单选在答案键
 // 缺失/损坏时会**刻意**落 needsReview 转人工(actions/submissions 的客观判分回退),
