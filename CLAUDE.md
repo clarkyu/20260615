@@ -53,11 +53,17 @@ scoping)→ prisma。依赖只能向下。
 
 - D1 无交互式事务;嵌套 autoincrement `create` 会失败——用独立 create。`createMany` /
   `$transaction([deleteMany, createMany])` 可以。
-- 响应后台任务用 `runAfterResponse`(`lib/cf.ts` 的 `waitUntil`);耐用评阅走 `GradingJob` 队列。
+- 响应后台任务用 `runAfterResponse`(`lib/cf.ts` 的 `waitUntil`)——**注意:响应后 ~30 秒
+  就会被终止,长活(评阅)绝不能靠它**;耐用评阅走 `GradingJob` 队列 + 同步 drain。
 
 ## 当前已知状态
 
 - **CSP** 收在 Report-Only:严格 nonce 策略因 workerd 剥 CSP 请求头无法 enforce,阻于上游
   **opennextjs/opennextjs-cloudflare#1302**。全部根因 + 修好后的一行翻转步骤:
   **`docs/CSP-NONCE-OPENNEXT.md`**。
-- 其它文档:`docs/OPERATIONS.md`(运维)、`docs/VISION.md`、`docs/BACKLOG.md`。
+- **期末考核 AI 评阅**:2026-07-07 会话的复盘/修复/清积压全记录 + 恢复指引:
+  **`docs/GRADING-BACKLOG-2026-07.md`**(存档时队列还在排空,收官待办见该文 §五)。
+  运维一律走 Actions 按钮(`admin-call.yml` / `grading-queue-drain` / `d1-query`),见
+  `docs/OPERATIONS.md` §6。
+- 其它文档:`docs/OPERATIONS.md`(运维)、`docs/VISION.md`、`docs/BACKLOG.md`、
+  审计台账 `docs/CODE-AUDIT-2026-07*.md`。
