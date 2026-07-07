@@ -12,7 +12,7 @@ vi.mock('@/lib/storage', () => ({
   presignDownload: vi.fn(async () => 'https://signed/url'),
   probeObject: vi.fn(async () => 'ok'), // 评前预检默认健康
 }))
-vi.mock('@/lib/ai/grade', () => ({ gradeSubmission: vi.fn() }))
+vi.mock('@/lib/ai/grade', () => ({ perceiveForGrading: vi.fn(), judgeForGrading: vi.fn() }))
 vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_k: unknown, fn: () => unknown) => fn() }))
 vi.mock('@/lib/ai/teacher-keys', () => ({ resolveTeacherKeys: async () => ({}) }))
 
@@ -20,7 +20,7 @@ import { hashPassword, verifyPassword } from '@/lib/password'
 import { resolveAttempt, missingRequiredPart, representativeSubmission } from '@/lib/domain/submit'
 import { enqueueGrading } from '@/lib/domain/jobs'
 import { autoGradeById } from '@/lib/domain/grading'
-import { gradeSubmission } from '@/lib/ai/grade'
+import { perceiveForGrading, judgeForGrading } from '@/lib/ai/grade'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as practiceRepo from '@/lib/repo/practice'
@@ -93,9 +93,12 @@ describe('main flow (login → submit → grade) against real SQL', () => {
     const p = db.prisma
     const d = await seed(p)
     const sub = await p.submission.create({ data: { assignmentId: d.assignment.id, phaseId: d.phase.id, studentId: d.student.id, attempt: 1, status: 'UPLOADED', videoKey: 'vid' } })
-    ;(gradeSubmission as Mock).mockResolvedValueOnce({
-      perceptionModel: 'pm', judgeModel: 'jm',
+    ;(perceiveForGrading as Mock).mockResolvedValueOnce({
+      perceptionModel: 'pm',
       perception: { transcript: 'hello world', perSentence: [] },
+    })
+    ;(judgeForGrading as Mock).mockResolvedValueOnce({
+      judgeModel: 'jm',
       judge: { score: 88, confidence: 0.95, feedback: '发音清晰' },
     })
 
@@ -104,6 +107,8 @@ describe('main flow (login → submit → grade) against real SQL', () => {
 
     const after = await p.submission.findUnique({ where: { id: sub.id } })
     expect(after).toMatchObject({ status: 'GRADED', needsReview: false, aiScore: 88, finalScore: 88, feedback: '发音清晰' })
+    // Perception cache is cleared once the grade finalizes (aiResult holds the full result).
+    expect(after?.perceptionJson).toBeNull()
   })
 
   it('④ teacher override wins: a manual score finalizes GRADED regardless of AI', async () => {

@@ -3,27 +3,31 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 // autoGradeSubmission orchestrates storage → AI → repo persistence. Mock those
 // collaborators so the orchestration/state-machine behaviour (review decision,
 // teacher-score precedence, media-unavailable → FAILED, unavailable model →
-// revert, generic error → FAILED) is asserted without real IO. isUnavailable
-// stays REAL so the sentinel contract is exercised end-to-end. The pure-policy
-// tests below (decideReview / hasAntiCheatViolation) don't touch these mocks.
+// revert, generic error → FAILED, perception caching) is asserted without real IO.
+// isUnavailable stays REAL so the sentinel contract is exercised end-to-end. The
+// pure-policy tests below (decideReview / hasAntiCheatViolation) don't touch these mocks.
 vi.mock('@/lib/storage', () => ({
   storageConfigured: () => true,
   presignDownload: vi.fn(async () => 'https://signed/url'),
   probeObject: vi.fn(async () => 'ok'), // 评前预检默认健康;预检用例单独改写
 }))
-vi.mock('@/lib/ai/grade', () => ({ gradeSubmission: vi.fn() }))
+// Grading is split into two stages (perceive → judge) so a judge failure doesn't discard a
+// billed perception; mock each independently.
+vi.mock('@/lib/ai/grade', () => ({ perceiveForGrading: vi.fn(), judgeForGrading: vi.fn() }))
 vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_keys: unknown, fn: () => unknown) => fn() }))
 vi.mock('@/lib/ai/teacher-keys', () => ({ resolveTeacherKeys: async () => ({}) }))
 vi.mock('@/lib/repo/assignments', () => ({
-  offeringTeacher: vi.fn(async () => ({ teacherId: 5, defaultPerceptionModel: null, defaultJudgeModel: null })),
+  offeringTeacher: vi.fn(async () => ({ teacherId: 5, schoolId: 1, defaultPerceptionModel: null, defaultJudgeModel: null })),
 }))
 vi.mock('@/lib/repo/submissions', () => ({
   markProcessing: vi.fn(async () => {}),
   claimForProcessing: vi.fn(async () => ({ count: 1 })),
   markFailed: vi.fn(async () => {}),
   revertToQueue: vi.fn(async () => {}),
+  savePerception: vi.fn(async () => {}),
   applyGradeResult: vi.fn(async () => {}),
 }))
+// logAiCall is best-effort (swallows its own errors); leave it real — it no-ops on the fake prisma.
 
 import {
   autoGradeSubmission,
@@ -32,7 +36,7 @@ import {
   REVIEW_CONFIDENCE_THRESHOLD,
   type GradableSubmission,
 } from '@/lib/domain/grading'
-import { gradeSubmission } from '@/lib/ai/grade'
+import { perceiveForGrading, judgeForGrading } from '@/lib/ai/grade'
 import { presignDownload, probeObject } from '@/lib/storage'
 import * as subRepo from '@/lib/repo/submissions'
 import { unavailable } from '@/lib/ai/errors'
@@ -107,29 +111,32 @@ const sub = (over: Partial<GradableSubmission> = {}): GradableSubmission => ({
   recitedText: null,
   teacherScore: null,
   violations: null,
+  perceptionJson: null,
   phase: { requireEyesClosed: false, sentences: [{ order: 1, text: 'Hi' }], freePractice: false },
   assignment: { requireEyesClosed: false, sentences: [{ order: 1, text: 'Hi' }] },
   ...over,
 })
 
-const judged = (judge: { score: number; confidence: number | null; feedback: string }) => ({
-  perceptionModel: 'pm',
-  judgeModel: 'jm',
-  perception: { transcript: 'hi', perSentence: [] },
-  judge,
-})
+const PERCEPTION = { transcript: 'hi', perSentence: [] }
+// The default perceive result; per-test judge outcome.
+const mockPerceive = () => (perceiveForGrading as Mock).mockResolvedValue({ perceptionModel: 'pm', perception: PERCEPTION })
+const mockJudge = (judge: { score: number; confidence: number | null; feedback: string }) =>
+  (judgeForGrading as Mock).mockResolvedValueOnce({ judgeModel: 'jm', judge })
 
 const gradeData = () => (subRepo.applyGradeResult as Mock).mock.calls[0][2]
 
 describe('autoGradeSubmission — orchestration + state machine', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPerceive() // clearAllMocks wipes implementations; re-arm the default perceive
+  })
 
   it('marks FAILED (not graded) when a present media key cannot be signed', async () => {
     ;(presignDownload as Mock).mockRejectedValueOnce(new Error('R2 down'))
     const res = await autoGradeSubmission(prisma, sub(), opts)
     expect(res).toEqual({ ok: false, error: 'err.mediaUnavailable' })
     expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
-    expect(gradeSubmission).not.toHaveBeenCalled()
+    expect(perceiveForGrading).not.toHaveBeenCalled()
     expect(subRepo.applyGradeResult).not.toHaveBeenCalled()
   })
 
@@ -140,17 +147,18 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
       const res = await autoGradeSubmission(prisma, sub(), opts)
       expect(res).toEqual({ ok: false, error: 'err.mediaUnavailable' })
       expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
-      expect(gradeSubmission).not.toHaveBeenCalled()
+      expect(perceiveForGrading).not.toHaveBeenCalled()
     }
     // 'unknown'(网络抖动)放行,照常进入感知阶段。
     vi.clearAllMocks()
+    mockPerceive()
     ;(probeObject as Mock).mockResolvedValueOnce('unknown')
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 70, confidence: 0.9, feedback: 'ok' }))
+    mockJudge({ score: 70, confidence: 0.9, feedback: 'ok' })
     expect((await autoGradeSubmission(prisma, sub(), opts)).ok).toBe(true)
   })
 
   it('persists a confident grade as GRADED with no review needed', async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 80, confidence: 0.9, feedback: 'good' }))
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'good' })
     const res = await autoGradeSubmission(prisma, sub(), opts)
     expect(res).toEqual({ ok: true, needsReview: false })
     expect(subRepo.markProcessing).toHaveBeenCalledTimes(1)
@@ -158,26 +166,26 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
   })
 
   it("lets a teacher's earlier manual score win over the fresh AI score", async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 70, confidence: 0.9, feedback: 'ok' }))
+    mockJudge({ score: 70, confidence: 0.9, feedback: 'ok' })
     await autoGradeSubmission(prisma, sub({ teacherScore: 88 }), opts)
     expect(gradeData()).toMatchObject({ aiScore: 70, finalScore: 88 })
   })
 
   it('requires review for a low-confidence grade (still GRADED, not flagged)', async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 60, confidence: 0.5, feedback: 'meh' }))
+    mockJudge({ score: 60, confidence: 0.5, feedback: 'meh' })
     const res = await autoGradeSubmission(prisma, sub(), opts)
     expect(res).toEqual({ ok: true, needsReview: true })
     expect(gradeData()).toMatchObject({ status: 'GRADED', needsReview: true })
   })
 
   it('flags a submission with an anti-cheat violation even when the AI is confident', async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 95, confidence: 0.99, feedback: 'nice' }))
+    mockJudge({ score: 95, confidence: 0.99, feedback: 'nice' })
     await autoGradeSubmission(prisma, sub({ violations: '["LOOK_AWAY"]' }), opts)
     expect(gradeData()).toMatchObject({ status: 'FLAGGED', needsReview: true })
   })
 
   it('auto-finalizes a free-practice phase regardless of confidence', async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 40, confidence: 0.1, feedback: 'keep going' }))
+    mockJudge({ score: 40, confidence: 0.1, feedback: 'keep going' })
     const s = sub({ phase: { requireEyesClosed: false, sentences: [{ order: 1, text: 'Hi' }], freePractice: true } })
     const res = await autoGradeSubmission(prisma, s, opts)
     expect(res).toEqual({ ok: true, needsReview: false })
@@ -185,7 +193,7 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
   })
 
   it('reverts to the queue (does NOT mark FAILED) when the model is unavailable', async () => {
-    ;(gradeSubmission as Mock).mockRejectedValueOnce(unavailable('感知 provider 未实现'))
+    ;(perceiveForGrading as Mock).mockRejectedValueOnce(unavailable('感知 provider 未实现'))
     const res = await autoGradeSubmission(prisma, sub(), opts)
     expect(res.ok).toBe(false)
     expect(subRepo.revertToQueue).toHaveBeenCalledWith(prisma, 1, 'UPLOADED')
@@ -193,7 +201,7 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
   })
 
   it('a background run uses the GUARDED claim (not the unconditional markProcessing)', async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 80, confidence: 0.9, feedback: 'good' }))
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'good' })
     await autoGradeSubmission(prisma, sub(), { ...opts, background: true })
     expect(subRepo.claimForProcessing).toHaveBeenCalledTimes(1)
     expect(subRepo.markProcessing).not.toHaveBeenCalled()
@@ -203,22 +211,53 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
     ;(subRepo.claimForProcessing as Mock).mockResolvedValueOnce({ count: 0 })
     const res = await autoGradeSubmission(prisma, sub(), { ...opts, background: true })
     expect(res).toEqual({ ok: true, needsReview: false })
-    expect(gradeSubmission).not.toHaveBeenCalled()
+    expect(perceiveForGrading).not.toHaveBeenCalled()
     expect(subRepo.applyGradeResult).not.toHaveBeenCalled()
   })
 
   it('the manual (teacher-triggered) path still claims unconditionally via markProcessing', async () => {
-    ;(gradeSubmission as Mock).mockResolvedValueOnce(judged({ score: 80, confidence: 0.9, feedback: 'good' }))
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'good' })
     await autoGradeSubmission(prisma, sub(), opts) // no background flag = manual
     expect(subRepo.markProcessing).toHaveBeenCalledTimes(1)
     expect(subRepo.claimForProcessing).not.toHaveBeenCalled()
   })
 
   it('marks FAILED on a genuine grading error', async () => {
-    ;(gradeSubmission as Mock).mockRejectedValueOnce(new Error('boom'))
+    ;(judgeForGrading as Mock).mockRejectedValueOnce(new Error('boom'))
     const res = await autoGradeSubmission(prisma, sub(), opts)
     expect(res).toEqual({ ok: false, error: 'boom' })
     expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
     expect(subRepo.revertToQueue).not.toHaveBeenCalled()
+  })
+
+  // ── Perception caching: perception (video) is ~16× the judge cost, so a judge failure must
+  //    neither discard nor re-bill a successful perception. ──────────────────────────────────
+  it('persists the perception BEFORE judging, so a judge failure keeps it for a cheap retry', async () => {
+    ;(judgeForGrading as Mock).mockRejectedValueOnce(new Error('deepseek 402: insufficient balance'))
+    const res = await autoGradeSubmission(prisma, sub(), opts)
+    expect(res.ok).toBe(false)
+    // Perception ran and was persisted; the grade then failed at judge → FAILED (cache survives).
+    expect(perceiveForGrading).toHaveBeenCalledTimes(1)
+    expect(subRepo.savePerception).toHaveBeenCalledTimes(1)
+    expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
+  })
+
+  it('reuses a cached perception on retry — skips the expensive re-perceive', async () => {
+    mockJudge({ score: 82, confidence: 0.9, feedback: 'good' })
+    const cached = JSON.stringify({ perceptionModel: 'pm', perception: PERCEPTION })
+    const res = await autoGradeSubmission(prisma, sub({ status: 'FAILED', perceptionJson: cached }), opts)
+    expect(res).toEqual({ ok: true, needsReview: false })
+    // The whole point: Gemini is NOT called again; only judge runs against the cached perception.
+    expect(perceiveForGrading).not.toHaveBeenCalled()
+    expect(subRepo.savePerception).not.toHaveBeenCalled()
+    expect(judgeForGrading).toHaveBeenCalledTimes(1)
+    expect(gradeData()).toMatchObject({ status: 'GRADED', aiScore: 82 })
+  })
+
+  it('falls through to re-perceive when the cached perception JSON is corrupt', async () => {
+    mockJudge({ score: 75, confidence: 0.9, feedback: 'ok' })
+    const res = await autoGradeSubmission(prisma, sub({ perceptionJson: 'not json{' }), opts)
+    expect(res.ok).toBe(true)
+    expect(perceiveForGrading).toHaveBeenCalledTimes(1) // corrupt cache ignored → re-perceived
   })
 })
