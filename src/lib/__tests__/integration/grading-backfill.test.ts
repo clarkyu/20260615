@@ -172,4 +172,14 @@ describe('claimForProcessing — 卡死回收(claim 陷阱修复)', () => {
     const graded = await d.sub(st2.id, { status: 'GRADED', videoKey: 'k/g', finalScore: 88 })
     expect((await claimForProcessing(db.prisma, graded.id)).count).toBe(0) // 定稿不可重开
   })
+
+  it('FAILED 可被认领重评——否则 requeue 的任务永远空转(232 份卡死死循环的根因)', async () => {
+    const d = await seedSpeech(db.prisma)
+    const st = await d.student('03')
+    // requeue 只重置 GradingJob→PENDING,提交仍 FAILED;后台评阅必须能认领它,否则
+    // autoGradeSubmission 认领 count=0 → 返回「成功但没评」→ 任务退回 PENDING 无限空转。
+    const failed = await d.sub(st.id, { status: 'FAILED', videoKey: 'k/x', needsReview: true })
+    expect((await claimForProcessing(db.prisma, failed.id)).count).toBe(1) // FAILED 接受重评
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: failed.id } })).status).toBe('PROCESSING')
+  })
 })
