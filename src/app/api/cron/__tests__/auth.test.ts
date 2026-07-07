@@ -4,6 +4,7 @@ import { POST as drainPOST } from '../drain/route'
 import { POST as retentionPOST } from '../retention/route'
 import { POST as unifyPOST } from '../../admin/unify-poll-phase/route'
 import { POST as backfillPOST } from '../../admin/backfill-writing-grading/route'
+import { POST as probePOST } from '../../admin/probe-media/route'
 
 // Minimal request stub — both handlers only read the Authorization header before the gate.
 function req(auth?: string): any {
@@ -19,6 +20,7 @@ describe.each([
   // 维护端点(跨班改写学生作答/批量建评阅任务)——守卫必须与 cron 两个同样被钉住。
   ['admin/unify-poll-phase', unifyPOST],
   ['admin/backfill-writing-grading', backfillPOST],
+  ['admin/probe-media', probePOST],
 ])('POST /api/%s — auth gate', (_name, POST) => {
   it('401 when CRON_SECRET is not configured (even with a bearer)', async () => {
     expect((await POST(req('Bearer anything'))).status).toBe(401)
