@@ -14,6 +14,7 @@ on:
         options:
           - backfill-writing-grading
           - probe-media
+          - purge-gemini-files
           - requeue-media-grading
           - unify-poll-phase
       payload:
