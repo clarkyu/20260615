@@ -66,6 +66,60 @@ export async function gradeSubmission(req: GradeRequest): Promise<GradeResult> {
   return { perceptionModel: perceptionModel.id, judgeModel: judgeModel.id, perception, judge }
 }
 
+// ── Split stages (perceive / judge) ───────────────────────────────────────────
+// Perception (the video call) is ~16× the judge cost, so a judge-only failure (e.g. the
+// judge provider out of balance) must NOT discard — and re-bill — a successful perception.
+// The orchestrator (domain/grading.ts) persists the perception between the two, and on retry
+// reuses it via judgeForGrading, skipping the expensive re-perceive. gradeSubmission above
+// stays as the combined one-shot for callers that don't need the split.
+
+export interface PerceiveResult {
+  perceptionModel: string
+  perception: PerceptionResult
+}
+
+// Run ONLY the perception stage. Same validation as gradeSubmission's first half.
+export async function perceiveForGrading(
+  req: Pick<GradeRequest, 'perceptionModelId' | 'referenceSentences' | 'requireEyesClosed' | 'videoUrl' | 'audioUrl'>,
+): Promise<PerceiveResult> {
+  const perceptionModel = getModel(req.perceptionModelId)
+  if (!perceptionModel) throw new Error(`未知的感知模型: ${req.perceptionModelId}`)
+  if (!perceptionModel.capabilities.includes('perception')) {
+    throw new Error(`模型 ${perceptionModel.label} 不能用于感知阶段`)
+  }
+  const perceptionProvider = getPerceptionProvider(perceptionModel.provider)
+  if (!perceptionProvider) throw unavailable(`感知 provider 未实现: ${perceptionModel.provider}`)
+  const perception = await perceptionProvider.perceive(
+    { videoUrl: req.videoUrl, audioUrl: req.audioUrl, referenceSentences: req.referenceSentences, requireEyesClosed: req.requireEyesClosed },
+    perceptionModel.id,
+  )
+  return { perceptionModel: perceptionModel.id, perception }
+}
+
+export interface JudgeStageResult {
+  judgeModel: string
+  judge: JudgeResult
+}
+
+// Run ONLY the judge stage against an already-obtained perception (fresh or cached).
+export async function judgeForGrading(
+  perception: PerceptionResult,
+  req: Pick<GradeRequest, 'judgeModelId' | 'referenceSentences' | 'rubric' | 'maxScore' | 'recitedText'>,
+): Promise<JudgeStageResult> {
+  const judgeModel = getModel(req.judgeModelId)
+  if (!judgeModel) throw new Error(`未知的评分模型: ${req.judgeModelId}`)
+  if (!judgeModel.capabilities.includes('judge')) {
+    throw new Error(`模型 ${judgeModel.label} 不能用于评分阶段`)
+  }
+  const judgeProvider = getJudgeProvider(judgeModel.provider)
+  if (!judgeProvider) throw unavailable(`评分 provider 未实现: ${judgeModel.provider}`)
+  const judge = await judgeProvider.judge(
+    { perception, referenceSentences: req.referenceSentences, rubric: req.rubric, maxScore: req.maxScore, recitedText: req.recitedText },
+    judgeModel.id,
+  )
+  return { judgeModel: judgeModel.id, judge }
+}
+
 export interface GradeWritingRequest {
   judgeModelId: string
   rubric: string

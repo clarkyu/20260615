@@ -477,10 +477,19 @@ export interface GradeResult {
   costMicroUsd: number | null // integer µUSD — the bill-grade cost column (usage aggregates on this)
 }
 
+// Persist the perception result mid-grade — after perceive succeeds, BEFORE judge runs.
+// Fenced to PROCESSING so only the owning run writes. If the grade then fails at judge, this
+// cached perception survives on the (FAILED) row, so the durable-queue retry reuses it and
+// skips the expensive re-perceive instead of re-billing Gemini for the same video.
+export function savePerception(prisma: PrismaClient, id: number, perceptionJson: string) {
+  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { perceptionJson } })
+}
+
 // Fenced to PROCESSING (see markFailed): a late AI write never overwrites a teacher
-// override or a faster concurrent run.
+// override or a faster concurrent run. Clears the mid-grade perception cache — the finalized
+// aiResult now holds the full result, so the cache is no longer needed.
 export function applyGradeResult(prisma: PrismaClient, id: number, data: GradeResult) {
-  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { ...data, gradedAt: new Date() } })
+  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { ...data, gradedAt: new Date(), perceptionJson: null } })
 }
 
 export interface ShadowResult {

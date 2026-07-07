@@ -9,7 +9,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { logError } from '../log'
 import { config } from '@/lib/config'
-import { gradeSubmission } from '@/lib/ai/grade'
+import { perceiveForGrading, judgeForGrading } from '@/lib/ai/grade'
+import type { PerceptionResult } from '@/lib/ai/types'
 import { costUsd, costMicroUsd, perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
@@ -90,6 +91,9 @@ export interface GradableSubmission {
   recitedText: string | null
   teacherScore: number | null
   violations: string | null
+  // Cached perception from a prior attempt that perceived successfully but failed at judge —
+  // reused to skip the expensive re-perceive on retry (see savePerception).
+  perceptionJson: string | null
   phase: GradingContent | null
   assignment: GradingContent
 }
@@ -181,65 +185,88 @@ export async function autoGradeSubmission(
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
 
   const content = gradingContent(submission)
+  const refs = content.sentences.map((s) => ({ order: s.order, text: s.text }))
+  // Reuse a perception cached by a prior attempt (perceived OK but failed at the judge stage) so
+  // the retry skips the expensive Gemini re-call. Guard the parse — a corrupt cache re-perceives.
+  let perceptionModel = opts.perceptionModel
+  let perception: PerceptionResult | undefined
+  if (submission.perceptionJson) {
+    try {
+      const cached = JSON.parse(submission.perceptionJson) as { perceptionModel?: string; perception?: PerceptionResult }
+      if (cached?.perception) { perception = cached.perception; perceptionModel = cached.perceptionModel || opts.perceptionModel }
+    } catch { /* corrupt cache → fall through and re-perceive */ }
+  }
+
   try {
-    const result = await withAiKeys(keys, () => gradeSubmission({
-      perceptionModelId: opts.perceptionModel,
+    // 1) Perceive (unless a valid cached perception was reused). Persist it + book its cost the
+    //    instant it succeeds, so a later judge failure never discards — and re-bills — paid perception.
+    if (!perception) {
+      const p = await withAiKeys(keys, () => perceiveForGrading({
+        perceptionModelId: opts.perceptionModel,
+        referenceSentences: refs,
+        requireEyesClosed: content.requireEyesClosed,
+        videoUrl,
+        audioUrl,
+      }))
+      perception = p.perception
+      perceptionModel = p.perceptionModel
+      await submissionRepo.savePerception(prisma, submission.id, JSON.stringify({ perceptionModel, perception }))
+      const pu0 = perception.usage
+      await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: perceptionModel, inputTokens: pu0?.inputTokens ?? 0, outputTokens: pu0?.outputTokens ?? 0, costMicroUsd: perceptionCostMicroUsd(perceptionModel, pu0?.inputTokens ?? 0, pu0?.outputTokens ?? 0, perception.audioSeconds), ok: true })
+    }
+
+    // 2) Judge — the cheap stage. If it fails (e.g. judge provider out of balance), the cached
+    //    perception above stays on the row and the durable-queue retry reuses it for free.
+    const { judgeModel, judge } = await withAiKeys(keys, () => judgeForGrading(perception!, {
       judgeModelId: opts.judgeModel,
+      referenceSentences: refs,
       rubric: opts.rubric,
       maxScore: opts.maxScore ?? DEFAULT_MAX_SCORE,
-      referenceSentences: content.sentences.map((s) => ({ order: s.order, text: s.text })),
-      requireEyesClosed: content.requireEyesClosed,
-      videoUrl,
-      audioUrl,
       recitedText: submission.recitedText ?? undefined,
     }))
+    const result = { perceptionModel, judgeModel, perception, judge }
 
     const decision = decideReview({
-      confidence: result.judge.confidence,
+      confidence: judge.confidence,
       hasViolation: hasAntiCheatViolation(submission.violations),
       freePractice: submission.phase?.freePractice ?? false,
     }, config.calibration().reviewConfidenceThreshold)
 
-    // Real usage/cost from the providers (perception + judge). Absent when a provider
-    // didn't report usage (or per-minute whisper) → persist null rather than a fake 0.
-    const pu = result.perception.usage
-    const ju = result.judge.usage
+    // Bill-grade cost of this grade (perception + judge). Absent usage → null, not a fake 0.
+    const pu = perception.usage
+    const ju = judge.usage
     const inputTokens = (pu?.inputTokens ?? 0) + (ju?.inputTokens ?? 0)
     const outputTokens = (pu?.outputTokens ?? 0) + (ju?.outputTokens ?? 0)
-    const perAudioSec = result.perception.audioSeconds
-    // Per-stage µUSD kept separate so the ledger can attribute cost to perception vs judge
-    // (perception — the video call — is where the spend concentrates); the Submission column
-    // stores their exact integer sum (no Float accumulation drift).
-    const perceptionMicro = perceptionCostMicroUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec)
-    const judgeMicro = costMicroUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    const perAudioSec = perception.audioSeconds
+    const judgeMicro = costMicroUsd(judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    const costMicro = perceptionCostMicroUsd(perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) + judgeMicro
     const cost =
-      perceptionCostUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
-      costUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
-    const costMicro = perceptionMicro + judgeMicro
+      perceptionCostUsd(perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
+      costUsd(judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     // Whisper reports no token usage but does have audio seconds — count it so its (per-minute) cost is persisted.
     const hasUsage = Boolean(pu || ju || perAudioSec)
 
     await submissionRepo.applyGradeResult(prisma, submission.id, {
       status: decision.status,
       needsReview: decision.needsReview,
-      confidence: result.judge.confidence ?? null,
-      perceptionModel: result.perceptionModel,
-      judgeModel: result.judgeModel,
-      transcript: result.perception.transcript,
+      confidence: judge.confidence ?? null,
+      perceptionModel,
+      judgeModel,
+      transcript: perception.transcript,
       aiResult: JSON.stringify(result),
-      aiScore: result.judge.score,
+      aiScore: judge.score,
       // A teacher's earlier manual score always wins over the fresh AI score.
-      finalScore: submission.teacherScore ?? result.judge.score,
-      feedback: result.judge.feedback,
+      finalScore: submission.teacherScore ?? judge.score,
+      feedback: judge.feedback,
       gradedById: opts.graderUserId ?? null,
       inputTokens: hasUsage ? inputTokens : null,
       outputTokens: hasUsage ? outputTokens : null,
       costUsd: hasUsage ? cost : null,
       costMicroUsd: hasUsage ? costMicro : null,
     })
-    // 成本流水账(真账,永不覆盖):感知 + 评分各记一行,供仪表盘可见与支出护栏累加。
-    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: result.perceptionModel, inputTokens: pu?.inputTokens ?? 0, outputTokens: pu?.outputTokens ?? 0, costMicroUsd: perceptionMicro, ok: true })
-    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'judge', model: result.judgeModel, inputTokens: ju?.inputTokens ?? 0, outputTokens: ju?.outputTokens ?? 0, costMicroUsd: judgeMicro, ok: true })
+    // Ledger: log the judge row now. Perception was logged when it was freshly perceived (above);
+    // on a reused perception it was already logged on the earlier attempt — never double-count it.
+    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'judge', model: judgeModel, inputTokens: ju?.inputTokens ?? 0, outputTokens: ju?.outputTokens ?? 0, costMicroUsd: judgeMicro, ok: true })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'grade failed'
@@ -251,11 +278,16 @@ export async function autoGradeSubmission(
     }
     logError('autoGradeSubmission', 'grading failed', err, { submissionId: submission.id })
     await submissionRepo.markFailed(prisma, submission.id)
-    // 失败也留痕(ok:false,cost 0):仪表盘可见失败次数,印证「失败调用不计费」。usage 在异常
-    // 里拿不到(gradeSubmission 抛错前的部分计费无法回读),故成本记 0——罕见的「已计费 200 但
-    // 解析失败」会因此少计,可接受:相比旧账(失败全漏、成功被覆盖),这里只在边角少记。归给
-    // perception(首个外部调用,也是 429/400 失败的主来源)。
-    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: opts.perceptionModel, costMicroUsd: 0, ok: false })
+    // Attribute the failure to the stage that actually broke. If a perception is in hand — freshly
+    // perceived (already logged ok + real cost above) or reused from cache — the failure is the
+    // JUDGE stage → a judge failure row (cost 0; the perception's real cost is already booked, and
+    // its cached JSON survives on the FAILED row for a free retry). Otherwise perception itself
+    // failed (e.g. pre-billing File API 429) → a perception failure row.
+    if (perception) {
+      await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'judge', model: opts.judgeModel, costMicroUsd: 0, ok: false })
+    } else {
+      await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: opts.perceptionModel, costMicroUsd: 0, ok: false })
+    }
     return { ok: false, error: message }
   }
 }
