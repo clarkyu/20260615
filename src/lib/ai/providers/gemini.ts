@@ -235,7 +235,12 @@ async function generate(model: string, parts: Part[], schema: unknown): Promise<
   return { data: extractJson(raw), usage: extractUsage(raw) }
 }
 
-const INLINE_MAX_BYTES = 18 * 1024 * 1024 // inline base64 is limited; larger goes through the File API
+// 内联(base64)与 File API 流式上传的分界。压到 4MB(期末考核复盘):内联要把整段
+// 视频读进内存再 base64——一份十几 MB 的视频瞬时吃掉几十 MB,一批连评几份就顶穿
+// Worker 128MB 内存,isolate 被杀、请求 502、提交被丢在 PROCESSING。超过阈值走
+// uploadFile 的流式路径(不缓冲、零 base64),内存平坦;短音频/小视频仍内联(省一次
+// 上传往返)。
+const INLINE_MAX_BYTES = 4 * 1024 * 1024
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms))
