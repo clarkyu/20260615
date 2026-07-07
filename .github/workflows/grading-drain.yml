@@ -2,26 +2,45 @@ name: grading-queue-drain
 
 # Periodically drains the durable grading queue so queued AI grades run on a cadence
 # instead of waiting for a teacher to open the dashboard. Opt-in: does nothing until the
-# CRON_SECRET repo secret is set. GitHub's scheduler is best-effort (≈5–15 min, not
-# exact); combined with the post-submit kick + dashboard self-heal, that's ample for
-# async grading. (Native Cloudflare Queues would be ~seconds but needs a custom OpenNext
-# Worker entry that can't be verified without a live deploy — deliberately avoided.)
+# CRON_SECRET repo secret is set.
+#
+# 实测(期末考核复盘):GitHub 对忙仓库的 schedule 限流到 ~45-70 分钟一班,不是写的
+# 每 5 分钟;端点现在同步跑一小批并返回 { ran }。schedule 每次连打几轮兜底;要快速清
+# 积压,手动 Run workflow 填大一点的 rounds(每轮 ≤10 份,ran=0 提前收工)。
 on:
   schedule:
     - cron: '*/5 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: '连打轮数(每轮一批,队列空了提前停)'
+        required: false
+        default: '12'
+        type: string
 
 jobs:
   drain:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - name: Kick grading drain
+      - name: Drain grading queue
         env:
           SECRET: ${{ secrets.CRON_SECRET }}
+          ROUNDS: ${{ github.event.inputs.rounds || '3' }}
         run: |
           if [ -z "$SECRET" ]; then echo "CRON_SECRET not set — skipping."; exit 0; fi
-          code=$(curl -fsS -o /tmp/out -w '%{http_code}' -X POST \
-            -H "Authorization: Bearer $SECRET" \
-            https://www.hihomework.com/api/cron/drain || true)
-          echo "HTTP $code"; cat /tmp/out 2>/dev/null; echo
-          test "$code" = "200"
+          case "$ROUNDS" in ''|*[!0-9]*) echo "::error::rounds must be a number"; exit 1;; esac
+          total=0
+          for i in $(seq 1 "$ROUNDS"); do
+            code=$(curl -sS --max-time 600 -o /tmp/out -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $SECRET" -H "content-type: application/json" \
+              -d '{"limit":5}' \
+              https://www.hihomework.com/api/cron/drain || true)
+            body=$(cat /tmp/out 2>/dev/null || true)
+            echo "round $i: HTTP $code $body"
+            test "$code" = "200" || exit 1
+            ran=$(printf '%s' "$body" | jq -r '.ran // 0')
+            total=$((total + ran))
+            if [ "$ran" = "0" ]; then echo "queue empty after $i rounds (ran $total total)"; break; fi
+          done
+          echo "drained $total job(s) in ≤$ROUNDS round(s)"
