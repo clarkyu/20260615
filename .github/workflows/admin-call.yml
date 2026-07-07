@@ -1,0 +1,43 @@
+name: Admin maintenance call
+
+# 维护端点的「按钮」:在 Actions 页面手动触发,选端点、填 JSON body,结果打进任务日志。
+# 维护者不用在本地摆弄 curl 与密钥——CRON_SECRET 一直待在仓库 secrets 里(与
+# grading-drain 同一枚),每次调用连同参数、结果全程留在 Actions 日志里可审计。
+# 端点是固定选项(不可自由拼 URL);payload 先过 jq 校验,坏 JSON 不会打到生产。
+on:
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: '维护端点(见 docs/OPERATIONS.md §6)'
+        required: true
+        type: choice
+        options:
+          - backfill-writing-grading
+          - probe-media
+          - unify-poll-phase
+      payload:
+        description: 'JSON body,如 {"schoolId":1,"title":"期末考核：2025-2026-2"}(执行加 ,"apply":true)'
+        required: true
+        type: string
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call endpoint
+        env:
+          SECRET: ${{ secrets.CRON_SECRET }}
+          PAYLOAD: ${{ github.event.inputs.payload }}
+          ENDPOINT: ${{ github.event.inputs.endpoint }}
+        run: |
+          set -eu
+          if [ -z "$SECRET" ]; then echo "::error::CRON_SECRET repo secret is not set"; exit 1; fi
+          printf '%s' "$PAYLOAD" | jq . > /dev/null || { echo "::error::payload is not valid JSON"; exit 1; }
+          code=$(curl -sS -o /tmp/out -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $SECRET" -H "content-type: application/json" \
+            --data-binary "$PAYLOAD" \
+            "https://www.hihomework.com/api/admin/$ENDPOINT" || true)
+          echo "HTTP $code"
+          jq . /tmp/out 2>/dev/null || { cat /tmp/out; echo; }
+          test "$code" = "200"
