@@ -427,12 +427,17 @@ export const PROCESSING_STALE_MS = 15 * 60 * 1000
 // UPLOADED/FLAGGED——这样的行从此无法被后台重评(claim 陷阱,生产一度积压 217 份)。
 // 现在允许接管 updatedAt 已过期的 PROCESSING 行;活跃运行会持续更新行(认领本身就会
 // bump updatedAt),不会被抢。
+//
+// FAILED 也可认领(复盘续:requeue 只重置 GradingJob→PENDING、提交仍 FAILED,而本函数
+// 原来不认 FAILED → 后台评阅认领 count=0、返回「成功但没评」→ 任务永远退回 PENDING 空转,
+// 232 份卡死死循环、lastError 全 null)。队列里存在 PENDING 任务本就是「要重评」的显式信号,
+// 提交是 FAILED 恰说明该重试。GRADED(老师已定稿或 AI 成功)不在列 → 绝不重开、不覆盖。
 export function claimForProcessing(prisma: PrismaClient, id: number) {
   return prisma.submission.updateMany({
     where: {
       id,
       OR: [
-        { status: { in: ['UPLOADED', 'FLAGGED'] } },
+        { status: { in: ['UPLOADED', 'FLAGGED', 'FAILED'] } },
         { status: 'PROCESSING', updatedAt: { lt: new Date(Date.now() - PROCESSING_STALE_MS) } },
       ],
     },
