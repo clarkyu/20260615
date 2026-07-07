@@ -1,0 +1,83 @@
+import type { PrismaClient, Role } from '@prisma/client'
+import { offeringScopeFor } from './scope'
+
+// 批阅诊断读(只读聚合,期末考核复盘的产物):队列水位 + 按作业的评阅进度。
+// 全部经 offeringScopeFor 钉在本人可见范围;不取任何学生个人信息。
+
+export interface QueueHealth {
+  counts: Record<string, number> // PENDING / PROCESSING / FAILED / DONE → 数量
+  oldestPendingAt: Date | null // 最老挂起任务的应跑时间——积压信号
+}
+
+export async function queueHealth(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role): Promise<QueueHealth> {
+  const scope = { submission: { assignment: { offering: offeringScopeFor(schoolId, userId, role) } } }
+  const groups = await prisma.gradingJob.groupBy({ by: ['status'], where: scope, _count: { _all: true } })
+  const oldest = await prisma.gradingJob.findFirst({
+    where: { ...scope, status: 'PENDING' },
+    orderBy: { nextAttemptAt: 'asc' },
+    select: { nextAttemptAt: true },
+  })
+  return {
+    counts: Object.fromEntries(groups.map((g) => [g.status, g._count._all])),
+    oldestPendingAt: oldest?.nextAttemptAt ?? null,
+  }
+}
+
+export interface AssignmentProgress {
+  assignmentId: number
+  title: string
+  className: string
+  submitted: number // 非草稿、非缺交
+  graded: number // GRADED(定稿)
+  aiScored: number // 有 AI 分(不论是否已定稿)
+  toReview: number // needsReview(老师待批)
+  failed: number // 评阅失败
+  processing: number // 处理中
+}
+
+// 最近 limit 份作业的评阅进度(每行 = 一份作业 = 一个班)。计数用
+// (assignmentId, status, needsReview, aiScored) 分组一次取回,id 按 ≤90 分块
+// (D1 绑定参数上限,R12 的既有约定)。
+export async function gradingProgress(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, limit = 30): Promise<AssignmentProgress[]> {
+  const assignments = await prisma.assignment.findMany({
+    where: { offering: offeringScopeFor(schoolId, userId, role) },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: { id: true, title: true, offering: { select: { class: { select: { name: true } } } } },
+  })
+  if (assignments.length === 0) return []
+
+  const byId = new Map<number, AssignmentProgress>(
+    assignments.map((a) => [a.id, { assignmentId: a.id, title: a.title, className: a.offering.class.name, submitted: 0, graded: 0, aiScored: 0, toReview: 0, failed: 0, processing: 0 }]),
+  )
+  const ids = assignments.map((a) => a.id)
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90)
+    const groups = await prisma.submission.groupBy({
+      by: ['assignmentId', 'status', 'needsReview'],
+      where: { assignmentId: { in: chunk } },
+      _count: { _all: true },
+    })
+    for (const g of groups) {
+      const row = byId.get(g.assignmentId)
+      if (!row) continue
+      const n = g._count._all
+      if (g.status !== 'DRAFT' && g.status !== 'MISSING') row.submitted += n
+      if (g.status === 'GRADED') row.graded += n
+      if (g.status === 'FAILED') row.failed += n
+      if (g.status === 'PROCESSING') row.processing += n
+      if (g.needsReview && g.status !== 'DRAFT' && g.status !== 'MISSING') row.toReview += n
+    }
+    // aiScored 无法进上面的 groupBy(是「非空判断」不是列值):单独一组计数。
+    const scored = await prisma.submission.groupBy({
+      by: ['assignmentId'],
+      where: { assignmentId: { in: chunk }, aiScore: { not: null } },
+      _count: { _all: true },
+    })
+    for (const s of scored) {
+      const row = byId.get(s.assignmentId)
+      if (row) row.aiScored = s._count._all
+    }
+  }
+  return [...byId.values()]
+}

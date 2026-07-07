@@ -106,6 +106,12 @@ export function aiConfigured(): boolean {
   return AI_PROVIDER_KEY_ENVS.some((k) => Boolean(env(k)))
 }
 
+// 各 AI provider 平台 key 的「有无」清单(批阅诊断页用)。SECURITY:只报在/不在,
+// 绝不返回值——与 startup report 同一条红线。
+export function aiProviderPresence(): { env: string; present: boolean }[] {
+  return AI_PROVIDER_KEY_ENVS.map((k) => ({ env: k, present: Boolean(env(k)) }))
+}
+
 // ── startup diagnostics (redacted — names + present/absent only) ──────────────
 
 export interface ConfigReport {

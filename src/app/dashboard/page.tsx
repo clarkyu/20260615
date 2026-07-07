@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, ChevronDown, CheckCircle2, Check, UserCog, Library, Gauge, Coins } from 'lucide-react'
+import { Users, GraduationCap, ClipboardCheck, ClipboardPen, ChevronRight, ChevronDown, CheckCircle2, Check, UserCog, Library, Gauge, Coins, Activity } from 'lucide-react'
 import { requireStaff, availablePanels } from '@/lib/auth'
 import { parseTzOffset, DAY_MS } from '@/lib/time'
 import { getDb } from '@/lib/db'
@@ -215,6 +215,14 @@ export default async function DashboardPage() {
             <CardContent className="flex flex-col gap-1.5 p-4">
               <Coins className="h-5 w-5 text-accent-foreground" />
               <p className="text-sm font-semibold">{t('usage.title')}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/dashboard/diagnostics">
+          <Card className="tap h-full hover:shadow-card">
+            <CardContent className="flex flex-col gap-1.5 p-4">
+              <Activity className="h-5 w-5 text-accent-foreground" />
+              <p className="text-sm font-semibold">{t('diag.title')}</p>
             </CardContent>
           </Card>
         </Link>
