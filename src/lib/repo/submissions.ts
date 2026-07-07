@@ -67,6 +67,49 @@ export function listPollAssignables(prisma: PrismaClient, ids: number[], schoolI
   })
 }
 
+// ── 评阅补登(维护,平台级按 schoolId+标题 钉租户;见 domain/grading-backfill) ────
+
+// 写作补评候选:写作型环节上 已提交/已标记、尚无 AI 分、文本非空的行——AI 文本评分
+// 上线前就提交、从未入队的那批(期末考核复盘)。已评(GRADED)/缺交/草稿/卡处理中的
+// 一律不碰;有 AI 分的说明评过,也不重评。
+export function listWritingBackfillCandidates(prisma: PrismaClient, schoolId: number, title: string) {
+  return prisma.submission.findMany({
+    where: {
+      status: { in: ['UPLOADED', 'FLAGGED'] },
+      aiScore: null,
+      NOT: [{ recitedText: null }, { recitedText: '' }],
+      assignment: { title, offering: { schoolId } },
+      phase: { itemType: 'writing' },
+    },
+    select: { id: true, assignmentId: true },
+  })
+}
+
+// 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是
+// 历史遗留,只虚增看板「待批」数。谓词必须钉死「无答案键」——带答案键的单选在答案键
+// 缺失/损坏时会**刻意**落 needsReview 转人工(actions/submissions 的客观判分回退),
+// 那是正路,不能误清;填空同理排除。
+const ghostPollReviewWhere = (schoolId: number, title: string) => ({
+  needsReview: true,
+  assignment: { title, offering: { schoolId } },
+  phase: {
+    requireChoice: true,
+    fillBlank: false,
+    AND: [
+      { OR: [{ correctChoice: null }, { correctChoice: '' }] },
+      { OR: [{ correctChoices: null }, { correctChoices: '' }, { correctChoices: '[]' }] },
+    ],
+  },
+})
+
+export function countGhostPollReview(prisma: PrismaClient, schoolId: number, title: string) {
+  return prisma.submission.count({ where: ghostPollReviewWhere(schoolId, title) })
+}
+
+export function clearGhostPollReview(prisma: PrismaClient, schoolId: number, title: string) {
+  return prisma.submission.updateMany({ where: ghostPollReviewWhere(schoolId, title), data: { needsReview: false } })
+}
+
 // 环节改型为投票后的清理:该环节全部提交退出复核队列(投票不复核;不清会出现
 // 待批徽章数得到、评分列表看不见的幽灵)。
 export function clearNeedsReviewForPhase(prisma: PrismaClient, phaseId: number) {

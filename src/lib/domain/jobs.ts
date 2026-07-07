@@ -190,14 +190,49 @@ export async function drainGradingJobs(prisma: PrismaClient, limit = 5): Promise
   }
 }
 
+// 批量补登(维护用):给一批提交补建评阅任务。与 enqueueGrading 同语义(已有任务重置为
+// PENDING、没有则新建),但按集合写:D1 绑定参数 ≤100/查询,子请求数不随行数线性放大
+// (Workers 有子请求上限,几百行逐条 upsert 会撞)。分块内 先查已有 → 重置已有 → 新建缺失。
+export async function enqueueGradingBulk(prisma: PrismaClient, submissionIds: number[], kind: GradingKind): Promise<{ created: number; reset: number }> {
+  const CHUNK = 40 // createMany 每行 ~2 个绑定参数,40 行远在 100 限内
+  const now = new Date()
+  let created = 0
+  let reset = 0
+  for (let i = 0; i < submissionIds.length; i += CHUNK) {
+    const ids = submissionIds.slice(i, i + CHUNK)
+    const existing = new Set((await prisma.gradingJob.findMany({ where: { submissionId: { in: ids } }, select: { submissionId: true } })).map((j) => j.submissionId))
+    const toReset = ids.filter((id) => existing.has(id))
+    const toCreate = ids.filter((id) => !existing.has(id))
+    if (toReset.length > 0) {
+      const r = await prisma.gradingJob.updateMany({
+        where: { submissionId: { in: toReset } },
+        data: { kind, status: 'PENDING', attempts: 0, nextAttemptAt: now, lastError: null },
+      })
+      reset += r.count
+    }
+    if (toCreate.length > 0) {
+      const c = await prisma.gradingJob.createMany({ data: toCreate.map((submissionId) => ({ submissionId, kind })) })
+      created += c.count
+    }
+  }
+  return { created, reset }
+}
+
+// Background drain kick (post-response, fresh client) — shared by the post-submit hook
+// and maintenance backfills. Loss-tolerant: a lost kick just leaves PENDING jobs for the
+// cron drain / dashboard self-heal.
+export async function kickDrain(): Promise<void> {
+  await runAfterResponse(async () => {
+    const bg = await getDb()
+    await drainGradingJobs(bg)
+  })
+}
+
 // Post-submit hook: persist the grading job, then kick a background drain so the
 // teacher usually only sees exceptions. The drain runs after the response on a
 // fresh client; if it's lost (worker eviction) the PENDING job is picked up by a
 // later drain or the dashboard self-heal. Keeps actions out of @/lib/db.
 export async function scheduleGrading(prisma: PrismaClient, submissionId: number, kind: GradingKind): Promise<void> {
   await enqueueGrading(prisma, submissionId, kind)
-  await runAfterResponse(async () => {
-    const bg = await getDb()
-    await drainGradingJobs(bg)
-  })
+  await kickDrain()
 }
