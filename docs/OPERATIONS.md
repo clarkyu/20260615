@@ -171,6 +171,12 @@ npm run cf:deploy         # 再部署
 |---|---|---|
 | `POST /api/admin/unify-poll-phase` | 把同名作业指定序号上误配成「默写文本」的环节统一改型为「单选投票」并自动归票（一次性数据修复;老师自助版在评分页「统一其它班为本投票」） | **`schoolId` 必填**（标题全平台不唯一,钉租户防误伤）；默认 dry-run 零写入,`"apply":true` 才执行；有评分即拒绝；可安全重跑。轮换 `CRON_SECRET` 时此端点同受影响 |
 
+**生产 D1 只读查询（`d1-query.yml`,手动触发）**：Actions → `D1 read-only query` →
+`Run workflow`,输入一条 SELECT,结果打进任务日志。复用部署同款 token(不新增密钥);
+守卫只放行单条 `SELECT`/`WITH…SELECT`,写关键词一律拒绝。**最小披露约定**:优先聚合/
+计数,非必要不查学生姓名/作答原文——查询与结果都会留在 Actions 日志(私有仓库,默认
+保留约 90 天)。
+
 排障见 §9。
 
 ---
