@@ -27,11 +27,16 @@ function matches(row: Record<string, unknown>, where: Record<string, unknown>): 
   return true
 }
 
-function fakePrisma(jobs: Job[]) {
+// `ledgerMicro` is the platform-wide AiUsageLog spend the breaker sees (default 0 =
+// never trips). The fake ignores the createdAt filter — the breaker just SUMs it.
+function fakePrisma(jobs: Job[], ledgerMicro = 0) {
   let nextId = jobs.reduce((m, j) => Math.max(m, j.id), 0) + 1
   const touch = (j: Job) => (j.updatedAt = new Date())
   return {
     _jobs: jobs,
+    aiUsageLog: {
+      async aggregate() { return { _sum: { costMicroUsd: ledgerMicro } } },
+    },
     gradingJob: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async updateMany({ where, data }: any) {
@@ -155,6 +160,27 @@ describe('claimAndRunDue', () => {
     expect(jobs[0].status).toBe('FAILED') // reclaim → attempts hit MAX → dead-lettered
     expect(runner).not.toHaveBeenCalled()
     expect(ran).toBe(0)
+  })
+
+  // ── spend circuit breaker (#4) ── default cap is $50 (GRADING_DAILY_CAP_USD unset).
+  it('pauses (runs nothing, touches nothing) once today’s spend hits the daily cap', async () => {
+    const jobs = [job()] // a due job that WOULD run if not paused
+    const db = fakePrisma(jobs, 50_000_000) // $50 today == cap → paused
+    const runner = vi.fn(ok)
+    const { ran } = await claimAndRunDue(db, 5, runner)
+    expect(ran).toBe(0)
+    expect(runner).not.toHaveBeenCalled()
+    // Pause must NOT burn an attempt or reclaim/dead-letter — the queue is preserved as-is.
+    expect(jobs[0]).toMatchObject({ status: 'PENDING', attempts: 0 })
+  })
+
+  it('runs normally when today’s spend is still under the cap', async () => {
+    const jobs = [job()]
+    const db = fakePrisma(jobs, 49_999_999) // just under $50 → not paused
+    const runner = vi.fn(ok)
+    const { ran } = await claimAndRunDue(db, 5, runner)
+    expect(ran).toBe(1)
+    expect(jobs[0].status).toBe('DONE')
   })
 })
 

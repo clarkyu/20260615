@@ -17,6 +17,7 @@ import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import { logAiCall } from '@/lib/repo/ai-usage'
 import { isUnavailable } from './grading'
 import { unavailable } from '@/lib/ai/errors'
 
@@ -162,6 +163,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       ? `逐句平均 ${overall} 分；最弱第 ${weakestOrder} 句仅 ${weakestScore} 分，注意发音与完整度。`
       : `逐句平均 ${overall} 分，整体不错，继续保持。`
 
+    const shadowMicro = gotUsage ? perceptionCostMicroUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : 0
     await submissionRepo.applyShadowResult(prisma, submissionId, {
       needsReview,
       aiScore: overall,
@@ -171,8 +173,12 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       inputTokens: gotUsage ? usedIn : null,
       outputTokens: gotUsage ? usedOut : null,
       costUsd: gotUsage ? perceptionCostUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : null,
-      costMicroUsd: gotUsage ? perceptionCostMicroUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : null,
+      costMicroUsd: shadowMicro || null,
     })
+    // 成本流水账(真账,永不覆盖):逐句跟读整份记一行,成本汇总本次实际评的各句(复用旧句
+    // 不重记——与 Submission.costMicroUsd 同口径,重试下会少计,可接受)。仅在定稿成功路径记录:
+    // 逐句评的失败语义(部分句失败即整体 revert 重试)不映射为单条「调用失败」,不强记 ok:false。
+    await logAiCall(prisma, { submissionId, schoolId: owner?.schoolId ?? null, kind: 'shadow', model: perceptionModel, inputTokens: usedIn, outputTokens: usedOut, costMicroUsd: shadowMicro, ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
     if (!isUnavailable(msg)) logError('gradeShadowSubmission', 'failed', err, { submissionId })

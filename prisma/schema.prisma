@@ -649,3 +649,22 @@ model Feedback {
   @@index([status])
   @@index([schoolId])
 }
+
+// AI 评阅成本流水账本(期末考核复盘:Submission.costMicroUsd 单列被覆盖、失败不记、
+// 旧行为 null → 账单失控时仪表盘显示近 $0)。每次感知/评分/写作/跟读的 AI 调用**追加**
+// 一行(成功或失败),真实 token 与成本各记各的,永不覆盖。仪表盘与「支出护栏」都 SUM 本表。
+model AiUsageLog {
+  id           Int      @id @default(autoincrement())
+  submissionId Int?
+  schoolId     Int?
+  kind         String   // perception | judge | writing | shadow
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costMicroUsd Int      @default(0)
+  ok           Boolean  @default(true) // true=评阅成功;false=调用失败(仍可能已计费)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([schoolId])
+}

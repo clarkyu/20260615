@@ -8,6 +8,7 @@ import { getT } from '@/lib/i18n-server'
 import { aiProviderPresence, storageConfigured, emailConfigured, config } from '@/lib/config'
 import { PROVIDER_LABELS, PROVIDER_KEY_ENV } from '@/lib/ai/registry'
 import * as diagnostics from '@/lib/repo/diagnostics'
+import * as aiUsage from '@/lib/repo/ai-usage'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -27,10 +28,21 @@ export default async function DiagnosticsPage() {
   const prisma = await getDb()
   const { t } = await getT()
 
-  const [queue, progress] = await Promise.all([
+  // 支出小结用 UTC 日/月界,与账本 createdAt(DB CURRENT_TIMESTAMP)同一时钟,也与支出护栏
+  // 的日界一致。今日/本月花费按本校 scope(不泄露他校);「已暂停」用全平台今日累计判断——
+  // 护栏保护的是共享的 Gemini 账单(一 key 一账单),故是平台级布尔量(不显示他校金额)。
+  const now = new Date()
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const [queue, progress, spend, platformTodayMicro] = await Promise.all([
     diagnostics.queueHealth(prisma, user.schoolId, user.userId, user.role),
     diagnostics.gradingProgress(prisma, user.schoolId, user.userId, user.role),
+    aiUsage.spendSummary(prisma, user.schoolId, todayStart, monthStart),
+    aiUsage.spendSinceMicroUsd(prisma, todayStart),
   ])
+  const capUsd = config.gradingDailyCapUsd()
+  const usd = (micro: number) => `$${(micro / 1_000_000).toFixed(2)}`
+  const spendPaused = capUsd > 0 && platformTodayMicro >= capUsd * 1_000_000
 
   // 平台级 key 的有无(env 名 → provider 名靠 registry 反查;BYOK 的老师个人 key 不在此列)。
   const envToProvider = new Map(Object.entries(PROVIDER_KEY_ENV).map(([provider, env]) => [env, provider]))
@@ -109,6 +121,19 @@ export default async function DiagnosticsPage() {
           <p className="text-xs text-muted-foreground">
             {oldestMin != null ? t('diag.oldestPending', { n: oldestMin }) : t('diag.queueIdle')}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">{t('diag.spend')}</CardTitle></CardHeader>
+        <CardContent className="space-y-2 pt-0 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={spendPaused ? 'danger' : 'primary'}>{t('diag.spendToday', { usd: usd(spend.todayMicro) })}</Badge>
+            <Badge>{t('diag.spendMonth', { usd: usd(spend.monthMicro) })}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">{t('diag.spendCalls', { n: spend.todayCalls, failed: spend.todayFailed })}</p>
+          {capUsd > 0 ? <p className="text-xs text-muted-foreground">{t('diag.spendCap', { usd: usd(capUsd * 1_000_000) })}</p> : null}
+          {spendPaused ? <p className="text-xs font-medium text-destructive">{t('diag.spendPaused')}</p> : null}
         </CardContent>
       </Card>
 

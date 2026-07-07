@@ -43,6 +43,10 @@ export const config = {
   // Days to keep student recordings before the retention sweep deletes them. 0 (the
   // default, when unset/invalid) disables retention entirely — nothing is ever deleted.
   videoRetentionDays: (): number => { const n = Number(env('VIDEO_RETENTION_DAYS')); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0 },
+  // 单日 AI 评阅花费上限(USD),第二道防线,补在 Gemini 控制台硬上限之后(期末考核复盘:
+  // 一次批处理一天烧了 ~$500)。当天 AiUsageLog 累计 ≥ 此值时,后台评阅暂停(队列保留、
+  // 次日或调高上限后自动恢复)。默认 50;设 0 = 关闭护栏(不建议)。
+  gradingDailyCapUsd: (): number => { const raw = env('GRADING_DAILY_CAP_USD'); if (raw === undefined) return 50; const n = Number(raw); return Number.isFinite(n) && n >= 0 ? n : 50 },
   geminiKey: (): string | undefined => env('GEMINI_API_KEY'),
   geminiBaseUrl: (): string => env('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com',
   // OpenAI powers GPT-4o (judge) + Whisper (transcription); Anthropic powers Claude (judge).

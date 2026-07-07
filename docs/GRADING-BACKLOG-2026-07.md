@@ -87,3 +87,32 @@
 - **剩余待办**:①期末考核死信 requeue 后的收官核对(评阅率冲 ~98%);②7 份真不可救
   (缺失 8107/8111/8163、空文件 8350/8360/9145/13343)老师人工;③其它标题(Native English
   2000 shadowing 等)死信按需逐标题 requeue;④环节 2/3/4 建议老师补写 rubric;⑤测试班摘除。
+
+## 八、成本危机应对(2026-07-07,Gemini 账单 $768)
+
+**触发**:Gemini 平台账单 ~$768,远超库内记账(`SUM(costMicroUsd)/1e6` 仅 ~$87)。复盘
+出三层问题并逐条处置。
+
+- **账实差因**(为何库比账单少记):`Submission.costMicroUsd` 是**单列**,`applyGradeResult`
+  每次评阅覆盖写(重评/重试丢历史);**失败调用完全不记**(catch 里无落库);早期 491 份评阅
+  在建列前记为 null;shadow 复用旧句在重试下少计。加之当时默认感知模型是 **3.5 Flash($1.50/1M)**,
+  视频评阅按 258 token/帧×1FPS 烧得快。
+- **能否拒付**:**不要在 Visa 发起拒付(chargeback)——会触发 Google 封号**。成功的 200
+  `generateContent` 是真实产生的用量,按公开单价折算属实(这批是期末考核几千份视频评阅的真账,
+  不是幻账)。**失败调用(429/400,处理前被拒)本就不计费**——新账本的失败留痕(ok:false、cost 0)
+  正是为印证这一点。若要减免,走 Google Cloud Support 申请 credit(措辞:一次性批处理误配置),
+  不走银行拒付。已在控制台设**硬支出上限 $555**。
+- **#换模型(见另一 PR)**:默认感知模型 **3.5 Flash → 3 Flash Preview($0.50/1M input)**,
+  视频评阅单价降 ~3×。
+- **#3 成本记账(真账本)**:新增 append-only 表 **`AiUsageLog`**(每次 AI 调用一行:kind
+  perception/judge/writing/shadow、model、真实 token、`costMicroUsd`、`ok`、`createdAt`),
+  永不覆盖、失败也留痕。写入在 `lib/repo/ai-usage.ts::logAiCall`(best-effort,绝不抛错到评阅)。
+  三条评阅路径(grading/grading-writing/shadow)在落库成功后各记行、失败记 ok:false 行。
+- **#4 支出护栏**:`config.gradingDailyCapUsd()`(env `GRADING_DAILY_CAP_USD`,**默认 $50**,
+  0=关)。`claimAndRunDue` 最前:当天(UTC 日界)`AiUsageLog` 全平台累计 ≥ 上限时**暂停后台评阅**
+  并直接返回(不回收/不夭折,不白烧 attempts);队列原样保留,次日归零或调高上限后自动恢复。
+  手动重评(老师触发)不走此路径,随时可评。这是第二道防线,补在 Gemini 控制台硬上限之后。
+- **可见性**:批阅诊断页(`/dashboard/diagnostics`)新增「AI 评阅花费」卡——今日/本月(按校)+
+  今日调用数/失败数 + 单日护栏值 + 已暂停提示。旧「用量/费用」页仍读被覆盖的单列,新账本是真账口径。
+- **仍存局限**(可接受,均属边角少记而非旧账的系统性漏记):已计费但解析失败的 200(gemini 抛错前
+  拿不到 usage)成本记 0;shadow 重试复用旧句不重记;账本失败留痕不计入护栏累加(失败本不计费)。
