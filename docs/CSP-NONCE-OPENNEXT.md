@@ -1,8 +1,9 @@
 # CSP 严格策略：为什么收在 Report-Only（OpenNext/workerd 的两道剔头 + 压缩运行时）
 
-> 状态：**已突破——响应侧 HTMLRewriter 方案落地(见文末「响应侧突围」)**。阶段一
-> (全量 nonce 注入 + 仍 Report-Only)已上线验证;阶段二翻转 = `wrangler.jsonc` 的
-> `CSP_ENFORCE` 改 `"enforce"` 一行 + 部署。上游 #1302 依旧未修,但已不再挡路。
+> 状态：**enforce 已翻(2026-07-07)**。响应侧 HTMLRewriter 给每个 script/preload 注入
+> nonce(worker.ts),`CSP_ENFORCE="enforce"` 令严格策略(`script-src 'self' 'nonce-…'
+> 'strict-dynamic'`,无 unsafe-inline)转正为 enforced 头。审计的 CSP finding 就此关闭。
+> 回退 = 改回 `"report-only"` + 部署(秒级)。上游 #1302 未修但已不挡路。
 > 相关：`src/middleware.ts`、`next.config.mjs`（静态 CSP，带 unsafe-inline 的强制头）、
 > `src/app/api/csp-report/route.ts`（违规上报）。
 
@@ -155,3 +156,15 @@ workerd 不剥的头即可，彻底绕过。属给 Next 的 feature request。
 已知边界:若未来 `opennextjs-cloudflare deploy` 强制覆盖 `main` 配置,包装层会失效——
 症状是生产 nonce 覆盖跌回 1/19、report-only 违规暴涨,但**阶段一下零破坏**(策略仍
 Report-Only),诊断页/上报会先叫。
+
+
+## 阶段二翻转记录(2026-07-07)
+
+- `wrangler.jsonc` `CSP_ENFORCE` → `"enforce"`。worker.ts 在 enforce 分支用 `headers.set`
+  **覆盖** HTML 响应的 `content-security-policy` 为严格策略、撤下 Report-Only。
+- 翻转前证据:生产多路由 nonce 全覆盖(`/login` 19/19、`/register` 14/14、
+  `/forgot-password` 19/19);本地 workerd enforce 下真浏览器加载+水合+交互零 CSP 违规。
+- `next.config.mjs` 的静态 CSP(含 `script-src 'unsafe-inline'`)**保留**:HTML 响应被
+  worker 的 `set` 覆盖,故所有真实页面走的是严格策略;静态头仅对非 HTML 响应
+  (静态资源/API JSON,CSP 在此基本无意义)与理论上的中间件旁路 HTML 兜底。审计
+  finding(enforced 文档策略带 unsafe-inline)对所有真实页面已消除。

@@ -29,7 +29,11 @@
     "MINIMAX_BASE_URL": "https://api.minimax.chat/v1",
     // CSP 两阶段翻转开关(worker.ts):"report-only" = 只补 nonce 验证期;
     // "enforce" = 严格策略转正。翻转/回退都是改这一行 + 部署。
-    "CSP_ENFORCE": "report-only"
+    // 阶段二已翻(2026-07-07):生产实测每路由 nonce 全覆盖(login 19/19、register 14/14
+    // 等)、本地 workerd enforce 下浏览器零违规。worker 用 set 覆盖 HTML 响应的 CSP 头为
+    // 严格策略;next.config 的 unsafe-inline 静态头仅剩非 HTML/中间件旁路的兜底作用。
+    // 回退:改回 "report-only" + 部署,秒级。
+    "CSP_ENFORCE": "enforce"
   },
   "observability": {
     "enabled": true
