@@ -10,6 +10,7 @@ import {
   buildAuthorPrompt,
   isTransientUploadStatus,
   uploadInitBackoffMs,
+  chunkMedia,
 } from '@/lib/ai/providers/gemini'
 
 const refs = [
@@ -164,5 +165,61 @@ describe('uploadInitBackoffMs', () => {
     expect(uploadInitBackoffMs(1, 'soon')).toBe(2000)
     expect(uploadInitBackoffMs(2, '0')).toBe(4000)
     expect(uploadInitBackoffMs(2, '-3')).toBe(4000)
+  })
+})
+
+// Chunked resumable upload — the fix for the 67 large 期末 videos rejected with 413 on a
+// single whole-file POST. chunkMedia re-packs the media into fixed-size pieces; every non-final
+// chunk must be exactly `size` (protocol requirement) and reassembly must be byte-exact.
+async function collect(gen: AsyncGenerator<Uint8Array>): Promise<Uint8Array[]> {
+  const out: Uint8Array[] = []
+  for await (const c of gen) out.push(c.slice()) // copy: the streaming path reuses its buffer
+  return out
+}
+function concat(arrs: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(arrs.reduce((n, a) => n + a.byteLength, 0))
+  let o = 0
+  for (const a of arrs) { out.set(a, o); o += a.byteLength }
+  return out
+}
+function streamOf(pieces: Uint8Array[]): ReadableStream<Uint8Array> {
+  let i = 0
+  return new ReadableStream({
+    pull(controller) {
+      if (i < pieces.length) controller.enqueue(pieces[i++])
+      else controller.close()
+    },
+  })
+}
+
+describe('chunkMedia', () => {
+  const data = Uint8Array.from({ length: 25 }, (_, i) => i) // 0..24
+
+  it('splits a buffered Uint8Array into fixed-size chunks with a smaller last chunk', async () => {
+    const chunks = await collect(chunkMedia(data, 10))
+    expect(chunks.map((c) => c.byteLength)).toEqual([10, 10, 5])
+    expect(concat(chunks)).toEqual(data) // byte-exact reassembly
+  })
+
+  it('emits no partial chunk when the size divides the input evenly', async () => {
+    const chunks = await collect(chunkMedia(data.subarray(0, 20), 10))
+    expect(chunks.map((c) => c.byteLength)).toEqual([10, 10])
+  })
+
+  it('re-packs an arbitrarily-chunked stream into fixed-size pieces, byte-exact', async () => {
+    // Reader delivers irregular sizes (3, 7, 15) → must be repacked to 10, 10, 5.
+    const stream = streamOf([data.subarray(0, 3), data.subarray(3, 10), data.subarray(10, 25)])
+    const chunks = await collect(chunkMedia(stream, 10))
+    expect(chunks.map((c) => c.byteLength)).toEqual([10, 10, 5])
+    expect(concat(chunks)).toEqual(data)
+  })
+
+  it('yields nothing for empty input (both buffer and stream)', async () => {
+    expect(await collect(chunkMedia(new Uint8Array(0), 10))).toEqual([])
+    expect(await collect(chunkMedia(streamOf([]), 10))).toEqual([])
+  })
+
+  it('yields a single short chunk when input is smaller than the chunk size', async () => {
+    expect((await collect(chunkMedia(Uint8Array.from([1, 2, 3]), 10))).map((c) => [...c])).toEqual([[1, 2, 3]])
   })
 })
