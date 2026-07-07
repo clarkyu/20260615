@@ -58,9 +58,10 @@ scoping)→ prisma。依赖只能向下。
 
 ## 当前已知状态
 
-- **CSP** 收在 Report-Only:严格 nonce 策略因 workerd 剥 CSP 请求头无法 enforce,阻于上游
-  **opennextjs/opennextjs-cloudflare#1302**。全部根因 + 修好后的一行翻转步骤:
-  **`docs/CSP-NONCE-OPENNEXT.md`**。
+- **CSP**:响应侧突围已落地——自定义入口 `worker.ts` 用 HTMLRewriter 给所有 script/preload
+  注入 nonce(不再依赖被 workerd 剥掉的请求头)。阶段一(补 nonce + 仍 Report-Only)已上线;
+  阶段二翻转 = `wrangler.jsonc` 的 `CSP_ENFORCE` 改 `"enforce"` 一行。全案:
+  **`docs/CSP-NONCE-OPENNEXT.md`**(上游 #1302 仍未修,但已不挡路)。
 - **期末考核 AI 评阅**:2026-07-07 会话的复盘/修复/清积压全记录 + 恢复指引:
   **`docs/GRADING-BACKLOG-2026-07.md`**(存档时队列还在排空,收官待办见该文 §五)。
   运维一律走 Actions 按钮(`admin-call.yml` / `grading-queue-drain` / `d1-query`),见
