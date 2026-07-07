@@ -123,10 +123,12 @@ export const PRESETS: Preset[] = [
 ]
 
 // Sensible default pairing when an assignment hasn't pinned its own models.
-// Perception (吃视频/音频，多模态) 默认 Gemini 3.5 Flash。评分(judge) 默认 DeepSeek V4 Pro
-// 推理版：先想后判、按评分标准精评。DeepSeek 只做文本评分,故感知仍走 Gemini。老师仍可在
-// 评分页按环节改。写作(纯文本评)与口语(Gemini 感知 → DeepSeek 评)都吃这个默认评分模型。
-export const DEFAULT_PERCEPTION_MODEL = 'gemini-3.5-flash'
+// Perception (吃视频/音频，多模态) 默认 Gemini 3 Flash Preview——感知阶段只是「看视频/
+// 转文字」,不需要 Pro 级推理,选中间价位的 Flash($0.50/1M,约为 3.5 Flash 的 1/3),
+// 大幅降本(期末考核复盘:3.5 Flash 视频计费 $1.50/1M 是账单失控的一大成因)。评分(judge)
+// 仍是 DeepSeek V4 Pro 推理版:先想后判、按评分标准精评(纯文本、便宜)。老师仍可在评分页
+// 按环节改。写作(纯文本评)与口语(Gemini 感知 → DeepSeek 评)都吃这个默认评分模型。
+export const DEFAULT_PERCEPTION_MODEL = 'gemini-3-flash-preview'
 export const DEFAULT_JUDGE_MODEL = 'deepseek-v4-pro'
 // Authoring (备课出题):
 //  · text/topic path → DeepSeek by default (cheap, capable at this text task; "让
