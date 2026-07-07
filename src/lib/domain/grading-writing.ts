@@ -14,6 +14,7 @@ import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import { DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import { logAiCall } from '@/lib/repo/ai-usage'
 import { phaseItemType } from '@/lib/phase-item-type'
 import {
   decideReview,
@@ -117,16 +118,21 @@ export async function autoGradeWriting(
       costUsd: hasUsage ? cost : null,
       costMicroUsd: hasUsage ? costMicro : null,
     })
+    // 成本流水账(真账,永不覆盖):文本评分一次 judge 调用记一行。
+    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'writing', model: result.judgeModel, inputTokens, outputTokens, costMicroUsd: costMicro, ok: true })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'grade failed'
     if (isUnavailable(message)) {
       // Model not configured — revert to the pre-grade state and leave it for the teacher.
+      // No provider call was made → nothing to bill.
       await submissionRepo.revertToQueue(prisma, submission.id, submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED')
       return { ok: false, error: message }
     }
     logError('autoGradeWriting', 'grading failed', err, { submissionId: submission.id })
     await submissionRepo.markFailed(prisma, submission.id)
+    // 失败留痕(ok:false,cost 0):usage 在异常里拿不到,与口语评分同理。
+    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'writing', model: opts.judgeModel, costMicroUsd: 0, ok: false })
     return { ok: false, error: message }
   }
 }

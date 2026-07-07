@@ -90,10 +90,10 @@ export function findForSchool(prisma: PrismaClient, id: number, schoolId: number
 export async function offeringTeacher(prisma: PrismaClient, assignmentId: number) {
   const a = await prisma.assignment.findUnique({
     where: { id: assignmentId },
-    select: { offering: { select: { teacherId: true, teacher: { select: { defaultPerceptionModel: true, defaultJudgeModel: true } } } } },
+    select: { offering: { select: { schoolId: true, teacherId: true, teacher: { select: { defaultPerceptionModel: true, defaultJudgeModel: true } } } } },
   })
   const o = a?.offering
-  return o ? { teacherId: o.teacherId, defaultPerceptionModel: o.teacher.defaultPerceptionModel, defaultJudgeModel: o.teacher.defaultJudgeModel } : null
+  return o ? { schoolId: o.schoolId, teacherId: o.teacherId, defaultPerceptionModel: o.teacher.defaultPerceptionModel, defaultJudgeModel: o.teacher.defaultJudgeModel } : null
 }
 
 // The grading screen: assignment + offering(course/class) + every submission with

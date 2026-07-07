@@ -14,10 +14,12 @@
 // (only the isolate whose update matched actually runs the job).
 
 import type { PrismaClient } from '@prisma/client'
-import { logError } from '../log'
+import { logError, logWarn } from '../log'
+import { config } from '@/lib/config'
 import { autoGradeById } from './grading'
 import { autoGradeWritingById } from './grading-writing'
 import { gradeShadowSubmission } from './shadow'
+import { spendSinceMicroUsd } from '@/lib/repo/ai-usage'
 import { runAfterResponse } from '@/lib/cf'
 import { getDb } from '@/lib/db'
 
@@ -100,6 +102,21 @@ export async function claimAndRunDue(
   runner: JobRunner = defaultRunner,
 ): Promise<{ ran: number }> {
   const now = new Date()
+
+  // 0) 支出护栏(期末考核复盘 #4):当天 AiUsageLog 累计花费 ≥ 单日上限时,暂停后台评阅——
+  //    队列原样保留,次日归零(或调高上限)后自动恢复。这是第二道防线,补在 Gemini 控制台
+  //    硬上限之后(一次批处理一天曾烧 ~$500)。放在最前:暂停就是彻底不动,连回收/夭折都不做,
+  //    免得停摆期白白累加 attempts 把任务熬进死信。手动重评(runGrading)不走此路径,老师随时可评。
+  //    cap=0 = 关闭护栏。用 UTC 日界,与账本 createdAt(DB CURRENT_TIMESTAMP)同一时钟。
+  const capUsd = config.gradingDailyCapUsd()
+  if (capUsd > 0) {
+    const startOfTodayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const spentMicro = await spendSinceMicroUsd(prisma, startOfTodayUtc)
+    if (spentMicro >= capUsd * 1_000_000) {
+      logWarn('jobs', 'daily grading spend cap reached — pausing background grading', undefined, { capUsd, spentUsd: (spentMicro / 1_000_000).toFixed(2) })
+      return { ran: 0 }
+    }
+  }
 
   // 1) Reclaim orphans AS A FAILED ATTEMPT: a worker that died mid-job (or a job that
   //    outran STALE_MS) left a stale PROCESSING row. Counting the reclaim as an attempt

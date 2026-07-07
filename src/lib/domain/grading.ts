@@ -17,6 +17,7 @@ import { presignDownload, probeObject, storageConfigured } from '@/lib/storage'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import { logAiCall } from '@/lib/repo/ai-usage'
 import { isUnavailable } from '@/lib/ai/errors'
 
 export const DEFAULT_MAX_SCORE = 100
@@ -206,13 +207,15 @@ export async function autoGradeSubmission(
     const inputTokens = (pu?.inputTokens ?? 0) + (ju?.inputTokens ?? 0)
     const outputTokens = (pu?.outputTokens ?? 0) + (ju?.outputTokens ?? 0)
     const perAudioSec = result.perception.audioSeconds
+    // Per-stage µUSD kept separate so the ledger can attribute cost to perception vs judge
+    // (perception — the video call — is where the spend concentrates); the Submission column
+    // stores their exact integer sum (no Float accumulation drift).
+    const perceptionMicro = perceptionCostMicroUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec)
+    const judgeMicro = costMicroUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
     const cost =
       perceptionCostUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
       costUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
-    // Bill-grade: two integer µUSD costs sum exactly (no Float accumulation drift).
-    const costMicro =
-      perceptionCostMicroUsd(result.perceptionModel, pu?.inputTokens ?? 0, pu?.outputTokens ?? 0, perAudioSec) +
-      costMicroUsd(result.judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+    const costMicro = perceptionMicro + judgeMicro
     // Whisper reports no token usage but does have audio seconds — count it so its (per-minute) cost is persisted.
     const hasUsage = Boolean(pu || ju || perAudioSec)
 
@@ -234,17 +237,25 @@ export async function autoGradeSubmission(
       costUsd: hasUsage ? cost : null,
       costMicroUsd: hasUsage ? costMicro : null,
     })
+    // 成本流水账(真账,永不覆盖):感知 + 评分各记一行,供仪表盘可见与支出护栏累加。
+    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: result.perceptionModel, inputTokens: pu?.inputTokens ?? 0, outputTokens: pu?.outputTokens ?? 0, costMicroUsd: perceptionMicro, ok: true })
+    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'judge', model: result.judgeModel, inputTokens: ju?.inputTokens ?? 0, outputTokens: ju?.outputTokens ?? 0, costMicroUsd: judgeMicro, ok: true })
     return { ok: true, needsReview: decision.needsReview }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'grade failed'
     if (isUnavailable(message)) {
       // Model not configured — revert to the pre-grade state and leave it for the
-      // teacher rather than marking it failed.
+      // teacher rather than marking it failed. No provider call was made → nothing to bill.
       await submissionRepo.revertToQueue(prisma, submission.id, submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED')
       return { ok: false, error: message }
     }
     logError('autoGradeSubmission', 'grading failed', err, { submissionId: submission.id })
     await submissionRepo.markFailed(prisma, submission.id)
+    // 失败也留痕(ok:false,cost 0):仪表盘可见失败次数,印证「失败调用不计费」。usage 在异常
+    // 里拿不到(gradeSubmission 抛错前的部分计费无法回读),故成本记 0——罕见的「已计费 200 但
+    // 解析失败」会因此少计,可接受:相比旧账(失败全漏、成功被覆盖),这里只在边角少记。归给
+    // perception(首个外部调用,也是 429/400 失败的主来源)。
+    await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: opts.perceptionModel, costMicroUsd: 0, ok: false })
     return { ok: false, error: message }
   }
 }
