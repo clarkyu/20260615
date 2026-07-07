@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   stripCodeFence,
   extractJson,
@@ -11,7 +11,9 @@ import {
   isTransientUploadStatus,
   uploadInitBackoffMs,
   chunkMedia,
+  purgeFiles,
 } from '@/lib/ai/providers/gemini'
+import { withAiKeys } from '@/lib/ai/key-context'
 
 const refs = [
   { order: 1, text: 'The early bird catches the worm.' },
@@ -221,5 +223,38 @@ describe('chunkMedia', () => {
 
   it('yields a single short chunk when input is smaller than the chunk size', async () => {
     expect((await collect(chunkMedia(Uint8Array.from([1, 2, 3]), 10))).map((c) => [...c])).toEqual([[1, 2, 3]])
+  })
+})
+
+// purgeFiles — reclaims the Gemini File API 20 GiB/project storage cap that filled when grading
+// never deleted uploaded videos (期末考核 20260707, all uploads blocked). Stub fetch: a GET lists a
+// page of files, a DELETE removes one. withAiKeys injects the key so apiKey() resolves without env.
+function stubGemini(pages: { name: string }[][], deleteOk: () => boolean) {
+  let listIdx = 0
+  return vi.fn(async (_url: unknown, init?: { method?: string }) => {
+    if (init?.method === 'DELETE') return { ok: deleteOk() } as Response
+    const page = pages[Math.min(listIdx++, pages.length - 1)] ?? []
+    return { ok: true, json: async () => ({ files: page }) } as unknown as Response
+  })
+}
+const page = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => ({ name: `files/${prefix}${i}` }))
+
+describe('purgeFiles', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('deletes files page by page until the list is empty', async () => {
+    vi.stubGlobal('fetch', stubGemini([page('a', 100), page('b', 30), []], () => true))
+    expect(await withAiKeys({ gemini: 'k' }, () => purgeFiles(9999))).toEqual({ deleted: 130, remaining: false })
+  })
+
+  it('stops (never loops forever) when a page cannot be deleted', async () => {
+    // list always returns the same page; every delete fails → no progress → must bail.
+    vi.stubGlobal('fetch', stubGemini([[{ name: 'files/x' }, { name: 'files/y' }]], () => false))
+    expect(await withAiKeys({ gemini: 'k' }, () => purgeFiles(9999))).toEqual({ deleted: 0, remaining: true })
+  })
+
+  it('respects the max cap and reports that files remain', async () => {
+    vi.stubGlobal('fetch', stubGemini([page('p', 100), page('q', 100), []], () => true))
+    expect(await withAiKeys({ gemini: 'k' }, () => purgeFiles(100))).toEqual({ deleted: 100, remaining: true })
   })
 })

@@ -321,8 +321,9 @@ async function uploadChunk(uploadUrl: string, chunk: Uint8Array, offset: number,
   return resp
 }
 
-// Uploads media to the Gemini File API (resumable) and waits until ACTIVE.
-async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<string> {
+// Uploads media to the Gemini File API (resumable) and waits until ACTIVE. Returns both the uri
+// (for generateContent) and the name (for deleteFile — see the storage-cap fix below).
+async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<{ uri: string; name: string }> {
   const key = apiKey()
   // Retry ONLY the init step: its body is a fresh JSON string (re-sendable). The upload
   // step below streams a one-shot body and must not be retried here.
@@ -379,7 +380,53 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
     } catch { /* keep polling */ }
   }
   if (file?.state !== 'ACTIVE' || !file.uri) throw new Error(`Gemini 文件未就绪（${file?.state ?? 'unknown'}）`)
-  return file.uri
+  return { uri: file.uri, name: file.name ?? '' }
+}
+
+// Delete a File API file. The File API has a 20 GiB/project storage cap and uploaded files linger
+// ~48h; grading never deleted them, so a heavy day piled up to the cap and then EVERY new upload
+// was rejected — a grading-wide outage (期末考核 20260707). perceive() now deletes the file the
+// instant generateContent is done with it, so storage never accumulates. Best-effort: the grade
+// already succeeded, so a failed delete just leaves the file to expire on its own — never throw.
+export async function deleteFile(name: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${baseUrl()}/v1beta/${name}`, {
+      method: 'DELETE',
+      headers: { 'x-goog-api-key': apiKey() },
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+// One-off maintenance: reclaim File API storage by deleting the platform project's lingering files
+// (the per-grade delete above is the permanent fix; this clears the historical pile-up). Repeatedly
+// lists page 1 and deletes it — deletions shrink the set, so page 1 keeps yielding fresh files until
+// empty. Bounded by `max` (one Worker request stays well within limits) and stops if a page can't be
+// deleted, so it can never spin forever. Returns whether files remain so the caller repeats until 0.
+export async function purgeFiles(max: number): Promise<{ deleted: number; remaining: boolean }> {
+  const key = apiKey()
+  let deleted = 0
+  for (;;) {
+    const res = await fetch(`${baseUrl()}/v1beta/files?pageSize=100`, {
+      headers: { 'x-goog-api-key': key },
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`Gemini files.list 失败 ${res.status}`)
+    const body = (await res.json()) as { files?: { name?: string }[] }
+    const names = (body.files ?? []).map((f) => f.name).filter((n): n is string => !!n)
+    if (names.length === 0) return { deleted, remaining: false }
+    let pageOk = 0
+    for (let i = 0; i < names.length; i += 10) {
+      const results = await Promise.all(names.slice(i, i + 10).map((n) => deleteFile(n)))
+      pageOk += results.filter(Boolean).length
+    }
+    deleted += pageOk
+    if (pageOk === 0) return { deleted, remaining: true } // couldn't delete this page → stop (no spin)
+    if (deleted >= max) return { deleted, remaining: true }
+  }
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -391,7 +438,9 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(bin)
 }
 
-async function mediaPart(mediaUrl: string): Promise<Part> {
+// Returns the content Part plus the File API `fileName` when the media was uploaded (undefined for
+// small inline media) so the caller can delete it after use and not leak into the storage cap.
+async function mediaPart(mediaUrl: string): Promise<{ part: Part; fileName?: string }> {
   const resp = await fetch(mediaUrl, { signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
   if (!resp.ok || !resp.body) throw new Error(`无法获取视频（${resp.status}）`)
   const mimeType = resp.headers.get('content-type') || 'video/webm'
@@ -399,15 +448,15 @@ async function mediaPart(mediaUrl: string): Promise<Part> {
 
   // Large files: stream straight into the File API without buffering in memory.
   if (declaredLen > INLINE_MAX_BYTES) {
-    const uri = await uploadFile(resp.body, declaredLen, mimeType)
-    return { fileData: { mimeType, fileUri: uri } }
+    const { uri, name } = await uploadFile(resp.body, declaredLen, mimeType)
+    return { part: { fileData: { mimeType, fileUri: uri } }, fileName: name }
   }
   const bytes = new Uint8Array(await resp.arrayBuffer())
   if (bytes.byteLength > INLINE_MAX_BYTES) {
-    const uri = await uploadFile(bytes, bytes.byteLength, mimeType)
-    return { fileData: { mimeType, fileUri: uri } }
+    const { uri, name } = await uploadFile(bytes, bytes.byteLength, mimeType)
+    return { part: { fileData: { mimeType, fileUri: uri } }, fileName: name }
   }
-  return { inlineData: { mimeType, data: toBase64(bytes) } }
+  return { part: { inlineData: { mimeType, data: toBase64(bytes) } } }
 }
 
 // Sanitize the model's per-sentence output before it's persisted: accuracy/completeness
@@ -432,16 +481,23 @@ export const geminiPerception: PerceptionProvider = {
   async perceive(input: PerceptionInput, modelId: string): Promise<PerceptionResult> {
     const media = input.videoUrl || input.audioUrl
     if (!media) throw new Error('没有可评阅的视频（请确认已配置 R2 并已上传）')
-    const parts: Part[] = [{ text: buildPerceptionPrompt(input) }, await mediaPart(media)]
-    const { data, usage } = await generate(modelId, parts, PERCEPTION_SCHEMA)
-    const json = data as PerceptionResult
-    return {
-      transcript: json.transcript ?? '',
-      perSentence: normalizePerSentence(json.perSentence),
-      pronunciationImpression: json.pronunciationImpression,
-      observations: json.observations ?? {},
-      usage,
-      raw: json,
+    const { part, fileName } = await mediaPart(media)
+    const parts: Part[] = [{ text: buildPerceptionPrompt(input) }, part]
+    try {
+      const { data, usage } = await generate(modelId, parts, PERCEPTION_SCHEMA)
+      const json = data as PerceptionResult
+      return {
+        transcript: json.transcript ?? '',
+        perSentence: normalizePerSentence(json.perSentence),
+        pronunciationImpression: json.pronunciationImpression,
+        observations: json.observations ?? {},
+        usage,
+        raw: json,
+      }
+    } finally {
+      // Free the File API storage the instant we're done — uploaded or not, success or failure.
+      // Without this the 20 GiB/project cap fills and blocks all future uploads.
+      if (fileName) await deleteFile(fileName)
     }
   },
 }
