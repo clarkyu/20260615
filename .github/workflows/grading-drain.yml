@@ -32,13 +32,14 @@ jobs:
           case "$ROUNDS" in ''|*[!0-9]*) echo "::error::rounds must be a number"; exit 1;; esac
           # 容错连打(期末考核复盘):单轮偶发 502(个别超大视频/上游抖动)不该终止整场
           # 排空——队列是耐久的,被掐死的那份由过期回收接管,跳过继续即可。只有连续
-          # 多轮全败(端点真不可用)才停。每轮小批(limit=2)把单请求控制在 ~1 分钟内。
+          # 多轮全败(端点真不可用)才停。批内并发(修复 ⑦):一轮 3 份并行,墙钟 ≈
+          # 最慢一份(≤ ~5 分钟,上游单调用 3 分钟封顶),curl 超时给足余量。
           total=0
           fails=0
           for i in $(seq 1 "$ROUNDS"); do
-            code=$(curl -sS --max-time 300 -o /tmp/out -w '%{http_code}' -X POST \
+            code=$(curl -sS --max-time 420 -o /tmp/out -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $SECRET" -H "content-type: application/json" \
-              -d '{"limit":2}' \
+              -d '{"limit":3}' \
               https://www.hihomework.com/api/cron/drain || true)
             body=$(cat /tmp/out 2>/dev/null | head -c 300 || true)
             echo "round $i: HTTP $code $body"

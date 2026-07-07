@@ -124,16 +124,21 @@ export async function claimAndRunDue(
     take: limit,
   })
 
-  let ran = 0
+  // Claim sequentially (cheap row flips), then run the claimed batch CONCURRENTLY:
+  // 一批的墙钟 ≈ 最慢一份而不是各份之和(期末考核修复 ⑦——视频评一份 1-3 分钟,串行
+  // 两份就顶穿调用方的超时;并行后同批互不叠加)。每份的结算写入仍各自独立、且全部
+  // FENCED 到 PROCESSING(见下),并发不会互相踩。
+  const claimed: typeof due = []
   for (const job of due) {
     // Atomic claim — only the isolate that flips PENDING→PROCESSING runs it.
-    const claimed = await prisma.gradingJob.updateMany({
+    const c = await prisma.gradingJob.updateMany({
       where: { id: job.id, status: 'PENDING' },
       data: { status: 'PROCESSING' },
     })
-    if (claimed.count === 0) continue
-    ran++
+    if (c.count > 0) claimed.push(job)
+  }
 
+  const runOne = async (job: (typeof due)[number]) => {
     const res = await runner(prisma, { id: job.id, submissionId: job.submissionId, kind: job.kind, attempts: job.attempts })
 
     // Every terminal write is FENCED to `status: 'PROCESSING'` — a stale run that was
@@ -141,7 +146,7 @@ export async function claimAndRunDue(
     // job another isolate has since settled.
     if (res.done) {
       await prisma.gradingJob.updateMany({ where: { id: job.id, status: 'PROCESSING' }, data: { status: 'DONE', lastError: null } })
-      continue
+      return
     }
 
     const attempts = job.attempts + 1
@@ -160,7 +165,8 @@ export async function claimAndRunDue(
       })
     }
   }
-  return { ran }
+  await Promise.all(claimed.map(runOne))
+  return { ran: claimed.length }
 }
 
 // 撤销一个环节全部提交的待跑评阅任务(环节改型为客观题/投票后,不该再有 AI 回来写分)。
