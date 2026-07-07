@@ -1,7 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hihomework",
-  "main": ".open-next/worker.js",
+  // 自定义入口:包装 .open-next/worker.js,响应侧注入 CSP nonce(见 worker.ts 头注)。
+  "main": "worker.ts",
   "compatibility_date": "2024-12-30",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -25,7 +26,10 @@
   "vars": {
     "APP_NAME": "你好！作业 Hi, Homework",
     "APP_URL": "https://www.hihomework.com",
-    "MINIMAX_BASE_URL": "https://api.minimax.chat/v1"
+    "MINIMAX_BASE_URL": "https://api.minimax.chat/v1",
+    // CSP 两阶段翻转开关(worker.ts):"report-only" = 只补 nonce 验证期;
+    // "enforce" = 严格策略转正。翻转/回退都是改这一行 + 部署。
+    "CSP_ENFORCE": "report-only"
   },
   "observability": {
     "enabled": true

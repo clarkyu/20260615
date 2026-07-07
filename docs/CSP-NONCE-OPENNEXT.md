@@ -1,8 +1,8 @@
 # CSP 严格策略：为什么收在 Report-Only（OpenNext/workerd 的两道剔头 + 压缩运行时）
 
-> 状态：**Report-Only（监控中）**。enforce 阻于 Cloudflare/OpenNext，非我们代码问题。
-> **上游追踪：https://github.com/opennextjs/opennextjs-cloudflare/issues/1302** —— 修复后即可
-> 按下文「何时/如何真正 enforce」一节翻转。
+> 状态：**已突破——响应侧 HTMLRewriter 方案落地(见文末「响应侧突围」)**。阶段一
+> (全量 nonce 注入 + 仍 Report-Only)已上线验证;阶段二翻转 = `wrangler.jsonc` 的
+> `CSP_ENFORCE` 改 `"enforce"` 一行 + 部署。上游 #1302 依旧未修,但已不再挡路。
 > 相关：`src/middleware.ts`、`next.config.mjs`（静态 CSP，带 unsafe-inline 的强制头）、
 > `src/app/api/csp-report/route.ts`（违规上报）。
 
@@ -11,6 +11,7 @@
 > | 复查日期 | 上游 #1302 | `@opennextjs/cloudflare`（已装 / 最新发布） | 结论 |
 > |---|---|---|---|
 > | 2026-07-05 | 仍 **open**，无关联 PR / 无修复 / 无 workaround | `1.20.1` / `1.20.1`（已是最新，无新版本） | **维持 Report-Only**，无可翻转项；强行 enforce 会拦掉生产绝大多数脚本（1/19 带 nonce） |
+> | 2026-07-07 | 仍 **open**，零回应 | `1.20.1` / `1.20.1` | **换思路突围**:不等上游,响应侧 HTMLRewriter 注入 nonce(见文末),本地 workerd 实测 19/19 + enforce 下浏览器零违规 |
 
 ## 目标与结论
 
@@ -119,3 +120,38 @@ workerd 不剥的头即可，彻底绕过。属给 Next 的 feature request。
 > Versions: `@opennextjs/cloudflare` 1.20.1, `@opennextjs/aws` 4.0.2, `next` 16.2.9. Suggested
 > fix: carry the CSP request header through to the server render in a workerd-safe way (e.g.
 > restore it after the final `Request` reconstruction, or expose the nonce Next can read).
+
+## 响应侧突围(2026-07-07,不再等上游)
+
+上文三道死路都在「请求侧」——想让 Next 在渲染时拿到 nonce。换路:**渲染完再补章**。
+自定义 Worker 入口 `worker.ts` 包装 OpenNext 生成的 handler,对每个 HTML 响应:
+
+1. 从 middleware 已发的 Report-Only 头里取回**同一枚** nonce(单一事实来源,与主题脚本
+   经 x-nonce 拿到的是同一枚);
+2. `HTMLRewriter`(workerd 原生,流式零缓冲)给每个 `<script>` **和**
+   `<link rel="preload" as="script">` / `modulepreload` 盖 nonce 章——preload 请求同受
+   script-src 管辖且不吃 `strict-dynamic` 传递信任,实测漏它会报违规;
+3. 运行时动态插入的 chunk 由 `'strict-dynamic'` 传递信任覆盖(这正是它的设计用途);
+4. `CSP_ENFORCE` var 两阶段:`"report-only"`(现值)只补 nonce、策略仍 Report-Only;
+   `"enforce"` 时严格策略转正为 `content-security-policy`、撤下 Report-Only、
+   顶替 next.config.mjs 的 unsafe-inline 静态头。
+
+为什么这条路不会重蹈覆辙:workerd 剥的是**请求头**;响应头是我们**最后**写的,上游没有
+任何一道边界再处理它(现行 unsafe-inline 静态头正是这样活到浏览器的)。
+
+本地 workerd(`wrangler dev`,与生产同引擎)实测:
+- report-only 模式:19/19 脚本带 nonce,头体 nonce 一致;
+- enforce 模式:严格策略转正、Report-Only 撤下,真浏览器加载 + 水合 + 交互,
+  **CSP 违规 0 条**(修 preload 前有 1 条,即上文第 2 点的由来)。
+
+### 剩余翻转步骤(阶段二)
+
+生产验证清单(阶段一部署后):`curl -s https://www.hihomework.com/login | grep -c nonce=`
+应为全量;`/api/csp-report` 观察 1-2 天归零。然后:
+1. `wrangler.jsonc` 里 `CSP_ENFORCE` 改 `"enforce"`,部署;
+2. (可选清理)删 `next.config.mjs` 的静态 CSP(worker 层已顶替)与 middleware 里
+   现在冗余的请求头设置。回退 = 改回 `"report-only"` 再部署,秒级。
+
+已知边界:若未来 `opennextjs-cloudflare deploy` 强制覆盖 `main` 配置,包装层会失效——
+症状是生产 nonce 覆盖跌回 1/19、report-only 违规暴涨,但**阶段一下零破坏**(策略仍
+Report-Only),诊断页/上报会先叫。
