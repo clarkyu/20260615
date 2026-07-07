@@ -265,6 +265,62 @@ export function uploadInitBackoffMs(attempt: number, retryAfterHeader: string | 
   return Math.min(1000 * 2 ** attempt, 30_000) // attempt 1→2s, 2→4s, 3→8s
 }
 
+// Chunk size for the resumable upload. Every non-final chunk must be a multiple of 256KB (the
+// resumable-upload protocol requires it); 8MB is 32×256KB and keeps peak memory to ~one chunk.
+const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024
+
+// Re-pack the media into fixed-size byte chunks (the last may be smaller), from either an
+// already-buffered Uint8Array or a streaming ReadableStream. Repacking guarantees every non-final
+// chunk is exactly `size` bytes (the protocol's requirement). The streaming path buffers only one
+// chunk at a time, so Worker memory stays flat regardless of file size. Exported for unit tests.
+export async function* chunkMedia(body: BodyInit, size: number): AsyncGenerator<Uint8Array> {
+  if (body instanceof Uint8Array) {
+    for (let off = 0; off < body.byteLength; off += size) {
+      yield body.subarray(off, Math.min(off + size, body.byteLength))
+    }
+    return
+  }
+  const reader = (body as ReadableStream<Uint8Array>).getReader()
+  let buf = new Uint8Array(size)
+  let filled = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value) continue
+    let v = value
+    while (v.byteLength > 0) {
+      const take = Math.min(size - filled, v.byteLength)
+      buf.set(v.subarray(0, take), filled)
+      filled += take
+      v = v.subarray(take)
+      if (filled === size) {
+        yield buf
+        buf = new Uint8Array(size)
+        filled = 0
+      }
+    }
+  }
+  if (filled > 0) yield buf.subarray(0, filled)
+}
+
+// POST one chunk to the resumable upload URL. 'finalize' rides the last chunk and returns the
+// file JSON. A non-2xx here surfaces as an error the durable queue retries (whole-upload restart).
+async function uploadChunk(uploadUrl: string, chunk: Uint8Array, offset: number, finalize: boolean): Promise<Response> {
+  const resp = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'X-Goog-Upload-Offset': String(offset),
+      'X-Goog-Upload-Command': finalize ? 'upload, finalize' : 'upload',
+    },
+    // A typed-array view is a valid fetch body; cast past the Workers BodyInit generic
+    // (Uint8Array<ArrayBufferLike>) the same way the buffered upload path always has.
+    body: chunk as BodyInit,
+    signal: AbortSignal.timeout(GEN_TIMEOUT_MS),
+  })
+  if (!resp.ok) throw new Error(`Gemini 文件上传失败 ${resp.status}`)
+  return resp
+}
+
 // Uploads media to the Gemini File API (resumable) and waits until ACTIVE.
 async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<string> {
   const key = apiKey()
@@ -296,15 +352,22 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
   const uploadUrl = start.headers.get('X-Goog-Upload-URL')
   if (!uploadUrl) throw new Error('Gemini 未返回上传地址')
 
-  const up = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: { 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
-    body,
-    signal: AbortSignal.timeout(GEN_TIMEOUT_MS),
-    // Streaming request body requires half-duplex.
-    ...({ duplex: 'half' } as Record<string, unknown>),
-  })
-  if (!up.ok) throw new Error(`Gemini 文件上传失败 ${up.status}`)
+  // Upload in fixed-size chunks rather than one whole-file POST. A single-shot upload of a large
+  // video is rejected with 413 (期末考核:67 份闭眼背诵卡在这一步——整段视频超过单请求体积上限);
+  // chunked resumable upload sidesteps that per-request cap while keeping memory flat. 'finalize'
+  // must ride the LAST chunk, so we send each chunk one behind — the pending chunk becomes the
+  // final one once the stream is exhausted.
+  let offset = 0
+  let pending: Uint8Array | null = null
+  for await (const chunk of chunkMedia(body, UPLOAD_CHUNK_BYTES)) {
+    if (pending) {
+      await uploadChunk(uploadUrl, pending, offset, false)
+      offset += pending.byteLength
+    }
+    pending = chunk
+  }
+  if (!pending) throw new Error('Gemini 文件上传失败（空文件）')
+  const up = await uploadChunk(uploadUrl, pending, offset, true)
   let file = (await up.json() as { file?: { uri?: string; name?: string; state?: string } }).file
   for (let i = 0; i < 30 && file?.state === 'PROCESSING'; i++) {
     await sleep(2000)
