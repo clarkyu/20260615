@@ -246,23 +246,53 @@ async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms))
 }
 
+// The File API 上传初始化 is rate-limited INDEPENDENTLY of generateContent, on its own
+// (lower) quota. During a burst (期末考核) its 429 was the single biggest blocker: 221 大
+// 视频全卡在这一步、每次一抛就整份重跑,而这类限流往往几秒就缓过来。So retry the init in
+// place on transient failures. These two policy helpers are pure + exported for unit tests.
+
+// 429（限流）与 5xx（上游抖动）是瞬时的 → 重试;其它（400/403/404…）是终态 → 立即抛。
+export function isTransientUploadStatus(status: number): boolean {
+  return status === 429 || status >= 500
+}
+
+// 退避时长:优先尊重服务端 Retry-After(秒),否则指数退避;都封顶 30s——更久的持久限流
+// 交给耐久队列的分钟级退避,不在一次评阅里死等。attempt 从 1 起。
+const UPLOAD_INIT_MAX_TRIES = 4
+export function uploadInitBackoffMs(attempt: number, retryAfterHeader: string | null): number {
+  const ra = Number(retryAfterHeader)
+  if (Number.isFinite(ra) && ra > 0) return Math.min(ra * 1000, 30_000)
+  return Math.min(1000 * 2 ** attempt, 30_000) // attempt 1→2s, 2→4s, 3→8s
+}
+
 // Uploads media to the Gemini File API (resumable) and waits until ACTIVE.
 async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<string> {
   const key = apiKey()
-  const start = await fetch(`${baseUrl()}/upload/v1beta/files`, {
-    method: 'POST',
-    headers: {
-      'x-goog-api-key': key,
-      'X-Goog-Upload-Protocol': 'resumable',
-      'X-Goog-Upload-Command': 'start',
-      'X-Goog-Upload-Header-Content-Length': String(contentLength),
-      'X-Goog-Upload-Header-Content-Type': mimeType,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ file: { display_name: 'recitation' } }),
-    signal: AbortSignal.timeout(NET_TIMEOUT_MS),
-  })
-  if (!start.ok) throw new Error(`Gemini 文件上传初始化失败 ${start.status}`)
+  // Retry ONLY the init step: its body is a fresh JSON string (re-sendable). The upload
+  // step below streams a one-shot body and must not be retried here.
+  let start: Response | undefined
+  for (let attempt = 1; attempt <= UPLOAD_INIT_MAX_TRIES; attempt++) {
+    start = await fetch(`${baseUrl()}/upload/v1beta/files`, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': key,
+        'X-Goog-Upload-Protocol': 'resumable',
+        'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': String(contentLength),
+        'X-Goog-Upload-Header-Content-Type': mimeType,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ file: { display_name: 'recitation' } }),
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS),
+    })
+    if (start.ok) break
+    // Terminal error, or attempts exhausted → surface it (durable queue takes over).
+    if (attempt >= UPLOAD_INIT_MAX_TRIES || !isTransientUploadStatus(start.status)) {
+      throw new Error(`Gemini 文件上传初始化失败 ${start.status}`)
+    }
+    await sleep(uploadInitBackoffMs(attempt, start.headers.get('retry-after')))
+  }
+  if (!start) throw new Error('Gemini 文件上传初始化失败')
   const uploadUrl = start.headers.get('X-Goog-Upload-URL')
   if (!uploadUrl) throw new Error('Gemini 未返回上传地址')
 
