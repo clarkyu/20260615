@@ -10,6 +10,8 @@ import { PROVIDER_LABELS, PROVIDER_KEY_ENV } from '@/lib/ai/registry'
 import * as diagnostics from '@/lib/repo/diagnostics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { batchKeyOf } from '@/lib/assignment-batches'
 
 // 批阅诊断(只读,期末考核复盘的产物):系统配置有无 / 评阅队列水位 / 按作业的评阅进度。
 // 三个问题各花过我们几小时:key 到底配没配、队列是不是在动、哪个班评到哪了——
@@ -45,6 +47,34 @@ export default async function DiagnosticsPage() {
 
   const pending = queue.counts['PENDING'] ?? 0
   const oldestMin = queue.oldestPendingAt ? Math.max(0, Math.round((Date.now() - queue.oldestPendingAt.getTime()) / 60000)) : null
+
+  // 按批次归拢(与作业列表同构:batchId 精确,legacy 同课程+同标题):批次卡出汇总数,
+  // 班级行折叠在下。rows 按 createdAt desc 到达,组序沿用首见序。
+  const groups: { key: string; title: string; rows: typeof progress; sum: { submitted: number; aiScored: number; toReview: number; failed: number; processing: number } }[] = []
+  const byKey = new Map<string, (typeof groups)[number]>()
+  for (const a of progress) {
+    const key = batchKeyOf(a)
+    let g = byKey.get(key)
+    if (!g) {
+      g = { key, title: a.title, rows: [], sum: { submitted: 0, aiScored: 0, toReview: 0, failed: 0, processing: 0 } }
+      byKey.set(key, g)
+      groups.push(g)
+    }
+    g.rows.push(a)
+    g.sum.submitted += a.submitted
+    g.sum.aiScored += a.aiScored
+    g.sum.toReview += a.toReview
+    g.sum.failed += a.failed
+    g.sum.processing += a.processing
+  }
+
+  const stats = (s: { submitted: number; aiScored: number; toReview: number; failed: number; processing: number }) => (
+    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+      {t('diag.rowStats', { submitted: s.submitted, ai: s.aiScored, review: s.toReview })}
+      {s.failed > 0 ? <span className="ml-1 font-medium text-destructive">{t('diag.rowFailed', { n: s.failed })}</span> : null}
+      {s.processing > 0 ? <span className="ml-1">{t('diag.rowProcessing', { n: s.processing })}</span> : null}
+    </span>
+  )
 
   return (
     <div className="space-y-3 py-2">
@@ -85,22 +115,43 @@ export default async function DiagnosticsPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">{t('diag.progress')}</CardTitle></CardHeader>
         <CardContent className="space-y-1 pt-0">
-          {progress.length === 0 ? (
+          {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('diag.noAssignments')}</p>
           ) : (
-            progress.map((a) => (
-              <Link key={a.assignmentId} href={`/dashboard/assignments/${a.assignmentId}`} className="tap flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-accent">
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  <span className="font-medium">{a.title}</span>
-                  <span className="ml-1 text-xs text-muted-foreground">{a.className}</span>
-                </span>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {t('diag.rowStats', { submitted: a.submitted, ai: a.aiScored, review: a.toReview })}
-                  {a.failed > 0 ? <span className="ml-1 font-medium text-destructive">{t('diag.rowFailed', { n: a.failed })}</span> : null}
-                  {a.processing > 0 ? <span className="ml-1">{t('diag.rowProcessing', { n: a.processing })}</span> : null}
-                </span>
-              </Link>
-            ))
+            groups.map((g) =>
+              g.rows.length === 1 ? (
+                // 单班批次:直达评分页的一行(与原样一致)。
+                <Link key={g.key} href={`/dashboard/assignments/${g.rows[0].assignmentId}`} className="tap flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-accent">
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    <span className="font-medium">{g.title}</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{g.rows[0].className}</span>
+                  </span>
+                  {stats(g.rows[0])}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              ) : (
+                // 多班批次:汇总行可折叠,班级行挂在下面(与作业列表/看板同构)。
+                <details key={g.key} className="group rounded-xl">
+                  <summary className="tap flex cursor-pointer list-none items-center gap-2 rounded-xl px-2 py-2 hover:bg-accent">
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      <span className="font-medium">{g.title}</span>
+                      <span className="ml-1 text-xs text-muted-foreground">{t('asgList.classesN', { n: g.rows.length })}</span>
+                    </span>
+                    {stats(g.sum)}
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="ml-2 space-y-0.5 border-l border-border/60 pl-2">
+                    {g.rows.map((a) => (
+                      <Link key={a.assignmentId} href={`/dashboard/assignments/${a.assignmentId}`} className="tap flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent">
+                        <span className="min-w-0 flex-1 truncate text-sm">{a.className}</span>
+                        {stats(a)}
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              ),
+            )
           )}
         </CardContent>
       </Card>

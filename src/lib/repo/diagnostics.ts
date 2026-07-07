@@ -1,5 +1,6 @@
 import type { PrismaClient, Role } from '@prisma/client'
 import { offeringScopeFor } from './scope'
+import { trimBoundaryBatch } from '@/lib/assignment-batches'
 
 // 批阅诊断读(只读聚合,期末考核复盘的产物):队列水位 + 按作业的评阅进度。
 // 全部经 offeringScopeFor 钉在本人可见范围;不取任何学生个人信息。
@@ -27,6 +28,9 @@ export interface AssignmentProgress {
   assignmentId: number
   title: string
   className: string
+  // 批次分组键的原料(诊断页把同批次的班折叠在一张卡下,与作业列表同构):
+  batchId: string | null
+  courseId: number
   submitted: number // 非草稿、非缺交
   graded: number // GRADED(定稿)
   aiScored: number // 有 AI 分(不论是否已定稿)
@@ -37,18 +41,20 @@ export interface AssignmentProgress {
 
 // 最近 limit 份作业的评阅进度(每行 = 一份作业 = 一个班)。计数用
 // (assignmentId, status, needsReview, aiScored) 分组一次取回,id 按 ≤90 分块
-// (D1 绑定参数上限,R12 的既有约定)。
-export async function gradingProgress(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, limit = 30): Promise<AssignmentProgress[]> {
-  const assignments = await prisma.assignment.findMany({
+// (D1 绑定参数上限,R12 的既有约定)。取 limit+1 探测截断并用 trimBoundaryBatch
+// 防止截断点劈开一个批次(同 R12:半批展示会让批次卡缺班)。
+export async function gradingProgress(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, limit = 45): Promise<AssignmentProgress[]> {
+  const fetched = await prisma.assignment.findMany({
     where: { offering: offeringScopeFor(schoolId, userId, role) },
     orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: { id: true, title: true, offering: { select: { class: { select: { name: true } } } } },
+    take: limit + 1,
+    select: { id: true, title: true, batchId: true, offering: { select: { courseId: true, class: { select: { name: true } } } } },
   })
+  const { rows: assignments } = trimBoundaryBatch(fetched.map((a) => ({ ...a, courseId: a.offering.courseId })), limit)
   if (assignments.length === 0) return []
 
   const byId = new Map<number, AssignmentProgress>(
-    assignments.map((a) => [a.id, { assignmentId: a.id, title: a.title, className: a.offering.class.name, submitted: 0, graded: 0, aiScored: 0, toReview: 0, failed: 0, processing: 0 }]),
+    assignments.map((a) => [a.id, { assignmentId: a.id, title: a.title, className: a.offering.class.name, batchId: a.batchId, courseId: a.offering.courseId, submitted: 0, graded: 0, aiScored: 0, toReview: 0, failed: 0, processing: 0 }]),
   )
   const ids = assignments.map((a) => a.id)
   for (let i = 0; i < ids.length; i += 90) {
