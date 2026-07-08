@@ -13,6 +13,9 @@ export interface GradeRequest {
   videoUrl?: string
   audioUrl?: string
   recitedText?: string
+  // A Gemini File API handle a prior attempt uploaded but couldn't wait out (see PerceptionInput);
+  // reused so the retry polls the same file instead of re-uploading. Ignored by non-Gemini providers.
+  resumeFile?: { uri: string; name: string }
 }
 
 export interface GradeResult {
@@ -48,6 +51,7 @@ export async function gradeSubmission(req: GradeRequest): Promise<GradeResult> {
       audioUrl: req.audioUrl,
       referenceSentences: req.referenceSentences,
       requireEyesClosed: req.requireEyesClosed,
+      resumeFile: req.resumeFile,
     },
     perceptionModel.id,
   )
@@ -80,7 +84,7 @@ export interface PerceiveResult {
 
 // Run ONLY the perception stage. Same validation as gradeSubmission's first half.
 export async function perceiveForGrading(
-  req: Pick<GradeRequest, 'perceptionModelId' | 'referenceSentences' | 'requireEyesClosed' | 'videoUrl' | 'audioUrl'>,
+  req: Pick<GradeRequest, 'perceptionModelId' | 'referenceSentences' | 'requireEyesClosed' | 'videoUrl' | 'audioUrl' | 'resumeFile'>,
 ): Promise<PerceiveResult> {
   const perceptionModel = getModel(req.perceptionModelId)
   if (!perceptionModel) throw new Error(`未知的感知模型: ${req.perceptionModelId}`)
@@ -90,7 +94,7 @@ export async function perceiveForGrading(
   const perceptionProvider = getPerceptionProvider(perceptionModel.provider)
   if (!perceptionProvider) throw unavailable(`感知 provider 未实现: ${perceptionModel.provider}`)
   const perception = await perceptionProvider.perceive(
-    { videoUrl: req.videoUrl, audioUrl: req.audioUrl, referenceSentences: req.referenceSentences, requireEyesClosed: req.requireEyesClosed },
+    { videoUrl: req.videoUrl, audioUrl: req.audioUrl, referenceSentences: req.referenceSentences, requireEyesClosed: req.requireEyesClosed, resumeFile: req.resumeFile },
     perceptionModel.id,
   )
   return { perceptionModel: perceptionModel.id, perception }

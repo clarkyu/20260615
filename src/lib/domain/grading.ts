@@ -11,6 +11,7 @@ import { logError } from '../log'
 import { config } from '@/lib/config'
 import { perceiveForGrading, judgeForGrading } from '@/lib/ai/grade'
 import type { PerceptionResult } from '@/lib/ai/types'
+import { PerceptionFileNotReady } from '@/lib/ai/types'
 import { costUsd, costMicroUsd, perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
@@ -22,6 +23,10 @@ import { logAiCall } from '@/lib/repo/ai-usage'
 import { isUnavailable } from '@/lib/ai/errors'
 
 export const DEFAULT_MAX_SCORE = 100
+
+// Gemini File API files expire ~48h after upload. Only reuse a preserved handle within a safe
+// margin — a staler one is likely gone, so re-uploading beats a wasted poll of a 404'd file.
+const GEMINI_FILE_REUSE_MS = 40 * 60 * 60 * 1000
 
 export const DEFAULT_RUBRIC = '按完整度、准确度、发音、流利度综合评分。'
 
@@ -94,6 +99,11 @@ export interface GradableSubmission {
   // Cached perception from a prior attempt that perceived successfully but failed at judge —
   // reused to skip the expensive re-perceive on retry (see savePerception).
   perceptionJson: string | null
+  // Gemini File API handle a prior attempt uploaded but couldn't wait out (still PROCESSING at 60s).
+  // Reused so the retry polls the same (now-ACTIVE) file instead of re-uploading. See saveGeminiFile.
+  geminiFileUri: string | null
+  geminiFileName: string | null
+  geminiFileAt: Date | null
   phase: GradingContent | null
   assignment: GradingContent
 }
@@ -201,16 +211,28 @@ export async function autoGradeSubmission(
     // 1) Perceive (unless a valid cached perception was reused). Persist it + book its cost the
     //    instant it succeeds, so a later judge failure never discards — and re-bills — paid perception.
     if (!perception) {
+      // Reuse a Gemini file a prior attempt uploaded but couldn't wait out (still PROCESSING at 60s):
+      // the retry polls that same file (ACTIVE by now) instead of re-uploading + restarting ingest.
+      // Only within the ~48h file TTL — a staler handle is likely gone, so re-uploading is cheaper.
+      const resumeFile =
+        submission.geminiFileUri && submission.geminiFileName &&
+        submission.geminiFileAt && Date.now() - submission.geminiFileAt.getTime() < GEMINI_FILE_REUSE_MS
+          ? { uri: submission.geminiFileUri, name: submission.geminiFileName }
+          : undefined
       const p = await withAiKeys(keys, () => perceiveForGrading({
         perceptionModelId: opts.perceptionModel,
         referenceSentences: refs,
         requireEyesClosed: content.requireEyesClosed,
         videoUrl,
         audioUrl,
+        resumeFile,
       }))
       perception = p.perception
       perceptionModel = p.perceptionModel
       await submissionRepo.savePerception(prisma, submission.id, JSON.stringify({ perceptionModel, perception }))
+      // Perceive succeeded (the file was used + deleted): drop any preserved handle so a later
+      // re-grade doesn't poll a now-deleted file.
+      if (submission.geminiFileName) await submissionRepo.clearGeminiFile(prisma, submission.id)
       const pu0 = perception.usage
       await logAiCall(prisma, { submissionId: submission.id, schoolId: owner?.schoolId ?? null, kind: 'perception', model: perceptionModel, inputTokens: pu0?.inputTokens ?? 0, outputTokens: pu0?.outputTokens ?? 0, costMicroUsd: perceptionCostMicroUsd(perceptionModel, pu0?.inputTokens ?? 0, pu0?.outputTokens ?? 0, perception.audioSeconds), ok: true })
     }
@@ -275,6 +297,12 @@ export async function autoGradeSubmission(
       // teacher rather than marking it failed. No provider call was made → nothing to bill.
       await submissionRepo.revertToQueue(prisma, submission.id, submission.status === 'FLAGGED' ? 'FLAGGED' : 'UPLOADED')
       return { ok: false, error: message }
+    }
+    // Media upload succeeded but the file was still PROCESSING at the readiness deadline: preserve
+    // the handle so the next durable-queue retry resumes polling THAT file (ACTIVE by then) instead
+    // of re-uploading and restarting Gemini's ingest clock. Then fail normally so the queue retries.
+    if (err instanceof PerceptionFileNotReady && err.fileName) {
+      await submissionRepo.saveGeminiFile(prisma, submission.id, err.fileUri, err.fileName)
     }
     logError('autoGradeSubmission', 'grading failed', err, { submissionId: submission.id })
     await submissionRepo.markFailed(prisma, submission.id)

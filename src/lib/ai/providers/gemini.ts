@@ -13,6 +13,7 @@ import type {
   TextJudgeInput,
   TokenUsage,
 } from '../types'
+import { PerceptionFileNotReady } from '../types'
 
 // Re-exported so long-standing imports of these authoring types from this module
 // keep working; the canonical definitions now live in ../types.
@@ -321,9 +322,33 @@ async function uploadChunk(uploadUrl: string, chunk: Uint8Array, offset: number,
   return resp
 }
 
-// Uploads media to the Gemini File API (resumable) and waits until ACTIVE. Returns both the uri
-// (for generateContent) and the name (for deleteFile — see the storage-cap fix below).
-async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<{ uri: string; name: string }> {
+type FileRecord = { uri?: string; name: string; state?: string; mimeType?: string }
+
+// Poll an already-uploaded File API file until it's ACTIVE (usable by generateContent), FAILED, or
+// gone (404 — expired/deleted → caller re-uploads). Budget 30×2s = 60s: a fresh upload of a large
+// video needs this long to be ingested; a RESUMED file (uploaded by a prior attempt minutes ago) is
+// almost always ACTIVE on the first poll and returns immediately. Transient poll errors keep waiting.
+async function pollUntilReady(name: string, maxIters = 30): Promise<FileRecord> {
+  const key = apiKey()
+  let file: FileRecord = { name }
+  for (let i = 0; i <= maxIters; i++) {
+    try {
+      const poll = await fetch(`${baseUrl()}/v1beta/${name}`, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
+      if (poll.status === 404) return { name, state: 'GONE' }
+      if (poll.ok) {
+        file = (await poll.json()) as FileRecord
+        if (file.state === 'ACTIVE' || file.state === 'FAILED') break
+      }
+    } catch { /* transient poll error/timeout — keep waiting */ }
+    if (i < maxIters) await sleep(2000)
+  }
+  return { uri: file.uri, name: file.name ?? name, state: file.state, mimeType: file.mimeType }
+}
+
+// Uploads media to the Gemini File API (resumable). Returns the file record straight after the final
+// chunk — it may still be PROCESSING; the caller (mediaPart) waits for ACTIVE via pollUntilReady, so
+// the readiness wait can be shared with the retry-resume path. Throws only on real upload failures.
+async function uploadFile(body: BodyInit, contentLength: number, mimeType: string): Promise<FileRecord> {
   const key = apiKey()
   // Retry ONLY the init step: its body is a fresh JSON string (re-sendable). The upload
   // step below streams a one-shot body and must not be retried here.
@@ -369,18 +394,9 @@ async function uploadFile(body: BodyInit, contentLength: number, mimeType: strin
   }
   if (!pending) throw new Error('Gemini 文件上传失败（空文件）')
   const up = await uploadChunk(uploadUrl, pending, offset, true)
-  let file = (await up.json() as { file?: { uri?: string; name?: string; state?: string } }).file
-  for (let i = 0; i < 30 && file?.state === 'PROCESSING'; i++) {
-    await sleep(2000)
-    // A transient poll error/timeout shouldn't abort the whole upload — keep waiting.
-    try {
-      const poll = await fetch(`${baseUrl()}/v1beta/${file.name}`, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
-      if (!poll.ok) continue
-      file = (await poll.json()) as { uri?: string; name?: string; state?: string }
-    } catch { /* keep polling */ }
-  }
-  if (file?.state !== 'ACTIVE' || !file.uri) throw new Error(`Gemini 文件未就绪（${file?.state ?? 'unknown'}）`)
-  return { uri: file.uri, name: file.name ?? '' }
+  const file = (await up.json() as { file?: FileRecord }).file
+  if (!file?.name) throw new Error('Gemini 文件上传失败（空文件）')
+  return { uri: file.uri, name: file.name, state: file.state, mimeType: file.mimeType }
 }
 
 // Delete a File API file. The File API has a 20 GiB/project storage cap and uploaded files linger
@@ -438,9 +454,30 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(bin)
 }
 
+// Turn an uploaded File API record into a content Part, waiting for it to be ACTIVE first. Not-ready
+// (still PROCESSING/FAILED) → throw PerceptionFileNotReady carrying the handle so a retry resumes it.
+async function fileDataPart(uploaded: FileRecord, mimeType: string): Promise<{ part: Part; fileName?: string }> {
+  const f = uploaded.state === 'ACTIVE' && uploaded.uri ? uploaded : await pollUntilReady(uploaded.name)
+  if (f.state === 'ACTIVE' && f.uri) return { part: { fileData: { mimeType: f.mimeType || mimeType, fileUri: f.uri } }, fileName: f.name }
+  // Only PROCESSING is worth resuming (it becomes ACTIVE given time) — preserve the handle for the
+  // retry. FAILED/unknown means the upload is unusable: a plain error, so no handle is kept and the
+  // next attempt re-uploads a fresh copy.
+  if (f.state === 'PROCESSING') throw new PerceptionFileNotReady(f.uri ?? '', f.name, `Gemini 文件未就绪（PROCESSING）`)
+  throw new Error(`Gemini 文件不可用（${f.state ?? 'unknown'}）`)
+}
+
 // Returns the content Part plus the File API `fileName` when the media was uploaded (undefined for
 // small inline media) so the caller can delete it after use and not leak into the storage cap.
-async function mediaPart(mediaUrl: string): Promise<{ part: Part; fileName?: string }> {
+// `resume` = a handle a prior attempt uploaded but couldn't wait out; poll IT (likely ACTIVE by now)
+// instead of re-uploading and restarting Gemini's ingest clock. If it's gone (expired), upload fresh.
+async function mediaPart(mediaUrl: string, resume?: { uri: string; name: string }): Promise<{ part: Part; fileName?: string }> {
+  if (resume?.name) {
+    const f = await pollUntilReady(resume.name)
+    if (f.state === 'ACTIVE' && f.uri) return { part: { fileData: { mimeType: f.mimeType || 'video/webm', fileUri: f.uri } }, fileName: f.name }
+    if (f.state === 'PROCESSING') throw new PerceptionFileNotReady(f.uri ?? resume.uri, f.name, `Gemini 文件未就绪（PROCESSING）`)
+    // GONE (expired/deleted) / FAILED / unknown → fall through and upload a fresh copy.
+  }
+
   const resp = await fetch(mediaUrl, { signal: AbortSignal.timeout(NET_TIMEOUT_MS) })
   if (!resp.ok || !resp.body) throw new Error(`无法获取视频（${resp.status}）`)
   const mimeType = resp.headers.get('content-type') || 'video/webm'
@@ -448,13 +485,11 @@ async function mediaPart(mediaUrl: string): Promise<{ part: Part; fileName?: str
 
   // Large files: stream straight into the File API without buffering in memory.
   if (declaredLen > INLINE_MAX_BYTES) {
-    const { uri, name } = await uploadFile(resp.body, declaredLen, mimeType)
-    return { part: { fileData: { mimeType, fileUri: uri } }, fileName: name }
+    return fileDataPart(await uploadFile(resp.body, declaredLen, mimeType), mimeType)
   }
   const bytes = new Uint8Array(await resp.arrayBuffer())
   if (bytes.byteLength > INLINE_MAX_BYTES) {
-    const { uri, name } = await uploadFile(bytes, bytes.byteLength, mimeType)
-    return { part: { fileData: { mimeType, fileUri: uri } }, fileName: name }
+    return fileDataPart(await uploadFile(bytes, bytes.byteLength, mimeType), mimeType)
   }
   return { part: { inlineData: { mimeType, data: toBase64(bytes) } } }
 }
@@ -481,7 +516,7 @@ export const geminiPerception: PerceptionProvider = {
   async perceive(input: PerceptionInput, modelId: string): Promise<PerceptionResult> {
     const media = input.videoUrl || input.audioUrl
     if (!media) throw new Error('没有可评阅的视频（请确认已配置 R2 并已上传）')
-    const { part, fileName } = await mediaPart(media)
+    const { part, fileName } = await mediaPart(media, input.resumeFile)
     const parts: Part[] = [{ text: buildPerceptionPrompt(input) }, part]
     try {
       const { data, usage } = await generate(modelId, parts, PERCEPTION_SCHEMA)

@@ -25,6 +25,8 @@ vi.mock('@/lib/repo/submissions', () => ({
   markFailed: vi.fn(async () => {}),
   revertToQueue: vi.fn(async () => {}),
   savePerception: vi.fn(async () => {}),
+  saveGeminiFile: vi.fn(async () => {}),
+  clearGeminiFile: vi.fn(async () => {}),
   applyGradeResult: vi.fn(async () => {}),
 }))
 // logAiCall is best-effort (swallows its own errors); leave it real — it no-ops on the fake prisma.
@@ -40,6 +42,7 @@ import { perceiveForGrading, judgeForGrading } from '@/lib/ai/grade'
 import { presignDownload, probeObject } from '@/lib/storage'
 import * as subRepo from '@/lib/repo/submissions'
 import { unavailable } from '@/lib/ai/errors'
+import { PerceptionFileNotReady } from '@/lib/ai/types'
 
 describe('decideReview', () => {
   it('flags anti-cheat violations for review regardless of confidence', () => {
@@ -112,6 +115,9 @@ const sub = (over: Partial<GradableSubmission> = {}): GradableSubmission => ({
   teacherScore: null,
   violations: null,
   perceptionJson: null,
+  geminiFileUri: null,
+  geminiFileName: null,
+  geminiFileAt: null,
   phase: { requireEyesClosed: false, sentences: [{ order: 1, text: 'Hi' }], freePractice: false },
   assignment: { requireEyesClosed: false, sentences: [{ order: 1, text: 'Hi' }] },
   ...over,
@@ -259,5 +265,42 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
     const res = await autoGradeSubmission(prisma, sub({ perceptionJson: 'not json{' }), opts)
     expect(res.ok).toBe(true)
     expect(perceiveForGrading).toHaveBeenCalledTimes(1) // corrupt cache ignored → re-perceived
+  })
+
+  // ── Gemini 文件句柄复用(慢摄取大视频) ───────────────────────────────────────
+  const resumeArg = () => (perceiveForGrading as Mock).mock.calls[0][0].resumeFile
+
+  it('reuses a FRESH preserved Gemini file handle: passes resumeFile into perceive', async () => {
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'ok' })
+    await autoGradeSubmission(prisma, sub({ geminiFileUri: 'files/u', geminiFileName: 'files/u', geminiFileAt: new Date() }), opts)
+    expect(resumeArg()).toEqual({ uri: 'files/u', name: 'files/u' })
+  })
+
+  it('ignores a STALE handle (older than the reuse window): no resumeFile → re-uploads', async () => {
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'ok' })
+    const old = new Date(Date.now() - 41 * 60 * 60 * 1000) // > 40h
+    await autoGradeSubmission(prisma, sub({ geminiFileUri: 'files/old', geminiFileName: 'files/old', geminiFileAt: old }), opts)
+    expect(resumeArg()).toBeUndefined()
+  })
+
+  it('on a not-ready file failure: preserves the handle for the next retry, then FAILS', async () => {
+    ;(perceiveForGrading as Mock).mockRejectedValueOnce(new PerceptionFileNotReady('files/x', 'files/x'))
+    const res = await autoGradeSubmission(prisma, sub(), opts)
+    expect(res).toEqual({ ok: false, error: 'Gemini 文件未就绪（PROCESSING）' })
+    expect(subRepo.saveGeminiFile).toHaveBeenCalledWith(prisma, 1, 'files/x', 'files/x')
+    expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
+  })
+
+  it('a generic (non file-not-ready) failure does NOT preserve a handle', async () => {
+    ;(perceiveForGrading as Mock).mockRejectedValueOnce(new Error('boom'))
+    await autoGradeSubmission(prisma, sub(), opts)
+    expect(subRepo.saveGeminiFile).not.toHaveBeenCalled()
+    expect(subRepo.markFailed).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears a preserved handle once perceive succeeds (the file was used + deleted)', async () => {
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'ok' })
+    await autoGradeSubmission(prisma, sub({ geminiFileName: 'files/u', geminiFileUri: 'files/u', geminiFileAt: new Date() }), opts)
+    expect(subRepo.clearGeminiFile).toHaveBeenCalledWith(prisma, 1)
   })
 })

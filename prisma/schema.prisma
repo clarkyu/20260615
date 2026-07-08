@@ -483,6 +483,14 @@ model Submission {
   // retry reuse it and skip the expensive re-perceive. Set on perceive success, cleared on a
   // finalized grade (aiResult then holds the full result).
   perceptionJson  String?
+  // Gemini File API handle from a perceive attempt whose upload succeeded but was still
+  // PROCESSING when the readiness poll (60s) gave up. A retry reuses this handle — polls the
+  // SAME (now-ACTIVE) file instead of re-uploading and restarting Gemini's ingest clock — so a
+  // slow-to-ingest large video eventually grades instead of dead-lettering. Set on a not-ready
+  // perceive failure, cleared on a finalized grade; geminiFileAt guards staleness (files expire ~48h).
+  geminiFileUri   String?
+  geminiFileName  String?
+  geminiFileAt    DateTime?
   aiScore         Float?
   confidence      Float?
   // Real token usage + cost of this grade (perception + judge), captured from the
