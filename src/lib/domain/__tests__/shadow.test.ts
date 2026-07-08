@@ -158,20 +158,24 @@ describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P
   it('reverts (for retry) instead of finalizing when one sentence fails to score', async () => {
     ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
     wirePerception('b') // sentence 2 fails
-    await gradeShadowSubmission({} as never, 1)
+    const err = await gradeShadowSubmission({} as never, 1)
     // the two that succeeded were persisted, but the overall grade was NOT finalized…
     expect(shadowRepo.setShadowTakeScore).toHaveBeenCalledTimes(2)
     expect(shadowRepo.applyShadowResult).not.toHaveBeenCalled()
     // …instead the submission is reverted so the durable job retries the missing take.
     expect(shadowRepo.revertToQueue).toHaveBeenCalledWith({}, 1, 'UPLOADED')
+    // …and the take's underlying failure reason is surfaced (durable job records it as lastError,
+    // so "audio healthy but won't grade" is diagnosable instead of a generic "did not complete").
+    expect(err).toBe('perceive 500')
   })
 
-  it('finalizes normally when every sentence scores', async () => {
+  it('finalizes normally when every sentence scores (no error surfaced)', async () => {
     ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
     wirePerception(null) // nothing fails
-    await gradeShadowSubmission({} as never, 1)
+    const err = await gradeShadowSubmission({} as never, 1)
     expect(shadowRepo.applyShadowResult).toHaveBeenCalledTimes(1)
     expect(shadowRepo.revertToQueue).not.toHaveBeenCalled()
+    expect(err).toBeUndefined()
   })
 
   it('books this run\'s real spend to the ledger EVEN when it reverts (was invisible before)', async () => {

@@ -75,7 +75,7 @@ export function summarizeShadow(
 // `onBatch` (the durable queue passes a job heartbeat) is awaited after each sentence
 // batch so a large, slow shadow grade keeps its job row fresh and isn't reclaimed +
 // double-run mid-flight.
-export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: number, onBatch?: () => Promise<unknown>): Promise<void> {
+export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: number, onBatch?: () => Promise<unknown>): Promise<string | undefined> {
   if (!storageConfigured()) return
   const submission = await submissionRepo.findGradableShadow(prisma, submissionId)
   if (!submission || submission.shadowTakes.length === 0) return
@@ -96,6 +96,10 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   if (claimed.count === 0) return
   // Grade on the assignment-owning teacher's own API key (BYOK); empty → platform key.
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
+  // 逐句失败的底层原因(首个 take 的报错):以前只 logError 进不了库,死信只留一句泛化的
+  // 「grading did not complete」——「音频完好却评不出」为何,无从查。这里捕获后由 durable job
+  // 写进 GradingJob.lastError,便于诊断(纯观测,不改评阅/revert 行为)。
+  let takeError: string | undefined
   await withAiKeys(keys, async () => {
   // Real usage summed across the takes graded IN THIS run (each take is one paid perception
   // call). Hoisted out of the try so the `finally` can book this run's ACTUAL spend to the
@@ -143,6 +147,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
           const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
           if (isUnavailable(msg)) { await revert(); return } // model not configured — leave for teacher
           hadFailure = true
+          if (!takeError) takeError = msg // 首个失败原因,末尾交给 durable job 落进 lastError
           logError('gradeShadowSubmission', 'take failed', res.reason, { submissionId })
         }
       }
@@ -179,7 +184,7 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
-    if (!isUnavailable(msg)) logError('gradeShadowSubmission', 'failed', err, { submissionId })
+    if (!isUnavailable(msg)) { if (!takeError) takeError = msg; logError('gradeShadowSubmission', 'failed', err, { submissionId }) }
     // Never mark FAILED — the teacher can still review the per-sentence takes.
     await revert()
   } finally {
@@ -195,4 +200,5 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     }
   }
   })
+  return takeError
 }
