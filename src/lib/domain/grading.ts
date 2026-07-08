@@ -78,6 +78,38 @@ export function hasAntiCheatViolation(violations: string | null | undefined): bo
   return countViolations(violations) > 0
 }
 
+// 把一段自由文本(本人写作环节提交)切成参照句子——供下游口语环节逐句比对/反馈。先按换行、
+// 再按句末标点(中英)后的空白切;去空白、丢空句;保序编号。无标点的单行整段作一句。
+export function splitReferenceText(text: string): { order: number; text: string }[] {
+  return text
+    .split(/\n+|(?<=[.!?。！？])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((t, i) => ({ order: i + 1, text: t }))
+}
+
+// 合规加减分的单位步长(clark 期末 rubric = ±10)。集中一处便于将来调。
+export const COMPLIANCE_STEP = 10
+
+// 背诵检测合规 ±10(仅 complianceScoring 环节开):规范闭眼 +10 / 偷看·照读 -10(AI 感知);
+// 全程未离开录制 +10 / 中途离开·切屏 -10(提交违规)。返回增量 + 中文说明,由编排层在 judge
+// 学术分之上确定性地加减、再夹到 0~满分。眼睛信号缺失(undefined)时不动闭眼那一档——数据不足,
+// 不奖不罚(交老师复核)。
+export function complianceAdjustment(
+  obs: { eyesClosed?: boolean; readingSuspected?: boolean } | null | undefined,
+  violations: string | null | undefined,
+): { delta: number; notes: string[] } {
+  const notes: string[] = []
+  let delta = 0
+  const closed = obs?.eyesClosed === true && obs?.readingSuspected !== true
+  const peeking = obs?.eyesClosed === false || obs?.readingSuspected === true
+  if (closed) { delta += COMPLIANCE_STEP; notes.push(`规范闭眼 +${COMPLIANCE_STEP}`) }
+  else if (peeking) { delta -= COMPLIANCE_STEP; notes.push(`偷看/照读 -${COMPLIANCE_STEP}`) }
+  if (hasAntiCheatViolation(violations)) { delta -= COMPLIANCE_STEP; notes.push(`中途离开/切屏 -${COMPLIANCE_STEP}`) }
+  else { delta += COMPLIANCE_STEP; notes.push(`全程未离开录制 +${COMPLIANCE_STEP}`) }
+  return { delta, notes }
+}
+
 // The shape the orchestrator needs — structurally satisfied by a Prisma `submission`
 // loaded with its phase + assignment (each carrying its sentences). Reference
 // sentences + the eyes-closed flag come from the PHASE; the assignment is the
@@ -87,9 +119,19 @@ interface GradingContent {
   sentences: { order: number; text: string }[]
   freePractice?: boolean // only meaningful on the phase; absent on the assignment fallback
 }
+// Phase-only grading knobs (no assignment fallback): where the reference comes from
+// (per-student "prior-text" vs this phase's own sentences), this phase's order (to find
+// the preceding text phase), and the compliance-scoring opt-in. All optional so a legacy
+// phase / the assignment-fallback path structurally satisfies GradableSubmission.
+interface PhaseGradingExtras {
+  order?: number
+  referenceSource?: string | null
+  complianceScoring?: boolean
+}
 export interface GradableSubmission {
   id: number
   assignmentId: number
+  studentId: number
   status: string
   videoKey: string | null
   audioKey: string | null
@@ -104,7 +146,7 @@ export interface GradableSubmission {
   geminiFileUri: string | null
   geminiFileName: string | null
   geminiFileAt: Date | null
-  phase: GradingContent | null
+  phase: (GradingContent & PhaseGradingExtras) | null
   assignment: GradingContent
 }
 
@@ -195,7 +237,17 @@ export async function autoGradeSubmission(
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
 
   const content = gradingContent(submission)
-  const refs = content.sentences.map((s) => ({ order: s.order, text: s.text }))
+  const phase = submission.phase
+  let refs = content.sentences.map((s) => ({ order: s.order, text: s.text }))
+  // 约定 a·参照本人文本:下游口语环节(朗读/背诵检测)按该生前置写作环节(环节2)提交的文本逐句评分,
+  // 而非全班统一参照。学生没交前置文本 → 回退到本环节自身 sentences(不至于空评)。
+  if (phase?.referenceSource === 'prior-text') {
+    const priorText = await submissionRepo.findPriorText(prisma, submission.assignmentId, submission.studentId, phase.order ?? 0)
+    const own = priorText ? splitReferenceText(priorText) : []
+    if (own.length) refs = own
+  }
+  // B:评分读该生在选题环节选定的主题,喂给判分让评语有针对性(按所选主题批阅)。
+  const theme = (await submissionRepo.findChosenTheme(prisma, submission.assignmentId, submission.studentId)) ?? undefined
   // Reuse a perception cached by a prior attempt (perceived OK but failed at the judge stage) so
   // the retry skips the expensive Gemini re-call. Guard the parse — a corrupt cache re-perceives.
   let perceptionModel = opts.perceptionModel
@@ -239,14 +291,26 @@ export async function autoGradeSubmission(
 
     // 2) Judge — the cheap stage. If it fails (e.g. judge provider out of balance), the cached
     //    perception above stays on the row and the durable-queue retry reuses it for free.
+    const maxScore = opts.maxScore ?? DEFAULT_MAX_SCORE
     const { judgeModel, judge } = await withAiKeys(keys, () => judgeForGrading(perception!, {
       judgeModelId: opts.judgeModel,
       referenceSentences: refs,
       rubric: opts.rubric,
-      maxScore: opts.maxScore ?? DEFAULT_MAX_SCORE,
+      maxScore,
       recitedText: submission.recitedText ?? undefined,
+      theme,
     }))
-    const result = { perceptionModel, judgeModel, perception, judge }
+    // 合规加减分(仅 complianceScoring 环节):judge 出学术分后,代码确定性地按闭眼/偷看(感知)与
+    // 离开/切屏(违规)±10,再夹到 0~满分——LLM 不可靠的算术不参与,评语里说明加减明细。
+    const compliance = phase?.complianceScoring
+      ? complianceAdjustment(perception.observations, submission.violations)
+      : null
+    const baseScore = judge.score
+    const aiScore = compliance ? Math.max(0, Math.min(maxScore, baseScore + compliance.delta)) : baseScore
+    const feedback = compliance
+      ? `${judge.feedback}\n\n【合规加减分】${compliance.notes.join('；')}（基础分 ${baseScore} → 最终 ${aiScore}）`
+      : judge.feedback
+    const result = { perceptionModel, judgeModel, perception, judge, ...(compliance ? { compliance } : {}) }
 
     const decision = decideReview({
       confidence: judge.confidence,
@@ -276,10 +340,10 @@ export async function autoGradeSubmission(
       judgeModel,
       transcript: perception.transcript,
       aiResult: JSON.stringify(result),
-      aiScore: judge.score,
+      aiScore,
       // A teacher's earlier manual score always wins over the fresh AI score.
-      finalScore: submission.teacherScore ?? judge.score,
-      feedback: judge.feedback,
+      finalScore: submission.teacherScore ?? aiScore,
+      feedback,
       gradedById: opts.graderUserId ?? null,
       inputTokens: hasUsage ? inputTokens : null,
       outputTokens: hasUsage ? outputTokens : null,
@@ -331,7 +395,9 @@ export async function autoGradeById(prisma: PrismaClient, submissionId: number):
   // prior run finished) — don't re-grade and clobber it; let the job settle.
   if (submission.status === 'GRADED') return null
   if (!submission.videoKey && !submission.audioKey) return null
-  if ((submission.phase ?? submission.assignment).sentences.length === 0) return null
+  // 无参照句子通常意味着「没什么可评」→ 结清。但「参照本人文本」环节本就没有 phase 级句子
+  // (参照按学生解析自其环节2 文本),不能据此跳过。
+  if ((submission.phase ?? submission.assignment).sentences.length === 0 && submission.phase?.referenceSource !== 'prior-text') return null
   // Model/rubric resolution: the PHASE's own config wins (按环节批阅配置), then the
   // assignment-level pin, then the teacher's own default, then the platform default.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)

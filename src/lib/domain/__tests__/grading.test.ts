@@ -28,6 +28,8 @@ vi.mock('@/lib/repo/submissions', () => ({
   saveGeminiFile: vi.fn(async () => {}),
   clearGeminiFile: vi.fn(async () => {}),
   applyGradeResult: vi.fn(async () => {}),
+  findChosenTheme: vi.fn(async () => null),
+  findPriorText: vi.fn(async () => null),
 }))
 // logAiCall is best-effort (swallows its own errors); leave it real — it no-ops on the fake prisma.
 
@@ -35,6 +37,9 @@ import {
   autoGradeSubmission,
   decideReview,
   hasAntiCheatViolation,
+  splitReferenceText,
+  complianceAdjustment,
+  COMPLIANCE_STEP,
   REVIEW_CONFIDENCE_THRESHOLD,
   type GradableSubmission,
 } from '@/lib/domain/grading'
@@ -108,6 +113,7 @@ const opts = { perceptionModel: 'pm', judgeModel: 'jm', rubric: 'r' }
 const sub = (over: Partial<GradableSubmission> = {}): GradableSubmission => ({
   id: 1,
   assignmentId: 10,
+  studentId: 7,
   status: 'UPLOADED',
   videoKey: 'vid',
   audioKey: null,
@@ -302,5 +308,101 @@ describe('autoGradeSubmission — orchestration + state machine', () => {
     mockJudge({ score: 80, confidence: 0.9, feedback: 'ok' })
     await autoGradeSubmission(prisma, sub({ geminiFileName: 'files/u', geminiFileUri: 'files/u', geminiFileAt: new Date() }), opts)
     expect(subRepo.clearGeminiFile).toHaveBeenCalledWith(prisma, 1)
+  })
+})
+
+// ── 评分个性化(PR-1):选题主题(B)/参照本人文本(约定a)/背诵检测合规±10 ────────────
+describe('splitReferenceText', () => {
+  it('splits on sentence-final punctuation + newlines, trims, numbers in order', () => {
+    expect(splitReferenceText('Hello world. How are you?\nI am fine.')).toEqual([
+      { order: 1, text: 'Hello world.' },
+      { order: 2, text: 'How are you?' },
+      { order: 3, text: 'I am fine.' },
+    ])
+  })
+  it('keeps a punctuation-less single line as one sentence', () => {
+    expect(splitReferenceText('  just one line  ')).toEqual([{ order: 1, text: 'just one line' }])
+  })
+  it('drops empty fragments from repeated separators', () => {
+    expect(splitReferenceText('A.\n\n\nB.')).toEqual([{ order: 1, text: 'A.' }, { order: 2, text: 'B.' }])
+  })
+})
+
+describe('complianceAdjustment', () => {
+  it('rewards compliant eyes-closed + a clean recording (+2×step)', () => {
+    expect(complianceAdjustment({ eyesClosed: true }, null).delta).toBe(2 * COMPLIANCE_STEP)
+  })
+  it('penalizes peeking / reading-suspected + a violation (−2×step)', () => {
+    expect(complianceAdjustment({ eyesClosed: false }, '["LEAVE"]').delta).toBe(-2 * COMPLIANCE_STEP)
+    expect(complianceAdjustment({ readingSuspected: true }, '["TAB"]').delta).toBe(-2 * COMPLIANCE_STEP)
+  })
+  it('leaves the eyes axis untouched when the signal is unknown (data-insufficient)', () => {
+    expect(complianceAdjustment({}, null).delta).toBe(COMPLIANCE_STEP) // only the clean-recording bonus
+    expect(complianceAdjustment(undefined, '["LEAVE"]').delta).toBe(-COMPLIANCE_STEP)
+  })
+})
+
+describe('autoGradeSubmission — 评分个性化(主题 / 本人文本 / 合规)', () => {
+  beforeEach(() => { vi.clearAllMocks(); mockPerceive() })
+  const judgeReq = () => (judgeForGrading as Mock).mock.calls[0][1]
+  const perceiveReq = () => (perceiveForGrading as Mock).mock.calls[0][0]
+  const withObs = (obs: Record<string, unknown>) =>
+    (perceiveForGrading as Mock).mockResolvedValue({ perceptionModel: 'pm', perception: { transcript: 'hi', perSentence: [], observations: obs } })
+  const compliancePhase = () => ({ requireEyesClosed: true, sentences: [{ order: 1, text: 'Hi' }], freePractice: false, complianceScoring: true })
+
+  it('B: feeds the student\'s chosen theme into the judge', async () => {
+    ;(subRepo.findChosenTheme as Mock).mockResolvedValueOnce('题目二：《大学英语》课程学习收获')
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'ok' })
+    await autoGradeSubmission(prisma, sub(), opts)
+    expect(judgeReq().theme).toBe('题目二：《大学英语》课程学习收获')
+  })
+
+  it('约定a: a prior-text phase grades against the student\'s OWN preceding text (perceive + judge)', async () => {
+    ;(subRepo.findPriorText as Mock).mockResolvedValueOnce('Sentence one. Sentence two.')
+    mockJudge({ score: 80, confidence: 0.9, feedback: 'ok' })
+    const s = sub({ phase: { requireEyesClosed: true, sentences: [{ order: 1, text: '占位' }], freePractice: false, order: 3, referenceSource: 'prior-text' } })
+    await autoGradeSubmission(prisma, s, opts)
+    expect(subRepo.findPriorText).toHaveBeenCalledWith(prisma, 10, 7, 3)
+    const expected = [{ order: 1, text: 'Sentence one.' }, { order: 2, text: 'Sentence two.' }]
+    expect(judgeReq().referenceSentences).toEqual(expected)
+    expect(perceiveReq().referenceSentences).toEqual(expected) // fresh perception uses it too
+  })
+
+  it('约定a: falls back to the phase\'s own sentences when the student has no prior text', async () => {
+    ;(subRepo.findPriorText as Mock).mockResolvedValueOnce(null)
+    mockJudge({ score: 70, confidence: 0.9, feedback: 'ok' })
+    const s = sub({ phase: { requireEyesClosed: true, sentences: [{ order: 1, text: 'Fallback' }], freePractice: false, order: 3, referenceSource: 'prior-text' } })
+    await autoGradeSubmission(prisma, s, opts)
+    expect(judgeReq().referenceSentences).toEqual([{ order: 1, text: 'Fallback' }])
+  })
+
+  it('合规: eyes-closed + clean recording lifts the base score by +2×step', async () => {
+    withObs({ eyesClosed: true })
+    mockJudge({ score: 70, confidence: 0.9, feedback: '背得不错' })
+    await autoGradeSubmission(prisma, sub({ violations: null, phase: compliancePhase() }), opts)
+    const g = gradeData()
+    expect(g.aiScore).toBe(90) // 70 + 10(闭眼) + 10(未离开)
+    expect(g.feedback).toContain('合规加减分')
+  })
+
+  it('合规: peeking + a tab-switch violation drops the base score by −2×step', async () => {
+    withObs({ eyesClosed: false })
+    mockJudge({ score: 50, confidence: 0.9, feedback: '照读了' })
+    await autoGradeSubmission(prisma, sub({ violations: '["TAB_SWITCH"]', phase: compliancePhase() }), opts)
+    expect(gradeData().aiScore).toBe(30) // 50 − 10 − 10
+  })
+
+  it('合规: the adjusted score is clamped to 0..maxScore', async () => {
+    withObs({ eyesClosed: true })
+    mockJudge({ score: 95, confidence: 0.9, feedback: 'ok' })
+    await autoGradeSubmission(prisma, sub({ violations: null, phase: compliancePhase() }), opts)
+    expect(gradeData().aiScore).toBe(100) // 95 + 20 → clamped
+  })
+
+  it('non-compliance phases leave the score + feedback untouched (legacy behaviour)', async () => {
+    withObs({ eyesClosed: true })
+    mockJudge({ score: 70, confidence: 0.9, feedback: 'ok' })
+    await autoGradeSubmission(prisma, sub(), opts) // default phase: no complianceScoring
+    expect(gradeData()).toMatchObject({ aiScore: 70, feedback: 'ok' })
   })
 })

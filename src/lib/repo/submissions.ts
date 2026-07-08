@@ -51,6 +51,41 @@ export async function findChosenTopic(prisma: PrismaClient, assignmentId: number
   return sub?.recitedText?.trim() || null
 }
 
+// 读学生在某作业「选题」环节(theme 或 branch,不含纯民调 poll)里选定的主题——最新非草稿提交的
+// recitedText。没有选题环节 / 学生还没选 → null。评分时喂给判分,让评语按所选主题有针对性(B)。
+export async function findChosenTheme(prisma: PrismaClient, assignmentId: number, studentId: number): Promise<string | null> {
+  const selPhase = await prisma.phase.findFirst({
+    where: { assignmentId, selectionMode: { in: ['theme', 'branch'] } },
+    orderBy: { order: 'asc' },
+    select: { id: true },
+  })
+  if (!selPhase) return null
+  const sub = await prisma.submission.findFirst({
+    where: { phaseId: selPhase.id, studentId, status: { not: 'DRAFT' } },
+    orderBy: { attempt: 'desc' },
+    select: { recitedText: true },
+  })
+  return sub?.recitedText?.trim() || null
+}
+
+// 约定 a·参照本人文本:读学生在某作业「本环节之前、最近一个 text/writing 环节」的提交文本
+// (最新非草稿 recitedText)。用于下游口语环节(朗读/背诵检测)按各自写作环节交的文本逐句评分。
+// 没有前置写作环节 / 学生没交文本 → null(调用方回退到本环节自身的 sentences)。
+export async function findPriorText(prisma: PrismaClient, assignmentId: number, studentId: number, beforeOrder: number): Promise<string | null> {
+  const textPhase = await prisma.phase.findFirst({
+    where: { assignmentId, itemType: 'writing', order: { lt: beforeOrder } },
+    orderBy: { order: 'desc' },
+    select: { id: true },
+  })
+  if (!textPhase) return null
+  const sub = await prisma.submission.findFirst({
+    where: { phaseId: textPhase.id, studentId, status: { not: 'DRAFT' }, recitedText: { not: null } },
+    orderBy: { attempt: 'desc' },
+    select: { recitedText: true },
+  })
+  return sub?.recitedText?.trim() || null
+}
+
 // 归票:把一份提交的作答改写为某个选项的规范原文(投票分布按 recitedText 与选项精确
 // 匹配计票)。needsReview 一并清掉——投票环节不进复核列表,留着会变成幽灵计数。
 // voteSourceText 归票留痕(原始作答,undefined = 不动该列):有它即可无损撤销。

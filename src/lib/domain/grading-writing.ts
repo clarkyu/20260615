@@ -39,6 +39,7 @@ interface WritingContent {
 export interface WritingGradable {
   id: number
   assignmentId: number
+  studentId: number
   status: string
   recitedText: string | null
   teacherScore: number | null
@@ -75,6 +76,9 @@ export async function autoGradeWriting(
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
 
+  // B:评分读该生在选题环节选定的主题,喂给写作判分让评语按所选主题批阅是否切题(针对性)。
+  const theme = (await submissionRepo.findChosenTheme(prisma, submission.assignmentId, submission.studentId)) ?? undefined
+
   try {
     const result = await withAiKeys(keys, () => gradeWriting({
       judgeModelId: opts.judgeModel,
@@ -83,6 +87,7 @@ export async function autoGradeWriting(
       studentText: text,
       instructions: opts.instructions,
       referenceSentences: opts.referenceSentences,
+      theme,
     }))
 
     const decision = decideReview({

@@ -12,6 +12,7 @@ const { gradeWriting, repo } = vi.hoisted(() => ({
     revertToQueue: vi.fn(),
     applyGradeResult: vi.fn(),
     findGradable: vi.fn(),
+    findChosenTheme: vi.fn(async () => null),
   },
 }))
 vi.mock('@/lib/ai/grade', () => ({ gradeWriting }))
@@ -29,6 +30,7 @@ const prisma = {} as never
 const sub = (over: Record<string, unknown> = {}) => ({
   id: 5,
   assignmentId: 9,
+  studentId: 3,
   status: 'UPLOADED',
   recitedText: 'My essay.',
   teacherScore: null,
