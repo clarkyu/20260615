@@ -124,17 +124,19 @@ export async function requeueShadowGrading(prisma: PrismaClient, schoolId: numbe
   return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
 }
 
-// ── 上传坏死自动归档(降老师负担) ────────────────────────────────────────────────
+// ── 上传坏死 / 内容损坏 自动归档(降老师负担) ──────────────────────────────────────
 //
-// 一批提交上传坏死(0 字节键空挂):整段媒体或逐句音频对象缺失(404)或空(416),评阅只会反复
-// 失败进死信,却没有任何可评内容,重跑也是死循环。这类不该扔给老师人工——本函数按 school+title
-// 圈定死信提交(GradingJob.status='FAILED'),逐个探测其媒体,确认「无内容可评」(所有必需媒体皆
-// 空/缺)的归档为缺交(MISSING)并删掉死信任务:随即落出看板的「失败/待批/已交」各计数(MISSING
-// 全 codebase 当未提交处理),老师零操作。
+// 两类「有提交、却没有可评内容」的卡住/死信,重跑都是死循环,不该扔给老师人工:
+//   ① 上传坏死:整段媒体或逐句音频对象缺失(404)/空(416,0 字节键空挂);
+//   ② 内容损坏:对象在、有字节,但视频损坏、Gemini 无法解码(评阅 lastError 明确含 corrupt)——
+//      探针只看「存在+非空」测不出,得靠评阅报错识别。
+// 本函数按 school+title 圈定卡住/失败的提交,逐个探测媒体 + 看评阅报错,确认无可评内容的归档为缺交
+// (MISSING)并删死信任务:随即落出看板的「失败/待批/已交」各计数(MISSING 全 codebase 当未提交处理),
+// 老师零操作。
 //
-// 保守判定:任一媒体探测为 'ok'(健康)——有可评内容,不碰(交给重评);夹杂 'unknown'(网络抖/5xx)
-// ——判不准,不碰;写作类(有文本、非媒体缺失)跳过。只归档铁证「全空/全缺」的。默认 dry-run 零
-// 写入,apply 才执行;幂等(已 MISSING 的下次不再扫)。cap 60/次,more=true 表示还有,续跑即可。
+// 保守判定:媒体探针有一个 'ok' 且评阅报错非「损坏」——有可评内容,不碰(交给重评);夹杂 'unknown'
+// (网络抖/5xx)判不准,不碰;写作类(有文本、非媒体)跳过。默认 dry-run 零写入,apply 才执行;
+// 幂等(已 MISSING 的下次不再扫)。cap 60/次,more=true 表示还有,续跑即可。
 async function probeAll(keys: string[], probe: (key: string) => Promise<ObjectHealth>, concurrency = 8): Promise<ObjectHealth[]> {
   const out: ObjectHealth[] = []
   for (let i = 0; i < keys.length; i += concurrency) {
@@ -143,13 +145,22 @@ async function probeAll(keys: string[], probe: (key: string) => Promise<ObjectHe
   return out
 }
 
+// Gemini 明确判定「视频损坏/无法解码」的签名:对象在、有字节,但内容不可用——AI 与人工都评不了,
+// 与「空/缺」同处理。窄匹配 'corrupt'(Gemini 报错原文如 "The video is corrupt or ..."),避免误伤
+// 瞬时错误(限流/网络)——那些该重试,不该归档。
+function isUngradeableContentError(lastError: string | null | undefined): boolean {
+  return !!lastError && lastError.toLowerCase().includes('corrupt')
+}
+
 export type ResolveMissingReport =
   | {
       ok: true
       applied: boolean
       scanned: number
       more: boolean
-      missing: number // 归档为缺交的条数
+      missing: number // 归档为缺交的总条数(空/缺 + 损坏)
+      emptyContent: number // 对象空/缺(上传坏死)
+      corruptContent: number // 对象在但内容损坏(Gemini 解不了)
       byKind: Record<string, number>
       skippedHealthy: number // 有健康媒体,留给重评
       skippedUnknown: number // 探测判不准(网络抖/无键),保守不碰
@@ -169,41 +180,54 @@ export async function resolveMissingMedia(
   const rows = await submissions.listStuckGradingTargets(prisma, schoolId, title, LIMIT)
   if (rows.length === 0) return { ok: false, error: 'no stuck/failed grading submissions for this school+title' }
 
-  const missingIds: number[] = []
+  const emptyIds: number[] = []   // 对象空/缺(上传坏死)
+  const corruptIds: number[] = [] // 对象在但内容损坏(Gemini 解不了)
   const byKind: Record<string, number> = {}
+  const bump = (kind: string) => { byKind[kind] = (byKind[kind] ?? 0) + 1 }
   let skippedHealthy = 0
   let skippedUnknown = 0
   let skippedWriting = 0
   for (const row of rows) {
     const kind = row.gradingJob?.kind ?? 'submission'
-    if (kind === 'writing') { skippedWriting++; continue } // 有文本,不是媒体缺失
+    if (kind === 'writing') { skippedWriting++; continue } // 有文本,不是媒体缺失/损坏
+    const corruptErr = isUngradeableContentError(row.gradingJob?.lastError)
     const keys = kind === 'shadow'
       ? row.shadowTakes.map((t) => t.audioKey)
       : [row.videoKey, row.audioKey].filter((k): k is string => !!k)
-    if (keys.length === 0) { skippedUnknown++; continue } // 没有键可探,判不准
+    if (keys.length === 0) {
+      // 没有键可探:评阅报「损坏」也算无可评内容;否则判不准,不碰。
+      if (corruptErr) { corruptIds.push(row.id); bump(kind) } else skippedUnknown++
+      continue
+    }
     const healths = await probeAll(keys, probe)
-    if (healths.some((h) => h === 'ok')) { skippedHealthy++; continue } // 有可评内容,别归档
     if (healths.every((h) => h === 'missing' || h === 'empty')) {
-      missingIds.push(row.id)
-      byKind[kind] = (byKind[kind] ?? 0) + 1
+      emptyIds.push(row.id); bump(kind) // 全空/全缺:上传坏死
+    } else if (corruptErr) {
+      corruptIds.push(row.id); bump(kind) // 对象在但内容损坏(Gemini 解不了)
+    } else if (healths.some((h) => h === 'ok')) {
+      skippedHealthy++ // 有可评内容,别归档
     } else {
       skippedUnknown++ // 夹杂 'unknown'——保守不碰,交给下次或重评
     }
   }
 
+  const allIds = [...emptyIds, ...corruptIds]
   const base = {
     scanned: rows.length,
     more: rows.length === LIMIT,
-    missing: missingIds.length,
+    missing: allIds.length,
+    emptyContent: emptyIds.length,
+    corruptContent: corruptIds.length,
     byKind,
     skippedHealthy,
     skippedUnknown,
     skippedWriting,
-    sampleIds: missingIds.slice(0, 20),
+    sampleIds: allIds.slice(0, 20),
   }
-  if (!apply || missingIds.length === 0) return { ok: true, applied: false, ...base }
+  if (!apply || allIds.length === 0) return { ok: true, applied: false, ...base }
 
-  await submissions.markSubmissionsMissing(prisma, missingIds, '录音/录像未成功上传（对象缺失或为空），系统已归档为缺交，无需老师处理。')
-  await deleteJobsForSubmissions(prisma, missingIds)
+  if (emptyIds.length > 0) await submissions.markSubmissionsMissing(prisma, emptyIds, '录音/录像未成功上传（对象缺失或为空），系统已归档为缺交，无需老师处理。')
+  if (corruptIds.length > 0) await submissions.markSubmissionsMissing(prisma, corruptIds, '视频/录像文件损坏、无法解码评阅，系统已归档为缺交，无需老师处理。')
+  await deleteJobsForSubmissions(prisma, allIds)
   return { ok: true, applied: true, ...base }
 }

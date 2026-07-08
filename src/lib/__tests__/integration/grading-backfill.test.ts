@@ -236,8 +236,8 @@ describe('resolveMissingMedia (上传坏死自动归档)', () => {
   afterEach(async () => { await db?.cleanup() })
 
   const probe = (table: Record<string, ObjectHealth>) => async (key: string) => table[key] ?? 'missing'
-  const stuckJob = (p: PrismaClient, submissionId: number, kind: 'submission' | 'shadow' | 'writing', status: 'FAILED' | 'PENDING' | 'PROCESSING' = 'FAILED', attempts = 4) =>
-    p.gradingJob.create({ data: { submissionId, kind, status, attempts } })
+  const stuckJob = (p: PrismaClient, submissionId: number, kind: 'submission' | 'shadow' | 'writing', status: 'FAILED' | 'PENDING' | 'PROCESSING' = 'FAILED', attempts = 4, lastError?: string) =>
+    p.gradingJob.create({ data: { submissionId, kind, status, attempts, lastError } })
 
   it('dry-run 报告不写:只归档确证「全空/全缺」的;死信+卡住(PENDING/PROCESSING)都扫,刚提交(attempts=0)/健康/判不准/写作不碰', async () => {
     const d = await seedSpeech(db.prisma)
@@ -292,6 +292,26 @@ describe('resolveMissingMedia (上传坏死自动归档)', () => {
     const r2 = await resolveMissingMedia(db.prisma, d.school.id, TITLE, true, probe(table))
     if (!r2.ok) throw new Error(r2.error)
     expect(r2.missing).toBe(0)
+  })
+
+  it('内容损坏(媒体健康、但评阅报 corrupt)也归档缺交,记进 corruptContent;健康且报错非损坏的留着重评', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03'].map(d.student))
+    const empty = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/empty' }); await stuckJob(db.prisma, empty.id, 'submission', 'FAILED', 4, 'grading did not complete')
+    const corrupt = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/corrupt' }); await stuckJob(db.prisma, corrupt.id, 'submission', 'FAILED', 4, 'Gemini 400: The video is corrupt or in an unsupported format')
+    const healthy = await d.sub(s[2].id, { status: 'FAILED', videoKey: 'v/ok2' }); await stuckJob(db.prisma, healthy.id, 'submission', 'FAILED', 4, 'grading did not complete')
+
+    // v/corrupt 探针 'ok'(对象在、有字节),但评阅明确报损坏 → 无内容可评,归档。
+    const table: Record<string, ObjectHealth> = { 'v/empty': 'empty', 'v/corrupt': 'ok', 'v/ok2': 'ok' }
+    const r = await resolveMissingMedia(db.prisma, d.school.id, TITLE, true, probe(table))
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, missing: 2, emptyContent: 1, corruptContent: 1, skippedHealthy: 1 })
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: empty.id } })).status).toBe('MISSING')
+    const c = await db.prisma.submission.findUniqueOrThrow({ where: { id: corrupt.id } })
+    expect(c.status).toBe('MISSING')
+    expect(c.feedback).toContain('损坏') // 损坏用专属留痕,区别于「未成功上传」
+    // 健康媒体 + 报错非损坏(可能是瞬时/其它)→ 不归档,留着重评。
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: healthy.id } })).status).toBe('FAILED')
   })
 
   it('无死信目标时报错(标题打错要响,不静默空跑)', async () => {

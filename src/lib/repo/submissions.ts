@@ -147,7 +147,7 @@ export function listStuckGradingTargets(prisma: PrismaClient, schoolId: number, 
       id: true,
       videoKey: true,
       audioKey: true,
-      gradingJob: { select: { kind: true } },
+      gradingJob: { select: { kind: true, lastError: true } },
       shadowTakes: { select: { audioKey: true } },
     },
   })
