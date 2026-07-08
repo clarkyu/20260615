@@ -126,15 +126,19 @@ export function listShadowGradingTargets(prisma: PrismaClient, schoolId: number,
   })
 }
 
-// 上传坏死归档目标:评阅任务已进死信(GradingJob.status='FAILED')的提交,按 school+title
-// 圈定,带上探测所需的媒体键(整段 video/audio + 逐句 ShadowTake 音频)与任务类别。
-// resolveMissingMedia 逐个探测,确认「无内容可评」(所有必需媒体皆空/缺)的才归档为缺交
-// ——健康的/判不准的一律不碰。已归档(MISSING)的排除,保证重跑幂等。cap 60/次,more 续跑。
-export function listDeadLetterGradingTargets(prisma: PrismaClient, schoolId: number, title: string, limit = 60) {
+// 上传坏死归档目标:评阅任务卡住/失败(GradingJob.status ∈ FAILED/PENDING/PROCESSING 且
+// attempts≥1——即「至少试评过一次仍没成」)的提交,按 school+title 圈定,带上探测所需的媒体键
+// (整段 video/audio + 逐句 ShadowTake 音频)与任务类别。resolveMissingMedia 逐个探测,确认
+// 「无内容可评」(所有必需媒体皆空/缺)的才归档为缺交——健康的/判不准的一律不碰。
+// 为何不只看 FAILED 死信:坏死的行会在 死信→重排(PENDING)→再评(PROCESSING)→再死信 之间循环,
+// 只盯 FAILED 会漏掉此刻恰好在 PENDING/PROCESSING 的那些(尤其逐句被重跑后卡在 PENDING)。
+// attempts≥1 守卫排除「刚提交、还没试评」的新行(它的媒体可能还在最终一致中,别误判)。
+// 已归档(MISSING)的排除,保证重跑幂等。cap 60/次,more 续跑。
+export function listStuckGradingTargets(prisma: PrismaClient, schoolId: number, title: string, limit = 60) {
   return prisma.submission.findMany({
     where: {
       status: { not: 'MISSING' },
-      gradingJob: { status: 'FAILED' },
+      gradingJob: { status: { in: ['FAILED', 'PENDING', 'PROCESSING'] }, attempts: { gte: 1 } },
       assignment: { title, offering: { schoolId } },
     },
     orderBy: { id: 'asc' },
