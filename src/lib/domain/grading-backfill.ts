@@ -124,6 +124,37 @@ export async function requeueShadowGrading(prisma: PrismaClient, schoolId: numbe
   return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
 }
 
+// ── 写作(writing)重评(清死信盲区补漏) ────────────────────────────────────────────
+//
+// backfillWritingGrading 只捞「从没入过队」的 writing 行(UPLOADED/FLAGGED 且无 AI 分),已入过队又
+// 死信/卡死的 writing 任务它一个都碰不到;requeueMediaGrading/requeueShadowGrading 又都只认媒体键。
+// 于是一批文本作答评阅失败进死信后,没有任何重评工具能捞它们回来。本函数按 school+title 圈定「有文本、
+// writing 评阅任务失败/卡死/未评」的提交,重置成 kind='writing' 入队(重跑=重置)。与另外两个重评
+// 同款约定:默认 dry-run 零写入,apply 才执行;幂等;评阅本身仍走队列既有围栏(GRADED 不覆盖、老师分优先)。
+export async function requeueWritingGrading(prisma: PrismaClient, schoolId: number, title: string, apply: boolean): Promise<RequeueReport> {
+  const ids: number[] = []
+  const byPhase = new Map<number, number>()
+  let after = 0
+  for (;;) {
+    const rows = await submissions.listWritingRequeueTargets(prisma, schoolId, title, after, 500)
+    for (const r of rows) {
+      ids.push(r.id)
+      const order = r.phase?.order ?? 0
+      byPhase.set(order, (byPhase.get(order) ?? 0) + 1)
+    }
+    if (rows.length < 500) break
+    after = rows[rows.length - 1].id
+  }
+  if (ids.length === 0) return { ok: false, error: 'no writing requeue targets for this school+title' }
+  const perPhaseOrder = [...byPhase.entries()].map(([phaseOrder, count]) => ({ phaseOrder, count })).sort((a, b) => a.phaseOrder - b.phaseOrder)
+
+  if (!apply) return { ok: true, applied: false, targets: ids.length, perPhaseOrder, jobsCreated: 0, jobsReset: 0 }
+
+  const { created, reset } = await enqueueGradingBulk(prisma, ids, 'writing')
+  await kickDrain()
+  return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
+}
+
 // ── 上传坏死 / 内容损坏 自动归档(降老师负担) ──────────────────────────────────────
 //
 // 两类「有提交、却没有可评内容」的卡住/死信,重跑都是死循环,不该扔给老师人工:

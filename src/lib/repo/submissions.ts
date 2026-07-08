@@ -126,6 +126,26 @@ export function listShadowGradingTargets(prisma: PrismaClient, schoolId: number,
   })
 }
 
+// 写作(writing)评阅重评目标:AI 文本评分任务失败/卡死(GradingJob.kind='writing' 且
+// status ∈ FAILED/PROCESSING/PENDING、attempts≥1——即「至少试评过一次仍没成」的死信/卡行)的
+// 提交,按 school+title 圈定,且必须有文本(recitedText 非空)才可评。backfillWritingGrading 只捞
+// 「从没入过队」的行(UPLOADED/FLAGGED 且无 AI 分),对已入队又死信的 writing 任务是瞎的——本函数
+// 专补这个盲区(与 requeue-shadow-grading 同定位)。attempts≥1 守卫排除刚提交还没试评的新行。
+// id 游标分页(与另外两个重评目标同款)。
+export function listWritingRequeueTargets(prisma: PrismaClient, schoolId: number, title: string, afterId: number, limit: number) {
+  return prisma.submission.findMany({
+    where: {
+      id: { gt: afterId },
+      NOT: [{ recitedText: null }, { recitedText: '' }], // 有文本才可评,空提交不碰
+      assignment: { title, offering: { schoolId } },
+      gradingJob: { kind: 'writing', status: { in: ['FAILED', 'PROCESSING', 'PENDING'] }, attempts: { gte: 1 } },
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, phase: { select: { order: true } } },
+  })
+}
+
 // 上传坏死归档目标:评阅任务卡住/失败(GradingJob.status ∈ FAILED/PENDING/PROCESSING 且
 // attempts≥1——即「至少试评过一次仍没成」)的提交,按 school+title 圈定,带上探测所需的媒体键
 // (整段 video/audio + 逐句 ShadowTake 音频)与任务类别。resolveMissingMedia 逐个探测,确认
