@@ -6,7 +6,7 @@ import { studentContext } from '@/lib/action-context'
 import { presignUpload, presignDownload, probeObject, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
-import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy, unhealthyShadowTakes } from '@/lib/domain/submit'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
@@ -205,6 +205,14 @@ export async function finishShadowing(phaseId: number) {
   if (!submission) return { error: t('err.subNotFound') }
   const sentenceCount = await assignmentRepo.countPhaseSentences(prisma, phaseId)
   if (sentenceCount === 0 || submission._count.shadowTakes < sentenceCount) return { error: t('err.shadowIncomplete') }
+
+  // 提交完整性门(同 finishSubmission,但逐句音频在 ShadowTake 里):每条 take 的对象逐个探测,
+  // 空(0 字节/416)或缺(404)→ 当场退回、指名让学生重录那一句,别让空挂键溜进队列反复到死信。
+  if (storageConfigured()) {
+    const takes = await submissionRepo.listShadowTakes(prisma, submission.id)
+    const bad = await unhealthyShadowTakes(takes, probeObject)
+    if (bad.length > 0) return { error: t('err.shadowUploadIncomplete', { n: bad.join('、') }) }
+  }
 
   const flipped = await submissionRepo.flipDraft(prisma, submission.id, 'UPLOADED')
   if (flipped.count > 0) {

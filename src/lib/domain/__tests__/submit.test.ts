@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveAttempt, missingRequiredPart, isPollOnly, requiredMediaUnhealthy } from '../submit'
+import { resolveAttempt, missingRequiredPart, isPollOnly, requiredMediaUnhealthy, unhealthyShadowTakes } from '../submit'
 
 // ── missingRequiredPart (pure) ───────────────────────────────────────────────
 
@@ -113,5 +113,33 @@ describe('requiredMediaUnhealthy — 提交完整性门(期末考核复盘)', ()
     // requireVideo=false:即便 videoKey 指向缺失对象也不探测(比如文本环节的历史遗留键)。
     expect(await requiredMediaUnhealthy({ requireVideo: false, requireAudio: false }, { videoKey: 'k/gone', audioKey: null }, probe({}))).toBe(false)
     expect(await requiredMediaUnhealthy({ requireVideo: true, requireAudio: false }, { videoKey: null, audioKey: null }, probe({}))).toBe(false)
+  })
+})
+
+describe('unhealthyShadowTakes — 逐句提交完整性门(shadow 音频在 ShadowTake 里)', () => {
+  const probe = (table: Record<string, 'ok' | 'empty' | 'missing' | 'unknown'>) => async (key: string) => table[key] ?? 'ok'
+  const takes = [
+    { order: 1, audioKey: 'k1' },
+    { order: 2, audioKey: 'k2' },
+    { order: 3, audioKey: 'k3' },
+  ]
+
+  it('全部健康 → 空数组(放行)', async () => {
+    expect(await unhealthyShadowTakes(takes, probe({ k1: 'ok', k2: 'ok', k3: 'ok' }))).toEqual([])
+  })
+
+  it('返回空/缺的句子 order(升序),unknown 放行不计', async () => {
+    // 第 2 句 0 字节(416→empty)、第 3 句缺失(404→missing)、第 1 句网络抖(unknown 放行)。
+    expect(await unhealthyShadowTakes(takes, probe({ k1: 'unknown', k2: 'empty', k3: 'missing' }))).toEqual([2, 3])
+  })
+
+  it('并发分批仍覆盖所有 take,结果按 order 升序(concurrency 小于总数)', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ order: i + 1, audioKey: `m${i + 1}` }))
+    const bad = await unhealthyShadowTakes(many, probe({ m3: 'empty', m9: 'missing' }), 4)
+    expect(bad).toEqual([3, 9])
+  })
+
+  it('空 take 列表 → 空数组', async () => {
+    expect(await unhealthyShadowTakes([], probe({}))).toEqual([])
   })
 })

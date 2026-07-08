@@ -119,3 +119,25 @@ export async function requiredMediaUnhealthy(
   }
   return false
 }
+
+// 逐句跟读(shadow)提交完整性门:逐句音频存在 ShadowTake 行里,不在 videoKey/audioKey,
+// 所以 requiredMediaUnhealthy 探不到——一条 0 字节/缺失的 take 照样能定稿,评阅时反复空/404
+// 到死信,且 shadow 从不标 FAILED,坏账在看板里隐形。提交前逐条探测:空(416)或缺(404)→
+// 收集该句 order,让学生指名重录那一句。与 requiredMediaUnhealthy 同策:'unknown'(网络抖/5xx)
+// 放行,偶发故障不卡提交(评前预检兜底)。分批并发探测(bounded)——一次逐句提交可能几十句,
+// 串行太慢、全并发又怕打爆 Workers 子请求上限。返回坏掉的句子 order(升序,空数组=全健康)。
+export async function unhealthyShadowTakes(
+  takes: { order: number; audioKey: string }[],
+  probe: (key: string) => Promise<'ok' | 'empty' | 'missing' | 'unknown'>,
+  concurrency = 8,
+): Promise<number[]> {
+  const bad: number[] = []
+  for (let i = 0; i < takes.length; i += concurrency) {
+    const batch = takes.slice(i, i + concurrency)
+    const healths = await Promise.all(batch.map((tk) => probe(tk.audioKey)))
+    batch.forEach((tk, j) => {
+      if (healths[j] === 'missing' || healths[j] === 'empty') bad.push(tk.order)
+    })
+  }
+  return bad.sort((a, b) => a - b)
+}

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { backfillWritingGrading, requeueMediaGrading, requeueShadowGrading } from '@/lib/domain/grading-backfill'
+import { backfillWritingGrading, requeueMediaGrading, requeueShadowGrading, resolveMissingMedia } from '@/lib/domain/grading-backfill'
 import { claimForProcessing } from '@/lib/repo/submissions'
 import type { PrismaClient } from '@prisma/client'
+import type { ObjectHealth } from '@/lib/storage'
 
 // 评阅补登(维护):写作类提交补建 writing 任务 + 纯投票环节清幽灵复核。
 // 关键约定:dry-run 零写入;只碰 UPLOADED/FLAGGED、无 AI 分、文本非空的写作行;
@@ -225,5 +226,72 @@ describe('claimForProcessing — 卡死回收(claim 陷阱修复)', () => {
     const failed = await d.sub(st.id, { status: 'FAILED', videoKey: 'k/x', needsReview: true })
     expect((await claimForProcessing(db.prisma, failed.id)).count).toBe(1) // FAILED 接受重评
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: failed.id } })).status).toBe('PROCESSING')
+  })
+})
+
+// ── 上传坏死自动归档缺交(降老师负担):无内容可评的死信不该扔给老师 ──────────────────
+describe('resolveMissingMedia (上传坏死自动归档)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  const probe = (table: Record<string, ObjectHealth>) => async (key: string) => table[key] ?? 'missing'
+  const failedJob = (p: PrismaClient, submissionId: number, kind: 'submission' | 'shadow' | 'writing', status: 'FAILED' | 'PENDING' = 'FAILED') =>
+    p.gradingJob.create({ data: { submissionId, kind, status, attempts: 4 } })
+
+  it('dry-run 报告不写:只归档确证「全空/全缺」的;健康/判不准/写作/非死信一律不碰', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03', '04', '05', '06', '07'].map(d.student))
+    const mediaGone = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/gone' }); await failedJob(db.prisma, mediaGone.id, 'submission')
+    const mediaEmpty = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/empty' }); await failedJob(db.prisma, mediaEmpty.id, 'submission')
+    const mediaOk = await d.sub(s[2].id, { status: 'FAILED', videoKey: 'v/ok' }); await failedJob(db.prisma, mediaOk.id, 'submission')
+    const mediaBlip = await d.sub(s[3].id, { status: 'FAILED', videoKey: 'v/blip' }); await failedJob(db.prisma, mediaBlip.id, 'submission')
+    const writingDead = await d.sub(s[4].id, { status: 'FAILED', recitedText: '有文本' }); await failedJob(db.prisma, writingDead.id, 'writing')
+    const notDead = await d.sub(s[5].id, { status: 'FAILED', videoKey: 'v/pending' }); await failedJob(db.prisma, notDead.id, 'submission', 'PENDING')
+    const shadowBad = await d.sub(s[6].id, { status: 'UPLOADED' }); await failedJob(db.prisma, shadowBad.id, 'shadow')
+    await db.prisma.shadowTake.create({ data: { submissionId: shadowBad.id, order: 1, audioKey: 'sk/b1' } })
+    await db.prisma.shadowTake.create({ data: { submissionId: shadowBad.id, order: 2, audioKey: 'sk/b2' } })
+
+    const table: Record<string, ObjectHealth> = { 'v/gone': 'missing', 'v/empty': 'empty', 'v/ok': 'ok', 'v/blip': 'unknown', 'sk/b1': 'empty', 'sk/b2': 'missing' }
+    const r = await resolveMissingMedia(db.prisma, d.school.id, TITLE, false, probe(table))
+    if (!r.ok) throw new Error(r.error)
+    // 非死信(PENDING 任务)的 notDead 不入扫;写作有文本不碰;健康/unknown 不碰。
+    expect(r).toMatchObject({ applied: false, scanned: 6, missing: 3, skippedHealthy: 1, skippedUnknown: 1, skippedWriting: 1 })
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: mediaGone.id } })).status).toBe('FAILED') // 零写入
+    expect(await db.prisma.gradingJob.count({ where: { status: 'FAILED' } })).toBe(6)
+  })
+
+  it('apply 归档为 MISSING + 删死信任务;健康的保留;幂等重跑 missing=0', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03'].map(d.student))
+    const gone = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/gone', needsReview: true }); await failedJob(db.prisma, gone.id, 'submission')
+    const ok = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/ok' }); await failedJob(db.prisma, ok.id, 'submission')
+    const shadowBad = await d.sub(s[2].id, { status: 'UPLOADED' }); await failedJob(db.prisma, shadowBad.id, 'shadow')
+    await db.prisma.shadowTake.create({ data: { submissionId: shadowBad.id, order: 1, audioKey: 'sk/b1' } })
+
+    const table: Record<string, ObjectHealth> = { 'v/gone': 'missing', 'v/ok': 'ok', 'sk/b1': 'empty' }
+    const r = await resolveMissingMedia(db.prisma, d.school.id, TITLE, true, probe(table))
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, missing: 2 })
+    for (const id of [gone.id, shadowBad.id]) {
+      const sub = await db.prisma.submission.findUniqueOrThrow({ where: { id } })
+      expect(sub.status).toBe('MISSING')
+      expect(sub.needsReview).toBe(false)
+      expect(sub.feedback).toContain('缺交')
+      expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: id } })).toBeNull() // 死信删掉
+    }
+    // 健康 media 保留:仍 FAILED,任务还在(留给重评)。
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: ok.id } })).status).toBe('FAILED')
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: ok.id } })).not.toBeNull()
+    // 幂等:已 MISSING 的排除,再跑只剩健康的 ok,归档 0。
+    const r2 = await resolveMissingMedia(db.prisma, d.school.id, TITLE, true, probe(table))
+    if (!r2.ok) throw new Error(r2.error)
+    expect(r2.missing).toBe(0)
+  })
+
+  it('无死信目标时报错(标题打错要响,不静默空跑)', async () => {
+    const d = await seedSpeech(db.prisma)
+    const r = await resolveMissingMedia(db.prisma, d.school.id, '不存在的标题', true, probe({}))
+    expect(r.ok).toBe(false)
   })
 })

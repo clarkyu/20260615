@@ -11,7 +11,8 @@
 
 import type { PrismaClient } from '@prisma/client'
 import * as submissions from '@/lib/repo/submissions'
-import { enqueueGradingBulk, kickDrain } from './jobs'
+import { probeObject, type ObjectHealth } from '@/lib/storage'
+import { enqueueGradingBulk, kickDrain, deleteJobsForSubmissions } from './jobs'
 
 export type BackfillReport =
   | {
@@ -121,4 +122,88 @@ export async function requeueShadowGrading(prisma: PrismaClient, schoolId: numbe
   const { created, reset } = await enqueueGradingBulk(prisma, ids, 'shadow')
   await kickDrain()
   return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
+}
+
+// ── 上传坏死自动归档(降老师负担) ────────────────────────────────────────────────
+//
+// 一批提交上传坏死(0 字节键空挂):整段媒体或逐句音频对象缺失(404)或空(416),评阅只会反复
+// 失败进死信,却没有任何可评内容,重跑也是死循环。这类不该扔给老师人工——本函数按 school+title
+// 圈定死信提交(GradingJob.status='FAILED'),逐个探测其媒体,确认「无内容可评」(所有必需媒体皆
+// 空/缺)的归档为缺交(MISSING)并删掉死信任务:随即落出看板的「失败/待批/已交」各计数(MISSING
+// 全 codebase 当未提交处理),老师零操作。
+//
+// 保守判定:任一媒体探测为 'ok'(健康)——有可评内容,不碰(交给重评);夹杂 'unknown'(网络抖/5xx)
+// ——判不准,不碰;写作类(有文本、非媒体缺失)跳过。只归档铁证「全空/全缺」的。默认 dry-run 零
+// 写入,apply 才执行;幂等(已 MISSING 的下次不再扫)。cap 60/次,more=true 表示还有,续跑即可。
+async function probeAll(keys: string[], probe: (key: string) => Promise<ObjectHealth>, concurrency = 8): Promise<ObjectHealth[]> {
+  const out: ObjectHealth[] = []
+  for (let i = 0; i < keys.length; i += concurrency) {
+    out.push(...(await Promise.all(keys.slice(i, i + concurrency).map(probe))))
+  }
+  return out
+}
+
+export type ResolveMissingReport =
+  | {
+      ok: true
+      applied: boolean
+      scanned: number
+      more: boolean
+      missing: number // 归档为缺交的条数
+      byKind: Record<string, number>
+      skippedHealthy: number // 有健康媒体,留给重评
+      skippedUnknown: number // 探测判不准(网络抖/无键),保守不碰
+      skippedWriting: number // 写作类:有文本,非媒体缺失
+      sampleIds: number[]
+    }
+  | { ok: false; error: string }
+
+export async function resolveMissingMedia(
+  prisma: PrismaClient,
+  schoolId: number,
+  title: string,
+  apply: boolean,
+  probe: (key: string) => Promise<ObjectHealth> = probeObject,
+): Promise<ResolveMissingReport> {
+  const LIMIT = 60
+  const rows = await submissions.listDeadLetterGradingTargets(prisma, schoolId, title, LIMIT)
+  if (rows.length === 0) return { ok: false, error: 'no dead-lettered submissions for this school+title' }
+
+  const missingIds: number[] = []
+  const byKind: Record<string, number> = {}
+  let skippedHealthy = 0
+  let skippedUnknown = 0
+  let skippedWriting = 0
+  for (const row of rows) {
+    const kind = row.gradingJob?.kind ?? 'submission'
+    if (kind === 'writing') { skippedWriting++; continue } // 有文本,不是媒体缺失
+    const keys = kind === 'shadow'
+      ? row.shadowTakes.map((t) => t.audioKey)
+      : [row.videoKey, row.audioKey].filter((k): k is string => !!k)
+    if (keys.length === 0) { skippedUnknown++; continue } // 没有键可探,判不准
+    const healths = await probeAll(keys, probe)
+    if (healths.some((h) => h === 'ok')) { skippedHealthy++; continue } // 有可评内容,别归档
+    if (healths.every((h) => h === 'missing' || h === 'empty')) {
+      missingIds.push(row.id)
+      byKind[kind] = (byKind[kind] ?? 0) + 1
+    } else {
+      skippedUnknown++ // 夹杂 'unknown'——保守不碰,交给下次或重评
+    }
+  }
+
+  const base = {
+    scanned: rows.length,
+    more: rows.length === LIMIT,
+    missing: missingIds.length,
+    byKind,
+    skippedHealthy,
+    skippedUnknown,
+    skippedWriting,
+    sampleIds: missingIds.slice(0, 20),
+  }
+  if (!apply || missingIds.length === 0) return { ok: true, applied: false, ...base }
+
+  await submissions.markSubmissionsMissing(prisma, missingIds, '录音/录像未成功上传（对象缺失或为空），系统已归档为缺交，无需老师处理。')
+  await deleteJobsForSubmissions(prisma, missingIds)
+  return { ok: true, applied: true, ...base }
 }

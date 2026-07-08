@@ -126,6 +126,29 @@ export function listShadowGradingTargets(prisma: PrismaClient, schoolId: number,
   })
 }
 
+// 上传坏死归档目标:评阅任务已进死信(GradingJob.status='FAILED')的提交,按 school+title
+// 圈定,带上探测所需的媒体键(整段 video/audio + 逐句 ShadowTake 音频)与任务类别。
+// resolveMissingMedia 逐个探测,确认「无内容可评」(所有必需媒体皆空/缺)的才归档为缺交
+// ——健康的/判不准的一律不碰。已归档(MISSING)的排除,保证重跑幂等。cap 60/次,more 续跑。
+export function listDeadLetterGradingTargets(prisma: PrismaClient, schoolId: number, title: string, limit = 60) {
+  return prisma.submission.findMany({
+    where: {
+      status: { not: 'MISSING' },
+      gradingJob: { status: 'FAILED' },
+      assignment: { title, offering: { schoolId } },
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: {
+      id: true,
+      videoKey: true,
+      audioKey: true,
+      gradingJob: { select: { kind: true } },
+      shadowTakes: { select: { audioKey: true } },
+    },
+  })
+}
+
 // 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是
 // 历史遗留,只虚增看板「待批」数。谓词必须钉死「无答案键」——带答案键的单选在答案键
 // 缺失/损坏时会**刻意**落 needsReview 转人工(actions/submissions 的客观判分回退),
@@ -338,6 +361,22 @@ export function createMissingMarkers(prisma: PrismaClient, params: { assignmentI
       gradedAt: params.at,
     })),
   })
+}
+
+// 把一批提交归档为缺交(MISSING,无分、不进复核)。上传坏死、无内容可评的提交归档后自动落出
+// 看板「已交/待批/失败」各计数(MISSING 全 codebase 当作未提交处理),老师零操作。feedback 留痕
+// 归档原因。分块写以避开 D1 绑定参数上限。ids 由调用方从已 scope 的查询取得。
+export async function markSubmissionsMissing(prisma: PrismaClient, ids: number[], feedback: string): Promise<number> {
+  const CHUNK = 40
+  let n = 0
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const r = await prisma.submission.updateMany({
+      where: { id: { in: ids.slice(i, i + CHUNK) } },
+      data: { status: 'MISSING', needsReview: false, feedback },
+    })
+    n += r.count
+  }
+  return n
 }
 
 // How many of a student's graded submissions are newer than they've seen — drives the
