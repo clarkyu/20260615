@@ -84,6 +84,43 @@ describe('real cascade + raw SQL behaviours', () => {
     expect(await get('done')).toMatchObject({ finalScore: null, needsReview: false })
   })
 
+  it('acceptAiForPhaseRows finalizes pending-review AI rows INCLUDING flagged, phase-scoped, never clobbering a teacher score', async () => {
+    const p = db.prisma
+    const school = await p.school.create({ data: { name: 'S', code: 'S' } })
+    const teacher = await p.user.create({ data: { role: 'TEACHER', schoolId: school.id, staffNo: 'T', passwordHash: 'x' } })
+    const course = await p.course.create({ data: { schoolId: school.id, name: 'C', code: 'C' } })
+    const cls = await p.classGroup.create({ data: { schoolId: school.id, name: 'K' } })
+    const offering = await p.courseOffering.create({ data: { schoolId: school.id, courseId: course.id, teacherId: teacher.id, classId: cls.id, year: 'Y', semester: '1' } })
+    const asg = await p.assignment.create({ data: { offeringId: offering.id, title: 'A' } })
+    const phase = await p.phase.create({ data: { assignmentId: asg.id, order: 4 } })
+    const other = await p.phase.create({ data: { assignmentId: asg.id, order: 3 } })
+
+    const mk = async (no: string, phaseId: number, s: { status: string; needsReview: boolean; aiScore: number | null; teacherScore: number | null }) => {
+      const stu = await p.user.create({ data: { role: 'STUDENT', schoolId: school.id, studentNo: no, passwordHash: 'x' } })
+      const sub = await p.submission.create({ data: { assignmentId: asg.id, phaseId, studentId: stu.id, attempt: 1, status: s.status as never, needsReview: s.needsReview, aiScore: s.aiScore, teacherScore: s.teacherScore } })
+      return sub.id
+    }
+    const ids = {
+      flagged: await mk('flagged', phase.id, { status: 'FLAGGED', needsReview: true, aiScore: 70, teacherScore: null }), // → finalized to 70 (the new behavior)
+      lowconf: await mk('lowconf', phase.id, { status: 'GRADED', needsReview: true, aiScore: 55, teacherScore: null }), // → finalized to 55
+      teacher: await mk('teacher', phase.id, { status: 'FLAGGED', needsReview: true, aiScore: 70, teacherScore: 88 }), // → keeps 88 (COALESCE)
+      noai: await mk('noai', phase.id, { status: 'FLAGGED', needsReview: true, aiScore: null, teacherScore: null }), // → untouched (no AI score)
+      done: await mk('done', phase.id, { status: 'GRADED', needsReview: false, aiScore: 60, teacherScore: null }), // → untouched (already reviewed)
+      otherPhase: await mk('otherPhase', other.id, { status: 'FLAGGED', needsReview: true, aiScore: 42, teacherScore: null }), // → untouched (different phase)
+    }
+
+    const affected = await submissionRepo.acceptAiForPhaseRows(p, [phase.id], new Date())
+    expect(affected).toBe(3) // flagged + lowconf + teacher
+
+    const get = async (k: keyof typeof ids) => p.submission.findUnique({ where: { id: ids[k] } })
+    expect(await get('flagged')).toMatchObject({ finalScore: 70, status: 'GRADED', needsReview: false })
+    expect(await get('lowconf')).toMatchObject({ finalScore: 55, status: 'GRADED', needsReview: false })
+    expect(await get('teacher')).toMatchObject({ finalScore: 88, status: 'GRADED', needsReview: false }) // teacher score wins
+    expect(await get('noai')).toMatchObject({ finalScore: null, status: 'FLAGGED', needsReview: true })
+    expect(await get('done')).toMatchObject({ finalScore: null, status: 'GRADED', needsReview: false })
+    expect(await get('otherPhase')).toMatchObject({ finalScore: null, status: 'FLAGGED', needsReview: true }) // phase scope holds
+  })
+
   it('order-uniqueness: rejects a duplicate (chunkSetId, order) chunk (audit P2-3)', async () => {
     const p = db.prisma
     const set = await p.chunkSet.create({ data: { name: 'S' } })

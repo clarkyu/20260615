@@ -225,6 +225,41 @@ export async function regradePhase(prisma: PrismaClient, schoolId: number, title
   return { ok: true, applied: true, total, scanned: rows.length, more: total > rows.length, restored, requeued: created + reset, kind, sampleIds }
 }
 
+// ── 采纳 AI 评阅结果定稿一个环节(含 FLAGGED) ─────────────────────────────────────
+//
+// 把某环节「待复核(needsReview,含 FLAGGED 防作弊 + 低置信)且有 AI 分」的提交一次性定稿为已评,
+// finalScore 取 COALESCE(老师分, AI 分)。clark 期末环节4 决定:录制违规的合规已按"只奖不罚"并入
+// AI 分(#425)——254 份 FLAGGED 里 253 只是"录制窗口失焦"(移动端极易误触)、仅 13 份真偷看且已 −10,
+// 不再需要逐份人工复核,老师复核与评分直接采纳 AI 评阅结果。与其它维护端点同款:schoolId+title+order
+// 必填钉租户;默认 dry-run 报盘子(总数 + FLAGGED 占比),apply 才写;幂等(定稿后 needsReview=0 移出
+// 谓词,重跑数 0);无待复核目标即拒(objective 环节无 AI 分,自然命中此拒)。
+// 可退:这些行的重评快照仍在,restore-scores order=N 一键还原到重评前(会同时撤销本次定稿)。
+export type AcceptAiReport =
+  | {
+      ok: true
+      applied: boolean
+      targets: number // 待复核且有 AI 分的总数(dry-run 即见)
+      flagged: number // 其中 FLAGGED(防作弊)占比
+      lowConfidence: number // 其中低置信 GRADED(= targets − flagged)
+      finalized: number // apply 实际定稿的行数;dry-run 为 0
+    }
+  | { ok: false; error: string }
+
+export async function acceptAiForPhase(prisma: PrismaClient, schoolId: number, title: string, order: number, apply: boolean): Promise<AcceptAiReport> {
+  const phases = await assignments.findPhaseRubricTargets(prisma, schoolId, title, order)
+  if (phases.length === 0) return { ok: false, error: 'no phase at this school+title+order' }
+  const phaseIds = phases.map((p) => p.id)
+
+  const targets = await submissions.countAcceptAiForPhase(prisma, phaseIds)
+  if (targets === 0) return { ok: false, error: 'no pending-review AI-graded submissions to accept for this school+title+order' }
+  const flagged = await submissions.countAcceptAiFlaggedForPhase(prisma, phaseIds)
+  const lowConfidence = targets - flagged
+
+  if (!apply) return { ok: true, applied: false, targets, flagged, lowConfidence, finalized: 0 }
+  const finalized = await submissions.acceptAiForPhaseRows(prisma, phaseIds, new Date())
+  return { ok: true, applied: true, targets, flagged, lowConfidence, finalized }
+}
+
 // ── 重评回退(安全网:一键还原到重评前) ────────────────────────────────────────────────
 //
 // regrade-phase 在首次重置每行前把旧评分态存进 regradeSnapshot。本函数据此把某环节被重评动过的行

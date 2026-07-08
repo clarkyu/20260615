@@ -12,6 +12,7 @@ on:
         required: true
         type: choice
         options:
+          - accept-ai-phase
           - backfill-writing-grading
           - probe-media
           - purge-gemini-files
