@@ -7,6 +7,7 @@ import { getT } from '@/lib/i18n-server'
 import * as userRepo from '@/lib/repo/users'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import { representativeSubmission } from '@/lib/domain/submit'
+import { isPhaseActiveFor } from '@/lib/domain/selection'
 import { PhaseSubmit } from '../../phase-submit'
 
 // One phase's submit screen (reached from the multi-phase checklist).
@@ -29,10 +30,18 @@ export default async function StudentPhasePage({ params }: { params: Promise<{ i
   ])
   if (!phase || phase.assignmentId !== assignmentId) notFound()
 
+  // 甲·分流：读学生在「选题·分流」环节选的题目。若本环节是「非你所选主题」的带门环节、且还没交过 →
+  // 不属于这个学生,回作业首页(那里显示为「待选题解锁 / 非你主题」)。已有历史提交则放行(软性只读:可看)。
+  const selectionPhase = overview?.phases.find((p) => p.selectionMode === 'branch')
+  const chosenTopic = selectionPhase ? (representativeSubmission(selectionPhase.submissions)?.recitedText?.trim() || null) : null
+  if (!isPhaseActiveFor(phase.branchTopicsJson, chosenTopic) && !phase.submissions.some((s) => s.status !== 'DRAFT')) {
+    redirect(`/student/assignments/${assignmentId}`)
+  }
+
   const { t } = await getT()
   const heading = phase.title?.trim() || t('phase.nth', { n: phase.order })
 
-  // 多环节自动衔接：交完本环节后，引导/自动进入「之后第一个还没做、且在开放期内」的环节。
+  // 多环节自动衔接：交完本环节后，引导/自动进入「之后第一个还没做、且在开放期内、且属于我所选主题」的环节。
   const DONE = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
   const now = new Date()
   let nextHref: string | null = null
@@ -45,7 +54,7 @@ export default async function StudentPhasePage({ params }: { params: Promise<{ i
       const done = rep ? DONE.includes(rep.status) : false
       const notOpen = p.openAt ? now < p.openAt : false
       const closed = p.dueAt ? now > p.dueAt : false
-      if (!done && !notOpen && !closed) {
+      if (!done && !notOpen && !closed && isPhaseActiveFor(p.branchTopicsJson, chosenTopic)) {
         nextHref = `/student/assignments/${assignmentId}/phase/${p.id}`
         nextLabel = p.title?.trim() || t('phase.nth', { n: i + 1 })
         break
