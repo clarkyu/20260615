@@ -61,7 +61,9 @@ async function defaultRunner(prisma: PrismaClient, job: JobRow): Promise<RunOutc
   let error: string | undefined
   try {
     if (job.kind === 'shadow') {
-      await gradeShadowSubmission(prisma, job.submissionId, () => heartbeatJob(prisma, job.submissionId))
+      // shadow 返回首个 take 的失败原因(若有),交给下面的 lastError——诊断「音频完好却评不出」。
+      const shadowErr = await gradeShadowSubmission(prisma, job.submissionId, () => heartbeatJob(prisma, job.submissionId))
+      if (shadowErr) error = shadowErr
     } else if (job.kind === 'writing') {
       const r = await autoGradeWritingById(prisma, job.submissionId)
       if (r === null) return { done: true } // nothing to grade — settle, don't loop
