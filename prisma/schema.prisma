@@ -365,6 +365,10 @@ model Phase {
   //   'branch'      → 选题·分流：所选题目决定做哪些下游环节（甲，配 branchTopicsJson，见 P2）
   // 与 itemType 正交：选题环节仍是 objective，不走 AI/评阅队列。
   selectionMode String?
+  // 甲·分流门（挂在下游环节上）：JSON 字符串数组，元素是选题环节 choicesJson 里的题目原文（其子集）。
+  // null/[] = 公共环节（全班都做，= 历史行为）；非空 = 只有选了其中某题目的学生才做/能交本环节。
+  // 判定按学生选择（Submission.recitedText）与本数组做文本匹配——与投票计票、归票同一套连接约定。
+  branchTopicsJson String?
   // 填空题（fillBlank=true）：blanksJson = {text, accept}——text 是带 ____（≥3 下划线）挖空
   // 标记的题干，accept 是每个空的可接受答案数组（大小写/空白不敏感、任一即对）。提交即客观
   // 判分，按空给分（答对空数 / 总空数 × 满分）；不走 AI、不进老师待批队列。
