@@ -17,6 +17,7 @@ on:
           - purge-gemini-files
           - requeue-media-grading
           - requeue-shadow-grading
+          - requeue-writing-grading
           - resolve-missing-media
           - unify-poll-phase
       payload:

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { backfillWritingGrading, requeueMediaGrading, requeueShadowGrading, resolveMissingMedia } from '@/lib/domain/grading-backfill'
+import { backfillWritingGrading, requeueMediaGrading, requeueShadowGrading, requeueWritingGrading, resolveMissingMedia } from '@/lib/domain/grading-backfill'
 import { claimForProcessing } from '@/lib/repo/submissions'
 import type { PrismaClient } from '@prisma/client'
 import type { ObjectHealth } from '@/lib/storage'
@@ -192,6 +192,54 @@ describe('requeueShadowGrading (清扫盲区补漏)', () => {
   it('无匹配时报错(标题打错要响,不是静默空跑)', async () => {
     const d = await seedSpeech(db.prisma)
     const r = await requeueShadowGrading(db.prisma, d.school.id, '不存在的标题', true)
+    expect(r.ok).toBe(false)
+  })
+})
+
+describe('requeueWritingGrading (清写作死信盲区)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('只捞 kind=writing 失败/卡死的有文本提交,重置成 PENDING;无文本/已完成/别的 kind/刚入队(attempts=0)不碰', async () => {
+    const d = await seedSpeech(db.prisma)
+    // 写作环节(itemType='writing');写作评阅任务在 GradingJob.kind='writing'——backfill 只捞
+    // 从没入队的,requeue-media/shadow 只认媒体键,已入队又死信的 writing 谁都捞不到,本函数专补。
+    const wphase = await db.prisma.phase.create({ data: { assignmentId: d.asg.id, order: 5, requireText: true, requireVideo: false, requireEyesClosed: false, itemType: 'writing', graded: true, maxAttempts: 3 } })
+    const s = await Promise.all(['01', '02', '03', '04', '05', '06', '07'].map(d.student))
+    const wsub = (studentId: number, over: object) =>
+      db.prisma.submission.create({ data: { assignmentId: d.asg.id, offeringId: d.asg.offeringId, phaseId: wphase.id, studentId, attempt: 1, ...over } })
+    const job = (submissionId: number, over: object) =>
+      db.prisma.gradingJob.create({ data: { submissionId, kind: 'writing', status: 'FAILED', attempts: 4, ...over } })
+
+    const dead = await wsub(s[0].id, { status: 'FLAGGED', recitedText: '默写甲', needsReview: true }); await job(dead.id, { status: 'FAILED', attempts: 4, lastError: 'x' })
+    const stuck = await wsub(s[1].id, { status: 'PROCESSING', recitedText: '默写乙' }); await job(stuck.id, { status: 'PROCESSING', attempts: 2 })
+    const retried = await wsub(s[2].id, { status: 'UPLOADED', recitedText: '默写丙' }); await job(retried.id, { status: 'PENDING', attempts: 1 })
+    const fresh = await wsub(s[3].id, { status: 'UPLOADED', recitedText: '新提交' }); await job(fresh.id, { status: 'PENDING', attempts: 0 }) // 刚入队没试评,不碰
+    const notext = await wsub(s[4].id, { status: 'FAILED', recitedText: '' }); await job(notext.id, { status: 'FAILED', attempts: 4 }) // 无文本不可评,不碰
+    const done = await wsub(s[5].id, { status: 'GRADED', recitedText: '已评', finalScore: 88 }); await job(done.id, { status: 'DONE', attempts: 1 }) // 已完成不碰
+    const media = await wsub(s[6].id, { status: 'FAILED', recitedText: '有文本但媒体kind' }); await job(media.id, { kind: 'submission', status: 'FAILED', attempts: 4 }) // 别的 kind 不碰
+
+    const dry = await requeueWritingGrading(db.prisma, d.school.id, TITLE, false)
+    if (!dry.ok) throw new Error(dry.error)
+    expect(dry).toMatchObject({ applied: false, targets: 3, jobsCreated: 0, jobsReset: 0 })
+    expect(dry.perPhaseOrder).toEqual([{ phaseOrder: 5, count: 3 }])
+
+    const r = await requeueWritingGrading(db.prisma, d.school.id, TITLE, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, targets: 3, jobsCreated: 0, jobsReset: 3 })
+    const targets = await db.prisma.gradingJob.findMany({ where: { submissionId: { in: [dead.id, stuck.id, retried.id] } } })
+    for (const j of targets) expect(j).toMatchObject({ kind: 'writing', status: 'PENDING', attempts: 0 })
+    // 非目标不受影响
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: fresh.id } })).toMatchObject({ status: 'PENDING', attempts: 0 })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: notext.id } })).toMatchObject({ status: 'FAILED', attempts: 4 })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: done.id } })).toMatchObject({ status: 'DONE' })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: media.id } })).toMatchObject({ kind: 'submission', status: 'FAILED', attempts: 4 })
+  })
+
+  it('无匹配时报错(标题打错要响,不是静默空跑)', async () => {
+    const d = await seedSpeech(db.prisma)
+    const r = await requeueWritingGrading(db.prisma, d.school.id, '不存在的标题', true)
     expect(r.ok).toBe(false)
   })
 })

@@ -173,6 +173,9 @@ npm run cf:deploy         # 再部署
 | `POST /api/admin/backfill-writing-grading` | 给「AI 文本评分上线前就已提交、从未入队」的写作类提交补建评阅任务（body: `schoolId`+`title`）;顺带清纯投票环节的幽灵复核标记 | 同上:`schoolId` 必填、默认 dry-run、可安全重跑（重跑=重置任务）。只碰 已上传/已标记+无 AI 分+文本非空 的写作行;有答案键的客观题 needsReview 是「答案键缺失转人工」的正路,不清。补登后队列由 5 分钟一班的 drain 消化（~10 份/班） |
 | `POST /api/admin/probe-media` | **只读诊断**:在 Worker 环境（评阅同款取件路径）探测待评提交的视频对象是否在 R2,按 存在/缺失(404)/其它 计数、按环节与时长分桶（body: `schoolId`+`title`） | 一批 ≤40 个（Workers 子请求上限）,拿返回的 `nextAfterId` 作下一次 `afterId` 续查,直到报「no probe targets」。零写入;报告只含提交 id 与聚合数,无对象键/学生信息 |
 | `POST /api/admin/requeue-media-grading` | 把「评阅失败/卡死处理中/未评」且带媒体指针的提交批量重置入队重评（body: `schoolId`+`title`;与探针同口径） | 同款约定:`schoolId` 必填、默认 dry-run、可安全重跑（重跑=重置任务、attempts 归零）。先跑探针确认对象健在再 apply;缺失/空文件的行会在评前预检下快速走到「评阅失败」,老师人工处理 |
+| `POST /api/admin/requeue-shadow-grading` | 同 media,但专捞**逐句跟读(shadow)**:逐句音频在 `ShadowTake` 行里、`requeue-media-grading` 完全看不到（期末盲区,163 份真背诵漏在死信里）（body: `schoolId`+`title`） | 同款约定:`schoolId` 必填、默认 dry-run、可安全重跑（重跑=重置任务、attempts 归零）。只碰「有 ShadowTake+失败/卡死/未评」的行 |
+| `POST /api/admin/requeue-writing-grading` | 同 media,但专捞**写作(writing)死信**:AI 文本评分入队后又失败/卡死的行——`backfill-writing-grading` 只捞从没入队的,media/shadow 只认媒体键,已入队又死信的 writing 谁都捞不到（body: `schoolId`+`title`） | 同款约定:`schoolId` 必填、默认 dry-run、可安全重跑（重跑=重置任务、attempts 归零）。只碰「有文本+`GradingJob.kind='writing'`+失败/卡死/未评（attempts≥1）」的行 |
+| `POST /api/admin/resolve-missing-media` | 把「有提交、却无可评内容」的卡死/死信**自动归档为缺交(MISSING)**并删死信:①对象缺失(404)/空(416,上传坏死);②对象在但视频损坏、Gemini 报 corrupt。逐个探测媒体+看评阅报错,老师零操作（body: `schoolId`+`title`） | `schoolId` 必填、默认 dry-run、可安全重跑（已 MISSING 的不再扫）。cap 60/次,`more:true` 续跑;有一个健康媒体或判不准(网络抖)一律不碰,交给重评;写作类跳过 |
 
 **维护端点怎么调(`admin-call.yml`,推荐)**：GitHub 仓库 → Actions → `Admin maintenance
 call` → `Run workflow`,选端点、贴 JSON body → 运行结束点进任务日志看结果。CRON_SECRET
