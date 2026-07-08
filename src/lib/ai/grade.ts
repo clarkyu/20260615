@@ -13,6 +13,8 @@ export interface GradeRequest {
   videoUrl?: string
   audioUrl?: string
   recitedText?: string
+  // 该生在选题环节选定的主题(喂给判分让评语有针对性)。
+  theme?: string
   // A Gemini File API handle a prior attempt uploaded but couldn't wait out (see PerceptionInput);
   // reused so the retry polls the same file instead of re-uploading. Ignored by non-Gemini providers.
   resumeFile?: { uri: string; name: string }
@@ -63,6 +65,7 @@ export async function gradeSubmission(req: GradeRequest): Promise<GradeResult> {
       rubric: req.rubric,
       maxScore: req.maxScore,
       recitedText: req.recitedText,
+      theme: req.theme,
     },
     judgeModel.id,
   )
@@ -108,7 +111,7 @@ export interface JudgeStageResult {
 // Run ONLY the judge stage against an already-obtained perception (fresh or cached).
 export async function judgeForGrading(
   perception: PerceptionResult,
-  req: Pick<GradeRequest, 'judgeModelId' | 'referenceSentences' | 'rubric' | 'maxScore' | 'recitedText'>,
+  req: Pick<GradeRequest, 'judgeModelId' | 'referenceSentences' | 'rubric' | 'maxScore' | 'recitedText' | 'theme'>,
 ): Promise<JudgeStageResult> {
   const judgeModel = getModel(req.judgeModelId)
   if (!judgeModel) throw new Error(`未知的评分模型: ${req.judgeModelId}`)
@@ -118,7 +121,7 @@ export async function judgeForGrading(
   const judgeProvider = getJudgeProvider(judgeModel.provider)
   if (!judgeProvider) throw unavailable(`评分 provider 未实现: ${judgeModel.provider}`)
   const judge = await judgeProvider.judge(
-    { perception, referenceSentences: req.referenceSentences, rubric: req.rubric, maxScore: req.maxScore, recitedText: req.recitedText },
+    { perception, referenceSentences: req.referenceSentences, rubric: req.rubric, maxScore: req.maxScore, recitedText: req.recitedText, theme: req.theme },
     judgeModel.id,
   )
   return { judgeModel: judgeModel.id, judge }
@@ -131,6 +134,8 @@ export interface GradeWritingRequest {
   studentText: string
   instructions?: string
   referenceSentences?: ReferenceSentence[]
+  // 该生在选题环节选定的主题(喂给写作判分让评语按所选主题批阅切题)。
+  theme?: string
 }
 
 export interface GradeWritingResult {
@@ -156,6 +161,7 @@ export async function gradeWriting(req: GradeWritingRequest): Promise<GradeWriti
       maxScore: req.maxScore,
       instructions: req.instructions,
       referenceSentences: req.referenceSentences,
+      theme: req.theme,
     },
     judgeModel.id,
   )

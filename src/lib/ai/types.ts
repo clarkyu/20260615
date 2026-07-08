@@ -96,6 +96,8 @@ export interface JudgeInput {
   maxScore: number
   // Step 1: the text the student wrote from memory (optional).
   recitedText?: string
+  // 该生在「选题」环节(selectionMode)选定的主题——喂给判分让评语有针对性(按所选主题批阅)。
+  theme?: string
 }
 
 // Writing (text-only) grading: the student submitted written text (自由文本 / 默写),
@@ -110,6 +112,8 @@ export interface TextJudgeInput {
   // Optional model/reference lines (e.g. a 默写 phase's target sentences); absent for
   // open-ended writing.
   referenceSentences?: ReferenceSentence[]
+  // 该生在「选题」环节选定的主题——喂给写作判分让评语按所选主题批阅(针对性)。
+  theme?: string
 }
 
 export interface JudgeResult {

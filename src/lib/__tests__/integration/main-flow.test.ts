@@ -139,6 +139,41 @@ describe('main flow (login → submit → grade) against real SQL', () => {
     expect(rep).toMatchObject({ status: 'GRADED', finalScore: 88 })
   })
 
+  it('⑦ 评分个性化: a prior-text speech phase grades against the student\'s OWN 环节2 text + reads the chosen theme (real SQL)', async () => {
+    const p = db.prisma
+    // This suite doesn't clear mocks between tests → reset the AI call history so calls[0] is ours.
+    ;(perceiveForGrading as Mock).mockClear()
+    ;(judgeForGrading as Mock).mockClear()
+    const d = await seed(p)
+    // Build the 期末-shaped assignment: 选题(theme) → 写作(writing) → 口语(prior-text).
+    const a = await p.assignment.create({ data: { offeringId: d.offering.id, title: '期末考核' } })
+    const pick = await p.phase.create({ data: { assignmentId: a.id, order: 1, itemType: 'objective', requireChoice: true, requireVideo: false, requireText: false, selectionMode: 'theme', graded: false } })
+    const write = await p.phase.create({ data: { assignmentId: a.id, order: 2, itemType: 'writing', requireText: true, requireVideo: false, graded: true } })
+    const speak = await p.phase.create({ data: { assignmentId: a.id, order: 3, itemType: 'speech', requireVideo: true, requireText: false, requireEyesClosed: true, referenceSource: 'prior-text', graded: true } })
+    // The student chose a theme in 环节1 and submitted their own text in 环节2.
+    await p.submission.create({ data: { assignmentId: a.id, phaseId: pick.id, studentId: d.student.id, attempt: 1, status: 'GRADED', recitedText: '题目二：《大学英语》课程学习收获' } })
+    await p.submission.create({ data: { assignmentId: a.id, phaseId: write.id, studentId: d.student.id, attempt: 1, status: 'GRADED', recitedText: 'I learned a lot. English is fun.' } })
+    // …and a 环节3 recording waiting to be graded (the phase itself has NO reference sentences).
+    const speakSub = await p.submission.create({ data: { assignmentId: a.id, phaseId: speak.id, studentId: d.student.id, attempt: 1, status: 'UPLOADED', videoKey: 'vid3' } })
+
+    ;(perceiveForGrading as Mock).mockResolvedValueOnce({ perceptionModel: 'pm', perception: { transcript: 'I learned a lot. English is fun.', perSentence: [], observations: {} } })
+    ;(judgeForGrading as Mock).mockResolvedValueOnce({ judgeModel: 'jm', judge: { score: 84, confidence: 0.95, feedback: 'ok' } })
+
+    const res = await autoGradeById(p, speakSub.id)
+    expect(res).toMatchObject({ ok: true })
+    // The judge was handed the student's OWN 环节2 text (split into sentences) as the reference,
+    // and their 环节1 chosen theme — not the phase's (empty) sentence list.
+    const judgeArg = (judgeForGrading as Mock).mock.calls[0][1]
+    expect(judgeArg.referenceSentences).toEqual([
+      { order: 1, text: 'I learned a lot.' },
+      { order: 2, text: 'English is fun.' },
+    ])
+    expect(judgeArg.theme).toBe('题目二：《大学英语》课程学习收获')
+    // Perception (fresh) got the same personalized reference.
+    expect((perceiveForGrading as Mock).mock.calls[0][0].referenceSentences).toEqual(judgeArg.referenceSentences)
+    expect(await p.submission.findUnique({ where: { id: speakSub.id } })).toMatchObject({ status: 'GRADED', aiScore: 84 })
+  })
+
   it('⑥ practice round persists real AI usage/cost (H1-c columns)', async () => {
     const p = db.prisma
     const d = await seed(p)

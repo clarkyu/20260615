@@ -369,6 +369,14 @@ model Phase {
   // null/[] = 公共环节（全班都做，= 历史行为）；非空 = 只有选了其中某题目的学生才做/能交本环节。
   // 判定按学生选择（Submission.recitedText）与本数组做文本匹配——与投票计票、归票同一套连接约定。
   branchTopicsJson String?
+  // 评分参照来源（下游口语环节按「本人文本」评分）：
+  //   null       → 用本环节自己的 sentences（历史行为）
+  //   'prior-text' → 用该生「本环节之前、最近一个 text/writing 环节」的提交文本作参照（约定 a）——
+  //                  背诵/朗读检测按各自写作环节交的文本逐句比对，而非全班统一参照。
+  referenceSource String?
+  // 合规加减分（仅背诵检测类环节开）：true → judge 出学术分后，代码按 AI 感知(闭眼/偷看)与
+  // 提交违规(离开/切屏)确定性地 ±10 再夹到 0~满分。false（默认）= 不动分（历史行为）。
+  complianceScoring Boolean @default(false)
   // 填空题（fillBlank=true）：blanksJson = {text, accept}——text 是带 ____（≥3 下划线）挖空
   // 标记的题干，accept 是每个空的可接受答案数组（大小写/空白不敏感、任一即对）。提交即客观
   // 判分，按空给分（答对空数 / 总空数 × 满分）；不走 AI、不进老师待批队列。

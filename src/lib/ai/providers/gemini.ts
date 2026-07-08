@@ -157,6 +157,7 @@ export function buildJudgePrompt(input: JudgeInput): string {
     'breakdown 给出各维度得分（dimension+points）。feedback 用中文，指出做得好与需改进之处，可引用具体句子。',
     'confidence 取 0~1，表示你对本次评分的把握程度（音频清晰、与参考高度吻合时给高分；含糊、缺失、异常时给低分）。',
     '',
+    ...(input.theme ? [`学生在选题环节选定的作业主题：${input.theme}（请据此主题批阅，评语要有针对性）`, ''] : []),
     '参考句子：',
     referenceBlock(input.referenceSentences),
     '',
@@ -181,6 +182,7 @@ export function buildWritingJudgePrompt(input: TextJudgeInput): string {
     'breakdown 给出各维度得分（dimension+points）。feedback 用中文，指出优点与需改进之处，可引用学生原文的具体词句并给出改写建议。',
     'confidence 取 0~1，表示你对本次评分的把握程度（作答完整、切题时给高分；空泛、离题、过短或疑似作弊时给低分）。',
     '',
+    ...(input.theme ? [`学生在选题环节选定的作业主题：${input.theme}（请据此主题批阅是否切题）`, ''] : []),
     ...(input.instructions ? ['写作要求 / 题目：', input.instructions, ''] : []),
     ...(input.referenceSentences && input.referenceSentences.length
       ? ['参考 / 范文（默写题请据此比对）：', referenceBlock(input.referenceSentences), '']
