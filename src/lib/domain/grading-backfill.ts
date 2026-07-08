@@ -181,7 +181,7 @@ export type RegradeReport =
     }
   | { ok: false; error: string }
 
-export async function regradePhase(prisma: PrismaClient, schoolId: number, title: string, order: number, apply: boolean): Promise<RegradeReport> {
+export async function regradePhase(prisma: PrismaClient, schoolId: number, title: string, order: number, apply: boolean, limit?: number): Promise<RegradeReport> {
   // 环节类型定评阅任务种类:writing→文本判分;speech→整段媒体(感知+判分)。objective 不评。
   const phases = await assignments.findPhaseRubricTargets(prisma, schoolId, title, order)
   if (phases.length === 0) return { ok: false, error: 'no phase at this school+title+order' }
@@ -191,7 +191,10 @@ export async function regradePhase(prisma: PrismaClient, schoolId: number, title
   const total = await submissions.countRegradeTargets(prisma, schoolId, title, order)
   if (total === 0) return { ok: false, error: 'no finalized (non-teacher-graded) submissions to regrade for this school+title+order' }
 
-  const rows = await submissions.listRegradeTargets(prisma, schoolId, title, order, REGRADE_BATCH)
+  // 试点旋钮:limit 可把本批压到更小(先小规模重评、与快照对比、再定全量)。上限仍是 REGRADE_BATCH,
+  // 免得一次太多顶穿子请求/时限。省略 = 满批。
+  const take = limit != null ? Math.max(1, Math.min(limit, REGRADE_BATCH)) : REGRADE_BATCH
+  const rows = await submissions.listRegradeTargets(prisma, schoolId, title, order, take)
   const sampleIds = rows.slice(0, 20).map((r) => r.id)
   if (!apply) return { ok: true, applied: false, total, scanned: rows.length, more: total > rows.length, restored: 0, requeued: 0, kind, sampleIds }
 

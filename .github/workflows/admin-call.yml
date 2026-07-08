@@ -16,10 +16,12 @@ on:
           - probe-media
           - purge-gemini-files
           - reconcile-graded-jobs
+          - regrade-phase
           - requeue-media-grading
           - requeue-shadow-grading
           - requeue-writing-grading
           - resolve-missing-media
+          - set-phase-rubric
           - set-selection-mode
           - unify-poll-phase
       payload:
