@@ -39,8 +39,10 @@ export interface PhaseInitial {
   // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
   multiChoice: boolean
   correctIndices: number[]
-  // 选题模式（仅当纯选择、无正确答案时有意义）：'poll'=课堂民调（默认，= 历史纯投票）；'theme'=选题·主题。'branch' 留待 P2。
-  selectionMode: 'poll' | 'theme' | null
+  // 选题模式（仅当纯选择、无正确答案时有意义）：'poll'=课堂民调（默认）；'theme'=选题·主题（乙）；'branch'=选题·分流（甲）。
+  selectionMode: 'poll' | 'theme' | 'branch' | null
+  // 甲·分流：本（下游）环节归属哪些题目（题目原文数组，是选题环节 choices 的子集）；空=公共环节，全班都做。
+  branchTopics: string[]
   // 填空题：fillText 是带 ____ 挖空标记的题干；fillAccept 是每个空的可接受答案
   // （编辑时用「|」分隔多个），空数 = fillText 里的 ____ 个数。落库成 blanksJson。
   fillBlank: boolean
@@ -125,8 +127,10 @@ interface PhaseState {
   // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
   multiChoice: boolean
   correctIndices: number[]
-  // 选题模式（仅当纯选择、无正确答案时有意义）：'poll'=课堂民调（默认，= 历史纯投票）；'theme'=选题·主题。'branch' 留待 P2。
-  selectionMode: 'poll' | 'theme' | null
+  // 选题模式（仅当纯选择、无正确答案时有意义）：'poll'=课堂民调（默认）；'theme'=选题·主题（乙）；'branch'=选题·分流（甲）。
+  selectionMode: 'poll' | 'theme' | 'branch' | null
+  // 甲·分流：本（下游）环节归属哪些题目（题目原文数组，是选题环节 choices 的子集）；空=公共环节，全班都做。
+  branchTopics: string[]
   // 填空题：fillText 是带 ____ 挖空标记的题干；fillAccept 是每个空的可接受答案
   // （编辑时用「|」分隔多个），空数 = fillText 里的 ____ 个数。落库成 blanksJson。
   fillBlank: boolean
@@ -171,6 +175,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     multiChoice: false,
     correctIndices: [],
     selectionMode: null,
+    branchTopics: [],
     fillBlank: false,
     fillText: '',
     fillAccept: [],
@@ -321,6 +326,8 @@ export function AssignmentForm({
         : null,
       // 选题模式只在「纯选择、无答案键」时有意义：设了答案键(客观判分题)或非选择环节一律 null。
       selectionMode: p.requireChoice && !(p.multiChoice ? p.correctIndices.length > 0 : p.correctIndex >= 0) ? p.selectionMode : null,
+      // 甲·分流门：下游环节归属的题目集合（去空白/空项）；空 = 公共环节。
+      branchTopicsJson: p.branchTopics.length > 0 ? JSON.stringify(p.branchTopics.map((x) => x.trim()).filter(Boolean)) : null,
       fillBlank: p.fillBlank,
       // blanksJson = { text, accept }；accept 长度按题干 ____ 个数取（= 总空数），
       // 每空的可接受答案由「|」分隔。空数为准，多余/缺失的 fillAccept 自动对齐。

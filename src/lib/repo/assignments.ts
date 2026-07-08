@@ -48,6 +48,7 @@ export interface PhaseInput {
   multiChoice?: boolean
   correctChoices?: string | null
   selectionMode?: string | null
+  branchTopicsJson?: string | null
   fillBlank?: boolean
   blanksJson?: string | null
   requireFreeText?: boolean
@@ -164,6 +165,7 @@ function phaseData(p: PhaseInput) {
     multiChoice: p.multiChoice ?? false,
     correctChoices: p.correctChoices ?? null,
     selectionMode: p.selectionMode ?? null,
+    branchTopicsJson: p.branchTopicsJson ?? null,
     fillBlank: p.fillBlank ?? false,
     blanksJson: p.blanksJson ?? null,
     requireFreeText: p.requireFreeText ?? false,

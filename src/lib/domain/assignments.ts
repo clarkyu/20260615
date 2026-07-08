@@ -9,6 +9,7 @@ import * as bank from '@/lib/repo/bank'
 import * as submissions from '@/lib/repo/submissions'
 import { weakSentences, latestPhaseSubmissions } from '@/lib/domain/analytics'
 import type { AssignmentMeta, PhaseInput, SentenceRow } from '@/lib/repo/assignments'
+import { parseChoices } from '@/lib/choices'
 
 export type { AssignmentMeta }
 
@@ -35,8 +36,10 @@ export interface PhaseDraft {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string | null
-  // 选题模式（仅 requireChoice 且无答案键时有意义）：'poll'=课堂民调 / 'theme'=选题·主题 / 'branch'=选题·分流(P2)。
+  // 选题模式（仅 requireChoice 且无答案键时有意义）：'poll'=课堂民调 / 'theme'=选题·主题 / 'branch'=选题·分流。
   selectionMode?: string | null
+  // 甲·分流门（挂在下游环节上）：JSON 题目原文数组，是选题环节 choicesJson 的子集；空=公共环节。
+  branchTopicsJson?: string | null
   fillBlank?: boolean
   blanksJson?: string | null
   requireFreeText?: boolean
@@ -107,6 +110,7 @@ async function resolvePhases(
       multiChoice: d.multiChoice ?? false,
       correctChoices: d.correctChoices ?? null,
       selectionMode: d.selectionMode ?? null,
+      branchTopicsJson: d.branchTopicsJson ?? null,
       fillBlank: d.fillBlank ?? false,
       blanksJson: d.blanksJson ?? null,
       requireFreeText: d.requireFreeText ?? false,
@@ -121,6 +125,24 @@ async function resolvePhases(
       freePractice: d.freePractice && !d.graded,
       sentences,
     })
+  }
+
+  // 选题（甲/乙）配置完整性校验（数据一等公民,不靠 UI 兜底）：
+  //  ① 一份作业至多一个「选题环节」(requireChoice + selectionMode theme/branch)——多个会让分流依据歧义。
+  //  ② 甲·分流:若有下游环节设了归属题目(branchTopicsJson),必须存在一个 selectionMode='branch' 的选题环节;
+  //  ③ 且每个归属题目必须是该选题环节 choicesJson 里真实存在的题目(否则该门永远无人命中=死环节)。
+  const selectionPhases = phases.filter((p) => p.requireChoice && (p.selectionMode === 'theme' || p.selectionMode === 'branch'))
+  if (selectionPhases.length > 1) return { ok: false, error: 'err.multiSelectionPhase' }
+  const gated = phases.filter((p) => parseChoices(p.branchTopicsJson ?? null).length > 0)
+  if (gated.length > 0) {
+    const branchPhase = selectionPhases.find((p) => p.selectionMode === 'branch')
+    if (!branchPhase) return { ok: false, error: 'err.branchNoSelection' }
+    const validTopics = new Set(parseChoices(branchPhase.choicesJson ?? null).map((c) => c.trim()))
+    for (const g of gated) {
+      if (parseChoices(g.branchTopicsJson ?? null).some((topic) => !validTopics.has(topic.trim()))) {
+        return { ok: false, error: 'err.branchTopicUnknown' }
+      }
+    }
   }
   return { ok: true, phases }
 }
