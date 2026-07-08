@@ -92,9 +92,9 @@ export function splitReferenceText(text: string): { order: number; text: string 
 export const COMPLIANCE_STEP = 10
 
 // 背诵检测合规 ±10(仅 complianceScoring 环节开):规范闭眼 +10 / 偷看·照读 -10(AI 感知);
-// 全程未离开录制 +10 / 中途离开·切屏 -10(提交违规)。返回增量 + 中文说明,由编排层在 judge
-// 学术分之上确定性地加减、再夹到 0~满分。眼睛信号缺失(undefined)时不动闭眼那一档——数据不足,
-// 不奖不罚(交老师复核)。
+// 全程未离开录制 +10 / 中途离开·切屏 **不扣分**(提交违规——clark 决定:录制违规只奖不罚,
+// 免得对已经背得差的学生二次重罚)。返回增量 + 中文说明,由编排层在 judge 学术分之上确定性地
+// 加减、再夹到 0~满分。眼睛信号缺失(undefined)时不动闭眼那一档——数据不足,不奖不罚(交老师复核)。
 export function complianceAdjustment(
   obs: { eyesClosed?: boolean; readingSuspected?: boolean } | null | undefined,
   violations: string | null | undefined,
@@ -105,7 +105,8 @@ export function complianceAdjustment(
   const peeking = obs?.eyesClosed === false || obs?.readingSuspected === true
   if (closed) { delta += COMPLIANCE_STEP; notes.push(`规范闭眼 +${COMPLIANCE_STEP}`) }
   else if (peeking) { delta -= COMPLIANCE_STEP; notes.push(`偷看/照读 -${COMPLIANCE_STEP}`) }
-  if (hasAntiCheatViolation(violations)) { delta -= COMPLIANCE_STEP; notes.push(`中途离开/切屏 -${COMPLIANCE_STEP}`) }
+  // 录制违规:全程未离开 +10;中途离开/切屏 不扣分(0)——只奖不罚。
+  if (hasAntiCheatViolation(violations)) { notes.push('中途离开/切屏（不扣分）') }
   else { delta += COMPLIANCE_STEP; notes.push(`全程未离开录制 +${COMPLIANCE_STEP}`) }
   return { delta, notes }
 }
