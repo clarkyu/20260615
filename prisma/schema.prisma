@@ -359,6 +359,12 @@ model Phase {
   // 客观判分，全对（所选集合 == 正确集合）得满分、否则 0；为空 → 多选投票（只统计分布不判分）。
   multiChoice   Boolean @default(false)
   correctChoices String?
+  // 选题模式（把历史「投票 hack」升格为一等公民）——仅当 requireChoice 且无答案键时有意义：
+  //   null / 'poll' → 课堂民调（= 历史纯投票，仅统计分布、不判分）
+  //   'theme'       → 选题·主题：学生选一个主题，全班后续环节结构一致（乙）
+  //   'branch'      → 选题·分流：所选题目决定做哪些下游环节（甲，配 branchTopicsJson，见 P2）
+  // 与 itemType 正交：选题环节仍是 objective，不走 AI/评阅队列。
+  selectionMode String?
   // 填空题（fillBlank=true）：blanksJson = {text, accept}——text 是带 ____（≥3 下划线）挖空
   // 标记的题干，accept 是每个空的可接受答案数组（大小写/空白不敏感、任一即对）。提交即客观
   // 判分，按空给分（答对空数 / 总空数 × 满分）；不走 AI、不进老师待批队列。

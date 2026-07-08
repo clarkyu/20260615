@@ -35,6 +35,8 @@ export interface PhaseDraft {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string | null
+  // 选题模式（仅 requireChoice 且无答案键时有意义）：'poll'=课堂民调 / 'theme'=选题·主题 / 'branch'=选题·分流(P2)。
+  selectionMode?: string | null
   fillBlank?: boolean
   blanksJson?: string | null
   requireFreeText?: boolean
@@ -104,6 +106,7 @@ async function resolvePhases(
       correctChoice: d.correctChoice ?? null,
       multiChoice: d.multiChoice ?? false,
       correctChoices: d.correctChoices ?? null,
+      selectionMode: d.selectionMode ?? null,
       fillBlank: d.fillBlank ?? false,
       blanksJson: d.blanksJson ?? null,
       requireFreeText: d.requireFreeText ?? false,

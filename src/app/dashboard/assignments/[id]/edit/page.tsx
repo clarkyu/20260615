@@ -55,6 +55,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       correctIndex: p.correctChoice ? parseChoices(p.choicesJson).indexOf(p.correctChoice) : -1,
       multiChoice: p.multiChoice,
       correctIndices: parseChoices(p.correctChoices).map((c) => parseChoices(p.choicesJson).indexOf(c)).filter((i) => i >= 0),
+      selectionMode: p.selectionMode === 'poll' || p.selectionMode === 'theme' ? p.selectionMode : null,
       fillBlank: p.fillBlank,
       fillText: parseFillBlank(p.blanksJson).text,
       fillAccept: parseFillBlank(p.blanksJson).accept.map((a) => a.join(' | ')),
