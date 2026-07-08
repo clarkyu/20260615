@@ -694,6 +694,31 @@ export async function setPhaseSelectionModeByIds(prisma: PrismaClient, ids: numb
   return count
 }
 
+// 环节 rubric 落地(维护):按 school+title+order 圈定环节(任意类型,不筛 requireChoice——评分标准
+// 落在写作/口语环节上),供 set-phase-rubric 批量写评分标准 + 参照来源 + 合规开关。带回当前值供 dry-run 核对。
+export function findPhaseRubricTargets(prisma: PrismaClient, schoolId: number, title: string, order: number) {
+  return prisma.phase.findMany({
+    where: { order, assignment: { title, offering: { schoolId } } },
+    select: { id: true, assignmentId: true, itemType: true, rubric: true, referenceSource: true, complianceScoring: true },
+  })
+}
+
+// 把一批环节的评分标准 / 参照来源 / 合规开关设成给定值(rubric 落地)。只带上明确给了的字段(部分更新),
+// 分块避 D1 绑定上限。只写 Phase,绝不碰 Submission / 评分结果。
+export async function setPhaseRubricByIds(
+  prisma: PrismaClient,
+  ids: number[],
+  data: { rubric?: string; referenceSource?: string | null; complianceScoring?: boolean },
+): Promise<number> {
+  const CHUNK = 100
+  let count = 0
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const r = await prisma.phase.updateMany({ where: { id: { in: ids.slice(i, i + CHUNK) } }, data })
+    count += r.count
+  }
+  return count
+}
+
 export function findPhaseShadowVideoForClasses(prisma: PrismaClient, phaseId: number, classIds: number[]) {
   return prisma.phase.findFirst({
     where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },
