@@ -236,37 +236,42 @@ describe('resolveMissingMedia (上传坏死自动归档)', () => {
   afterEach(async () => { await db?.cleanup() })
 
   const probe = (table: Record<string, ObjectHealth>) => async (key: string) => table[key] ?? 'missing'
-  const failedJob = (p: PrismaClient, submissionId: number, kind: 'submission' | 'shadow' | 'writing', status: 'FAILED' | 'PENDING' = 'FAILED') =>
-    p.gradingJob.create({ data: { submissionId, kind, status, attempts: 4 } })
+  const stuckJob = (p: PrismaClient, submissionId: number, kind: 'submission' | 'shadow' | 'writing', status: 'FAILED' | 'PENDING' | 'PROCESSING' = 'FAILED', attempts = 4) =>
+    p.gradingJob.create({ data: { submissionId, kind, status, attempts } })
 
-  it('dry-run 报告不写:只归档确证「全空/全缺」的;健康/判不准/写作/非死信一律不碰', async () => {
+  it('dry-run 报告不写:只归档确证「全空/全缺」的;死信+卡住(PENDING/PROCESSING)都扫,刚提交(attempts=0)/健康/判不准/写作不碰', async () => {
     const d = await seedSpeech(db.prisma)
-    const s = await Promise.all(['01', '02', '03', '04', '05', '06', '07'].map(d.student))
-    const mediaGone = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/gone' }); await failedJob(db.prisma, mediaGone.id, 'submission')
-    const mediaEmpty = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/empty' }); await failedJob(db.prisma, mediaEmpty.id, 'submission')
-    const mediaOk = await d.sub(s[2].id, { status: 'FAILED', videoKey: 'v/ok' }); await failedJob(db.prisma, mediaOk.id, 'submission')
-    const mediaBlip = await d.sub(s[3].id, { status: 'FAILED', videoKey: 'v/blip' }); await failedJob(db.prisma, mediaBlip.id, 'submission')
-    const writingDead = await d.sub(s[4].id, { status: 'FAILED', recitedText: '有文本' }); await failedJob(db.prisma, writingDead.id, 'writing')
-    const notDead = await d.sub(s[5].id, { status: 'FAILED', videoKey: 'v/pending' }); await failedJob(db.prisma, notDead.id, 'submission', 'PENDING')
-    const shadowBad = await d.sub(s[6].id, { status: 'UPLOADED' }); await failedJob(db.prisma, shadowBad.id, 'shadow')
+    const s = await Promise.all(['01', '02', '03', '04', '05', '06', '07', '08'].map(d.student))
+    const mediaGone = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/gone' }); await stuckJob(db.prisma, mediaGone.id, 'submission', 'FAILED')
+    const mediaEmpty = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/empty' }); await stuckJob(db.prisma, mediaEmpty.id, 'submission', 'FAILED')
+    // 重跑后卡在 PENDING(attempts≥1)的坏行:老版只扫 FAILED 会漏,新版必须捞到。
+    const pendingBroken = await d.sub(s[2].id, { status: 'UPLOADED', videoKey: 'v/pb' }); await stuckJob(db.prisma, pendingBroken.id, 'submission', 'PENDING', 2)
+    const mediaOk = await d.sub(s[3].id, { status: 'FAILED', videoKey: 'v/ok' }); await stuckJob(db.prisma, mediaOk.id, 'submission', 'FAILED')
+    const mediaBlip = await d.sub(s[4].id, { status: 'FAILED', videoKey: 'v/blip' }); await stuckJob(db.prisma, mediaBlip.id, 'submission', 'FAILED')
+    const writingDead = await d.sub(s[5].id, { status: 'FAILED', recitedText: '有文本' }); await stuckJob(db.prisma, writingDead.id, 'writing', 'FAILED')
+    // 刚提交、还没试评(attempts=0):即便媒体此刻探不到也别碰(可能还在最终一致中)。
+    const freshPending = await d.sub(s[6].id, { status: 'UPLOADED', videoKey: 'v/fresh' }); await stuckJob(db.prisma, freshPending.id, 'submission', 'PENDING', 0)
+    const shadowBad = await d.sub(s[7].id, { status: 'UPLOADED' }); await stuckJob(db.prisma, shadowBad.id, 'shadow', 'FAILED')
     await db.prisma.shadowTake.create({ data: { submissionId: shadowBad.id, order: 1, audioKey: 'sk/b1' } })
     await db.prisma.shadowTake.create({ data: { submissionId: shadowBad.id, order: 2, audioKey: 'sk/b2' } })
 
-    const table: Record<string, ObjectHealth> = { 'v/gone': 'missing', 'v/empty': 'empty', 'v/ok': 'ok', 'v/blip': 'unknown', 'sk/b1': 'empty', 'sk/b2': 'missing' }
+    const table: Record<string, ObjectHealth> = { 'v/gone': 'missing', 'v/empty': 'empty', 'v/pb': 'missing', 'v/ok': 'ok', 'v/blip': 'unknown', 'v/fresh': 'missing', 'sk/b1': 'empty', 'sk/b2': 'missing' }
     const r = await resolveMissingMedia(db.prisma, d.school.id, TITLE, false, probe(table))
     if (!r.ok) throw new Error(r.error)
-    // 非死信(PENDING 任务)的 notDead 不入扫;写作有文本不碰;健康/unknown 不碰。
-    expect(r).toMatchObject({ applied: false, scanned: 6, missing: 3, skippedHealthy: 1, skippedUnknown: 1, skippedWriting: 1 })
+    // freshPending(attempts=0)守卫排除;写作有文本不碰;健康/unknown 不碰;pendingBroken 被捞到。
+    expect(r).toMatchObject({ applied: false, scanned: 7, missing: 4, skippedHealthy: 1, skippedUnknown: 1, skippedWriting: 1 })
+    expect(r.sampleIds).toContain(pendingBroken.id) // PENDING 卡住的坏行确实被捞到
+    expect(r.sampleIds).not.toContain(freshPending.id) // 刚提交的没碰
     expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: mediaGone.id } })).status).toBe('FAILED') // 零写入
-    expect(await db.prisma.gradingJob.count({ where: { status: 'FAILED' } })).toBe(6)
+    expect(await db.prisma.gradingJob.count()).toBe(8)
   })
 
   it('apply 归档为 MISSING + 删死信任务;健康的保留;幂等重跑 missing=0', async () => {
     const d = await seedSpeech(db.prisma)
     const s = await Promise.all(['01', '02', '03'].map(d.student))
-    const gone = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/gone', needsReview: true }); await failedJob(db.prisma, gone.id, 'submission')
-    const ok = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/ok' }); await failedJob(db.prisma, ok.id, 'submission')
-    const shadowBad = await d.sub(s[2].id, { status: 'UPLOADED' }); await failedJob(db.prisma, shadowBad.id, 'shadow')
+    const gone = await d.sub(s[0].id, { status: 'FAILED', videoKey: 'v/gone', needsReview: true }); await stuckJob(db.prisma, gone.id, 'submission')
+    const ok = await d.sub(s[1].id, { status: 'FAILED', videoKey: 'v/ok' }); await stuckJob(db.prisma, ok.id, 'submission')
+    const shadowBad = await d.sub(s[2].id, { status: 'UPLOADED' }); await stuckJob(db.prisma, shadowBad.id, 'shadow')
     await db.prisma.shadowTake.create({ data: { submissionId: shadowBad.id, order: 1, audioKey: 'sk/b1' } })
 
     const table: Record<string, ObjectHealth> = { 'v/gone': 'missing', 'v/ok': 'ok', 'sk/b1': 'empty' }

@@ -166,8 +166,8 @@ export async function resolveMissingMedia(
   probe: (key: string) => Promise<ObjectHealth> = probeObject,
 ): Promise<ResolveMissingReport> {
   const LIMIT = 60
-  const rows = await submissions.listDeadLetterGradingTargets(prisma, schoolId, title, LIMIT)
-  if (rows.length === 0) return { ok: false, error: 'no dead-lettered submissions for this school+title' }
+  const rows = await submissions.listStuckGradingTargets(prisma, schoolId, title, LIMIT)
+  if (rows.length === 0) return { ok: false, error: 'no stuck/failed grading submissions for this school+title' }
 
   const missingIds: number[] = []
   const byKind: Record<string, number> = {}
