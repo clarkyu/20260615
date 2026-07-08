@@ -332,13 +332,14 @@ describe('complianceAdjustment', () => {
   it('rewards compliant eyes-closed + a clean recording (+2×step)', () => {
     expect(complianceAdjustment({ eyesClosed: true }, null).delta).toBe(2 * COMPLIANCE_STEP)
   })
-  it('penalizes peeking / reading-suspected + a violation (−2×step)', () => {
-    expect(complianceAdjustment({ eyesClosed: false }, '["LEAVE"]').delta).toBe(-2 * COMPLIANCE_STEP)
-    expect(complianceAdjustment({ readingSuspected: true }, '["TAB"]').delta).toBe(-2 * COMPLIANCE_STEP)
+  it('penalizes peeking / reading-suspected; a recording violation no longer deducts (只奖不罚)', () => {
+    // 偷看 −10；录制违规不扣分(0) → 净 −10(不再 −20)
+    expect(complianceAdjustment({ eyesClosed: false }, '["LEAVE"]').delta).toBe(-COMPLIANCE_STEP)
+    expect(complianceAdjustment({ readingSuspected: true }, '["TAB"]').delta).toBe(-COMPLIANCE_STEP)
   })
-  it('leaves the eyes axis untouched when the signal is unknown (data-insufficient)', () => {
+  it('leaves the eyes axis untouched when the signal is unknown; a violation still doesn\'t deduct', () => {
     expect(complianceAdjustment({}, null).delta).toBe(COMPLIANCE_STEP) // only the clean-recording bonus
-    expect(complianceAdjustment(undefined, '["LEAVE"]').delta).toBe(-COMPLIANCE_STEP)
+    expect(complianceAdjustment(undefined, '["LEAVE"]').delta).toBe(0) // eyes unknown (0) + violation (0, 不扣)
   })
 })
 
@@ -385,11 +386,11 @@ describe('autoGradeSubmission — 评分个性化(主题 / 本人文本 / 合规
     expect(g.feedback).toContain('合规加减分')
   })
 
-  it('合规: peeking + a tab-switch violation drops the base score by −2×step', async () => {
+  it('合规: peeking −10; a tab-switch violation does NOT deduct (只奖不罚)', async () => {
     withObs({ eyesClosed: false })
     mockJudge({ score: 50, confidence: 0.9, feedback: '照读了' })
     await autoGradeSubmission(prisma, sub({ violations: '["TAB_SWITCH"]', phase: compliancePhase() }), opts)
-    expect(gradeData().aiScore).toBe(30) // 50 − 10 − 10
+    expect(gradeData().aiScore).toBe(40) // 50 − 10(偷看) + 0(违规不扣)
   })
 
   it('合规: the adjusted score is clamped to 0..maxScore', async () => {
