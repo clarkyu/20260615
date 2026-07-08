@@ -417,6 +417,40 @@ export function acceptAiForAssignment(prisma: PrismaClient, assignmentId: number
        AND "status" <> 'FLAGGED'`
 }
 
+// ── 采纳 AI 评阅结果定稿一个环节(含 FLAGGED) ─────────────────────────────────────
+// 某环节「待复核(needsReview)且有 AI 分」的提交计数——采纳-AI 的 dry-run 盘子。含 FLAGGED
+// (防作弊)与低置信 GRADED。teacherScore 有无不影响入选(定稿时 COALESCE 仍以老师分为准)。
+export function countAcceptAiForPhase(prisma: PrismaClient, phaseIds: number[]) {
+  return prisma.submission.count({
+    where: { phaseId: { in: phaseIds }, needsReview: true, aiScore: { not: null } },
+  })
+}
+
+// 同上,但只数其中 FLAGGED(防作弊)那部分——报告里区分 FLAGGED vs 低置信,便于核对影响面。
+export function countAcceptAiFlaggedForPhase(prisma: PrismaClient, phaseIds: number[]) {
+  return prisma.submission.count({
+    where: { phaseId: { in: phaseIds }, needsReview: true, aiScore: { not: null }, status: 'FLAGGED' },
+  })
+}
+
+// 采纳 AI 评阅结果定稿:把该环节「待复核(needsReview,含 FLAGGED)且有 AI 分」的提交一次性置为
+// 已评——finalScore 取 COALESCE(teacherScore, aiScore)(老师若已改分仍以老师为准)、needsReview 清零、
+// status 置 GRADED、盖 gradedAt。与 acceptAiForAssignment 的区别:按环节(phaseId)圈定、且**包含
+// FLAGGED**(clark 期末环节4 决定:录制违规的合规已按"只奖不罚"并入 AI 分[#425],防作弊标记不再
+// 需要逐份人工复核,老师复核与评分直接采纳 AI 评阅结果)。scoped raw UPDATE:updateMany 无法
+// aiScore→finalScore 拷贝。phaseId 由调用方从已 scope 的查询(findPhaseRubricTargets)取得。
+export function acceptAiForPhaseRows(prisma: PrismaClient, phaseIds: number[], now: Date) {
+  return prisma.$executeRaw`
+    UPDATE "Submission"
+       SET "finalScore" = COALESCE("teacherScore", "aiScore"),
+           "needsReview" = 0,
+           "status" = 'GRADED',
+           "gradedAt" = ${now}
+     WHERE "phaseId" IN (${Prisma.join(phaseIds)})
+       AND "needsReview" = 1
+       AND "aiScore" IS NOT NULL`
+}
+
 // Submissions for an assignment by a set of students, newest attempt first — the
 // caller keeps the latest per student (score export). Excludes DRAFT so an
 // in-progress retry can't hide the student's already-submitted/graded attempt.
