@@ -54,12 +54,17 @@ function SentenceRecorder({ phaseId, order, recorded, onRecorded }: { phaseId: n
   useEffect(() => () => { unmountedRef.current = true; cleanup() }, [cleanup])
 
   const upload = useCallback(async (blob: Blob, ext: string) => {
+    // 空录音(没录到声音 / MediaRecorder 没产出数据)绝不上传:它会在 R2 留下 0 字节对象,
+    // 评阅时反复 416「空文件」到死信,且 shadow 从不标 FAILED,坏账隐形。当场提示重录这一句。
+    if (blob.size === 0) { setError(t('rec.emptyRecording')); setPhase('idle'); return }
     setPhase('uploading')
     try {
       const type = blob.type || 'audio/webm'
       const res = await getShadowTakeUploadUrl(phaseId, order, type, blob.type.includes('mp4') ? 'm4a' : ext)
       if ('error' in res || !res.url) { setError(res.error ?? t('rec.uploadFail')); setPhase('idle'); return }
-      const put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': type } })
+      // PUT 失败静默重试一次:偶发网络抖动不该逼学生重录(预签名 URL 可重用至过期)。
+      let put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': type } })
+      if (!put.ok) put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': type } })
       if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setPhase('idle'); return }
       setPhase('idle')
       onRecorded()

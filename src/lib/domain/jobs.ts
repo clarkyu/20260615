@@ -195,6 +195,18 @@ export async function cancelPendingForPhase(prisma: PrismaClient, phaseId: numbe
   return res.count
 }
 
+// 删除一批提交的评阅任务(维护:上传坏死的提交归档为缺交后,其死信任务不再有意义,一并清掉,
+// 死信数随之归零)。按 submissionId 集合删,分块避开 D1 绑定参数上限。调用方传的是已 scope 的 id。
+export async function deleteJobsForSubmissions(prisma: PrismaClient, submissionIds: number[]): Promise<number> {
+  const CHUNK = 80
+  let n = 0
+  for (let i = 0; i < submissionIds.length; i += CHUNK) {
+    const res = await prisma.gradingJob.deleteMany({ where: { submissionId: { in: submissionIds.slice(i, i + CHUNK) } } })
+    n += res.count
+  }
+  return n
+}
+
 // Keep a running job's row fresh so the stale-reclaim (which keys on `updatedAt`) never
 // treats a slow-but-alive run as orphaned and double-runs it (wasting AI spend). Fenced
 // to PROCESSING so it never disturbs a job another isolate has already settled or
