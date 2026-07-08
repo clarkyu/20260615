@@ -173,6 +173,45 @@ export function listStuckGradingTargets(prisma: PrismaClient, schoolId: number, 
   })
 }
 
+// 幽灵死信对账目标:提交**已经评出分**(aiScore 或 teacherScore 非空)、且落到已评/待批的
+// 稳定态(status ∈ GRADED/FLAGGED),评阅任务却还挂着 FAILED/PENDING(没走到 DONE)的行。
+// 成因:某份评过一次(job→DONE、提交拿到 aiScore),后来被批量重排(job 重置 PENDING)、再评时
+// 又失败到顶进死信——提交仍留着上次的分,任务却停在 FAILED,只虚增看板「失败/死信」数,老师复核
+// 定稿也不会清它(applyTeacherOverride 只改提交、不碰 GradingJob)。这类幽灵重评没意义(已有分)、
+// 归档缺交更错(有内容有分),唯一正解是把任务对账成 DONE。
+// 只认 FAILED/PENDING:PROCESSING 可能正在评,交给 runner 的围栏终态,别去抢。title 选填——
+// 传了按作业圈,不传就全校对账(仍按 schoolId scope)。id 游标分页,与其它维护读同款。
+export function listGradedPhantomTargets(prisma: PrismaClient, schoolId: number, title: string | null, afterId: number, limit: number) {
+  return prisma.submission.findMany({
+    where: {
+      id: { gt: afterId },
+      status: { in: ['GRADED', 'FLAGGED'] },
+      OR: [{ aiScore: { not: null } }, { teacherScore: { not: null } }],
+      gradingJob: { status: { in: ['FAILED', 'PENDING'] } },
+      assignment: { ...(title ? { title } : {}), offering: { schoolId } },
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, phase: { select: { order: true } } },
+  })
+}
+
+// 把一批提交的评阅任务对账成 DONE(幽灵死信清理)。status 围栏只碰 FAILED/PENDING——select 与
+// update 之间若有任务被 runner 抢成 PROCESSING/已结算成 DONE,这里就不动它(防抢/幂等)。分块避
+// D1 绑定参数上限。
+export async function markGradingJobsDone(prisma: PrismaClient, submissionIds: number[]): Promise<number> {
+  const CHUNK = 100
+  let count = 0
+  for (let i = 0; i < submissionIds.length; i += CHUNK) {
+    const r = await prisma.gradingJob.updateMany({
+      where: { submissionId: { in: submissionIds.slice(i, i + CHUNK) }, status: { in: ['FAILED', 'PENDING'] } },
+      data: { status: 'DONE', lastError: null },
+    })
+    count += r.count
+  }
+  return count
+}
+
 // 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是
 // 历史遗留,只虚增看板「待批」数。谓词必须钉死「无答案键」——带答案键的单选在答案键
 // 缺失/损坏时会**刻意**落 needsReview 转人工(actions/submissions 的客观判分回退),

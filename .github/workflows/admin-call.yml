@@ -15,6 +15,7 @@ on:
           - backfill-writing-grading
           - probe-media
           - purge-gemini-files
+          - reconcile-graded-jobs
           - requeue-media-grading
           - requeue-shadow-grading
           - requeue-writing-grading
