@@ -11,6 +11,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import * as submissions from '@/lib/repo/submissions'
+import * as assignments from '@/lib/repo/assignments'
 import { probeObject, type ObjectHealth } from '@/lib/storage'
 import { enqueueGradingBulk, kickDrain, deleteJobsForSubmissions } from './jobs'
 
@@ -153,6 +154,67 @@ export async function requeueWritingGrading(prisma: PrismaClient, schoolId: numb
   const { created, reset } = await enqueueGradingBulk(prisma, ids, 'writing')
   await kickDrain()
   return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
+}
+
+// ── 廉价重评(评分标准更新后:感知不重跑,只重判) ──────────────────────────────────────
+//
+// 评分个性化落地后要按新标准重评一个环节。贵的感知(视频,~16×)不该重跑:已定稿时 perceptionJson
+// 被清空(#400),但完整感知仍留在 aiResult 里——本函数把它拷回 perceptionJson,再把 status 置回
+// UPLOADED 重新入队。重评跑到时复用缓存感知、只重跑几分钱的 judge(带上新 rubric + 本人文本参照 +
+// 合规±10,全在 PR-1 的评阅路径里)。老师已改分的行不动(尊重终评)。writing 环节没有感知,直接重判。
+//
+// 与其它维护端点同款:默认 dry-run 报总盘子 + 本批,apply 才写;分批(每次 REGRADE_BATCH 行,
+// 处理过的移出谓词)——more=true 就再 apply 一次续,直到排空;幂等。
+const REGRADE_BATCH = 100
+
+export type RegradeReport =
+  | {
+      ok: true
+      applied: boolean
+      total: number     // 全部待重评数(dry-run 即见总盘子)
+      scanned: number   // 本批处理数
+      more: boolean     // 还有没排空的(再 apply 一次续)
+      restored: number  // 本批从 aiResult 恢复了感知缓存的行数(writing 环节恒 0)
+      requeued: number  // 本批重新入队的评阅任务数
+      kind: string      // 'submission'（整段媒体）| 'writing'（文本）
+      sampleIds: number[]
+    }
+  | { ok: false; error: string }
+
+export async function regradePhase(prisma: PrismaClient, schoolId: number, title: string, order: number, apply: boolean): Promise<RegradeReport> {
+  // 环节类型定评阅任务种类:writing→文本判分;speech→整段媒体(感知+判分)。objective 不评。
+  const phases = await assignments.findPhaseRubricTargets(prisma, schoolId, title, order)
+  if (phases.length === 0) return { ok: false, error: 'no phase at this school+title+order' }
+  if (phases[0].itemType === 'objective') return { ok: false, error: 'objective phase is not AI-graded — nothing to regrade' }
+  const kind: 'submission' | 'writing' = phases[0].itemType === 'writing' ? 'writing' : 'submission'
+
+  const total = await submissions.countRegradeTargets(prisma, schoolId, title, order)
+  if (total === 0) return { ok: false, error: 'no finalized (non-teacher-graded) submissions to regrade for this school+title+order' }
+
+  const rows = await submissions.listRegradeTargets(prisma, schoolId, title, order, REGRADE_BATCH)
+  const sampleIds = rows.slice(0, 20).map((r) => r.id)
+  if (!apply) return { ok: true, applied: false, total, scanned: rows.length, more: total > rows.length, restored: 0, requeued: 0, kind, sampleIds }
+
+  let restored = 0
+  const ids: number[] = []
+  for (const row of rows) {
+    ids.push(row.id)
+    let perceptionJson: string | null = null
+    // 已定稿会清空 perceptionJson(#400),但完整感知仍在 aiResult 里——拷回缓存,重评复用、只重判。
+    if (!row.perceptionJson && row.aiResult) {
+      try {
+        const r = JSON.parse(row.aiResult) as { perceptionModel?: string; perception?: unknown }
+        if (r?.perception) {
+          perceptionJson = JSON.stringify({ perceptionModel: r.perceptionModel, perception: r.perception })
+          restored++
+        }
+      } catch { /* aiResult 损坏 → 不写缓存,重评会重新感知(仍正确,只是贵一次) */ }
+    }
+    await submissions.resetForRegrade(prisma, row.id, perceptionJson)
+  }
+  const { created, reset } = await enqueueGradingBulk(prisma, ids, kind)
+  await kickDrain()
+  return { ok: true, applied: true, total, scanned: rows.length, more: total > rows.length, restored, requeued: created + reset, kind, sampleIds }
 }
 
 // ── 幽灵死信对账(看板对得上账 + 降老师负担) ────────────────────────────────────────
