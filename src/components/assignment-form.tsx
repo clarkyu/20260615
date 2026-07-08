@@ -299,6 +299,11 @@ export function AssignmentForm({
     }
   }
 
+  // 甲·分流：找出「选题·分流」环节（纯选择 + 无答案键 + selectionMode='branch'）。它的选项就是下游
+  // 环节可归属的题目清单；有它时，其它环节才显示「归属哪些题目」多选（把 branchTopics 交给学生分流）。
+  const branchSelectionPhase = phases.find((p) => p.requireChoice && p.selectionMode === 'branch' && !(p.multiChoice ? p.correctIndices.length > 0 : p.correctIndex >= 0))
+  const branchTopicOptions = branchSelectionPhase ? branchSelectionPhase.choices.map((c) => c.trim()).filter(Boolean) : []
+
   // Serialize phases for the server (local times → UTC ISO).
   const phasesJson = JSON.stringify(
     phases.map((p) => ({
@@ -509,6 +514,8 @@ export function AssignmentForm({
                   phase={p}
                   bank={bankInfo}
                   open={openPhase === i}
+                  branchTopicOptions={branchTopicOptions}
+                  isBranchSelectionPhase={p === branchSelectionPhase}
                   onToggle={() => setOpenPhase(openPhase === i ? -1 : i)}
                   onPatch={(patch) => patchPhase(i, patch)}
                   onMove={(dir) => movePhase(i, dir)}
@@ -598,6 +605,8 @@ function PhaseCard({
   phase,
   bank,
   open,
+  branchTopicOptions,
+  isBranchSelectionPhase,
   onToggle,
   onPatch,
   onMove,
@@ -608,6 +617,9 @@ function PhaseCard({
   phase: PhaseState
   bank: { id: number; name: string; count: number; hasVideo: boolean } | null
   open: boolean
+  // 甲·分流:整份作业里「选题·分流」环节的题目清单(空=没有分流选题环节);isBranchSelectionPhase=本卡自己就是那个选题环节。
+  branchTopicOptions: string[]
+  isBranchSelectionPhase: boolean
   onToggle: () => void
   onPatch: (patch: Partial<PhaseState>) => void
   onMove: (dir: -1 | 1) => void
@@ -810,7 +822,14 @@ function PhaseCard({
                   <input type="radio" name={`use-${index}`} checked={phase.selectionMode === 'theme'} onChange={() => onPatch({ selectionMode: 'theme' })} className="h-3.5 w-3.5 accent-primary" />
                   {t('asg.choiceUseTheme')}
                 </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input type="radio" name={`use-${index}`} checked={phase.selectionMode === 'branch'} onChange={() => onPatch({ selectionMode: 'branch' })} className="h-3.5 w-3.5 accent-primary" />
+                  {t('asg.choiceUseBranch')}
+                </label>
               </div>
+            ) : null}
+            {phase.selectionMode === 'branch' && !(phase.multiChoice ? phase.correctIndices.length > 0 : phase.correctIndex >= 0) ? (
+              <p className="text-xs text-muted-foreground">{t('asg.branchSelectionHint')}</p>
             ) : null}
             <p className="text-xs text-muted-foreground">
               {phase.multiChoice
@@ -841,6 +860,28 @@ function PhaseCard({
               </div>
             )
           })()}
+        </div>
+      ) : null}
+
+      {/* 甲·分流：归属题目——本环节只发给选了这些题目的学生；一个不选 = 公共环节（全班都做）。
+          仅当作业里有「选题·分流」环节、且本卡不是那个选题环节自身时出现。 */}
+      {branchTopicOptions.length > 0 && !isBranchSelectionPhase ? (
+        <div className="space-y-2">
+          <Label>{t('asg.branchAssign')}</Label>
+          <div className="space-y-1.5 rounded-xl border border-input p-3">
+            {branchTopicOptions.map((topic) => (
+              <label key={topic} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={phase.branchTopics.includes(topic)}
+                  onChange={(e) => onPatch({ branchTopics: e.target.checked ? [...phase.branchTopics, topic] : phase.branchTopics.filter((x) => x !== topic) })}
+                  className="h-4 w-4 shrink-0 accent-primary"
+                />
+                <span>{topic}</span>
+              </label>
+            ))}
+            <p className="text-xs text-muted-foreground">{phase.branchTopics.length === 0 ? t('asg.branchAssignAll') : t('asg.branchAssignHint')}</p>
+          </div>
         </div>
       ) : null}
 
