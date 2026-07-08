@@ -91,3 +91,34 @@ export async function requeueMediaGrading(prisma: PrismaClient, schoolId: number
   await kickDrain()
   return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
 }
+
+// ── 逐句跟读重评(清扫盲区补漏) ────────────────────────────────────────────────
+//
+// requeueMediaGrading 只认 videoKey/audioKey,对逐句跟读(shadow)完全瞎——它们的音频在
+// ShadowTake 行里。于是一批真背诵(期末收官时发现 163 份、8150 条逐句音频)评阅失败后进了
+// 死信,却从没被重评工具捞到过。本函数按 school+title 圈定「有 ShadowTake、失败/卡死/未评」
+// 的 shadow 提交,重置成 kind='shadow' 入队(重跑=重置)。与 requeueMediaGrading 同款约定:
+// 默认 dry-run 零写入,apply 才执行;幂等;GRADED/无录音不碰。
+export async function requeueShadowGrading(prisma: PrismaClient, schoolId: number, title: string, apply: boolean): Promise<RequeueReport> {
+  const ids: number[] = []
+  const byPhase = new Map<number, number>()
+  let after = 0
+  for (;;) {
+    const rows = await submissions.listShadowGradingTargets(prisma, schoolId, title, after, 500)
+    for (const r of rows) {
+      ids.push(r.id)
+      const order = r.phase?.order ?? 0
+      byPhase.set(order, (byPhase.get(order) ?? 0) + 1)
+    }
+    if (rows.length < 500) break
+    after = rows[rows.length - 1].id
+  }
+  if (ids.length === 0) return { ok: false, error: 'no shadow requeue targets for this school+title' }
+  const perPhaseOrder = [...byPhase.entries()].map(([phaseOrder, count]) => ({ phaseOrder, count })).sort((a, b) => a.phaseOrder - b.phaseOrder)
+
+  if (!apply) return { ok: true, applied: false, targets: ids.length, perPhaseOrder, jobsCreated: 0, jobsReset: 0 }
+
+  const { created, reset } = await enqueueGradingBulk(prisma, ids, 'shadow')
+  await kickDrain()
+  return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
+}
