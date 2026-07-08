@@ -155,6 +155,47 @@ export async function requeueWritingGrading(prisma: PrismaClient, schoolId: numb
   return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsCreated: created, jobsReset: reset }
 }
 
+// ── 幽灵死信对账(看板对得上账 + 降老师负担) ────────────────────────────────────────
+//
+// 一份提交评过一次(拿到 aiScore、进 GRADED/FLAGGED),后来被批量重排、再评又失败到顶——提交
+// 仍留着上次的分,评阅任务却停在 FAILED/PENDING,只虚增看板「失败/死信」数(就是「死信数 vs 失败
+// 数对不上」的那种行),老师复核定稿也不清(applyTeacherOverride 不碰 GradingJob)。重评没意义
+// (已有分)、归档缺交更错(有内容有分)——唯一正解:把任务对账成 DONE。默认 dry-run 报数,apply
+// 才写;幂等(已 DONE 的下次不再入选);可反复跑当常备扫帚,新冒出来的幽灵随时清。title 选填:
+// 传了按作业、不传全校对账。
+export type ReconcileReport =
+  | {
+      ok: true
+      applied: boolean
+      targets: number
+      perPhaseOrder: { phaseOrder: number; count: number }[]
+      jobsDone: number
+    }
+  | { ok: false; error: string }
+
+export async function reconcileGradedJobs(prisma: PrismaClient, schoolId: number, title: string | null, apply: boolean): Promise<ReconcileReport> {
+  const ids: number[] = []
+  const byPhase = new Map<number, number>()
+  let after = 0
+  for (;;) {
+    const rows = await submissions.listGradedPhantomTargets(prisma, schoolId, title, after, 500)
+    for (const r of rows) {
+      ids.push(r.id)
+      const order = r.phase?.order ?? 0
+      byPhase.set(order, (byPhase.get(order) ?? 0) + 1)
+    }
+    if (rows.length < 500) break
+    after = rows[rows.length - 1].id
+  }
+  if (ids.length === 0) return { ok: false, error: 'no graded-phantom grading jobs for this school(+title)' }
+  const perPhaseOrder = [...byPhase.entries()].map(([phaseOrder, count]) => ({ phaseOrder, count })).sort((a, b) => a.phaseOrder - b.phaseOrder)
+
+  if (!apply) return { ok: true, applied: false, targets: ids.length, perPhaseOrder, jobsDone: 0 }
+
+  const jobsDone = await submissions.markGradingJobsDone(prisma, ids)
+  return { ok: true, applied: true, targets: ids.length, perPhaseOrder, jobsDone }
+}
+
 // ── 上传坏死 / 内容损坏 自动归档(降老师负担) ──────────────────────────────────────
 //
 // 两类「有提交、却没有可评内容」的卡住/死信,重跑都是死循环,不该扔给老师人工:

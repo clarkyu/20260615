@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { backfillWritingGrading, requeueMediaGrading, requeueShadowGrading, requeueWritingGrading, resolveMissingMedia } from '@/lib/domain/grading-backfill'
+import { backfillWritingGrading, reconcileGradedJobs, requeueMediaGrading, requeueShadowGrading, requeueWritingGrading, resolveMissingMedia } from '@/lib/domain/grading-backfill'
 import { claimForProcessing } from '@/lib/repo/submissions'
 import type { PrismaClient } from '@prisma/client'
 import type { ObjectHealth } from '@/lib/storage'
@@ -241,6 +241,60 @@ describe('requeueWritingGrading (清写作死信盲区)', () => {
     const d = await seedSpeech(db.prisma)
     const r = await requeueWritingGrading(db.prisma, d.school.id, '不存在的标题', true)
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('reconcileGradedJobs (幽灵死信对账)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('把「已评出分/已定稿、任务却挂 FAILED/PENDING」的幽灵标记 DONE;未评分/PROCESSING/已DONE/无任务不碰', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03', '04', '05', '06'].map(d.student))
+    const job = (submissionId: number, over: object) =>
+      db.prisma.gradingJob.create({ data: { submissionId, kind: 'submission', status: 'FAILED', attempts: 4, lastError: 'x', ...over } })
+
+    const phantomAi = await d.sub(s[0].id, { status: 'FLAGGED', videoKey: 'k/1', aiScore: 70, needsReview: true }); await job(phantomAi.id, { status: 'FAILED', attempts: 4 })
+    const phantomTeacher = await d.sub(s[1].id, { status: 'GRADED', videoKey: 'k/2', teacherScore: 88, finalScore: 88 }); await job(phantomTeacher.id, { status: 'PENDING', attempts: 0, lastError: null }) // 已定稿又被重排的
+    const notGraded = await d.sub(s[2].id, { status: 'FAILED', videoKey: 'k/3' }); await job(notGraded.id, { status: 'FAILED', attempts: 4 }) // 没分、非稳定态,真死信,不碰
+    const processing = await d.sub(s[3].id, { status: 'FLAGGED', videoKey: 'k/4', aiScore: 60 }); await job(processing.id, { status: 'PROCESSING', attempts: 1, lastError: null }) // 正在评,不抢
+    const jobDone = await d.sub(s[4].id, { status: 'FLAGGED', videoKey: 'k/5', aiScore: 75 }); await job(jobDone.id, { status: 'DONE', attempts: 1, lastError: null }) // 已 DONE
+    await d.sub(s[5].id, { status: 'GRADED', videoKey: 'k/6', teacherScore: 90, finalScore: 90 }) // 无 gradingJob,不入选
+
+    const dry = await reconcileGradedJobs(db.prisma, d.school.id, TITLE, false)
+    if (!dry.ok) throw new Error(dry.error)
+    expect(dry).toMatchObject({ applied: false, targets: 2, jobsDone: 0 })
+    expect(dry.perPhaseOrder).toEqual([{ phaseOrder: 3, count: 2 }])
+
+    const r = await reconcileGradedJobs(db.prisma, d.school.id, TITLE, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, targets: 2, jobsDone: 2 })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: phantomAi.id } })).toMatchObject({ status: 'DONE', lastError: null })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: phantomTeacher.id } })).toMatchObject({ status: 'DONE' })
+    // 非目标原样
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: notGraded.id } })).toMatchObject({ status: 'FAILED' })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: processing.id } })).toMatchObject({ status: 'PROCESSING' })
+    expect(await db.prisma.gradingJob.findUnique({ where: { submissionId: jobDone.id } })).toMatchObject({ status: 'DONE' })
+
+    // 幂等:再 apply 已无目标(DONE 的不再入选)
+    const again = await reconcileGradedJobs(db.prisma, d.school.id, TITLE, true)
+    expect(again.ok).toBe(false)
+  })
+
+  it('title 不传=全校对账,跨作业的幽灵一并对上', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02'].map(d.student))
+    const asg2 = await db.prisma.assignment.create({ data: { offeringId: d.asg.offeringId, title: '别的作业' } })
+    const ph2 = await db.prisma.phase.create({ data: { assignmentId: asg2.id, order: 1, requireVideo: true, requireText: false, requireEyesClosed: false, itemType: 'speech', graded: true, maxAttempts: 3 } })
+    const p1 = await d.sub(s[0].id, { status: 'FLAGGED', videoKey: 'k/1', aiScore: 70 }); await db.prisma.gradingJob.create({ data: { submissionId: p1.id, kind: 'submission', status: 'FAILED', attempts: 4 } })
+    const p2 = await db.prisma.submission.create({ data: { assignmentId: asg2.id, offeringId: d.asg.offeringId, phaseId: ph2.id, studentId: s[1].id, attempt: 1, status: 'FLAGGED', videoKey: 'k/2', aiScore: 80 } })
+    await db.prisma.gradingJob.create({ data: { submissionId: p2.id, kind: 'submission', status: 'FAILED', attempts: 4 } })
+
+    const r = await reconcileGradedJobs(db.prisma, d.school.id, null, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.targets).toBe(2)
+    expect(r.jobsDone).toBe(2)
   })
 })
 
