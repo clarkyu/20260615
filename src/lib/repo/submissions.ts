@@ -260,6 +260,45 @@ export async function markGradingJobsDone(prisma: PrismaClient, submissionIds: n
   return count
 }
 
+// ── 廉价重评(评分标准更新后) ────────────────────────────────────────────────
+// 某环节「已定稿(GRADED/FLAGGED)、非老师改分」的提交——评分标准/参照来源改了以后要按新标准重评的目标。
+// 老师已改分的(teacherScore 非空)不动:尊重老师终评(重评也只会覆盖 aiScore、finalScore 仍取老师分,
+// 白跑一趟)。
+export function countRegradeTargets(prisma: PrismaClient, schoolId: number, title: string, order: number) {
+  return prisma.submission.count({
+    where: {
+      status: { in: ['GRADED', 'FLAGGED'] },
+      teacherScore: null,
+      phase: { order, assignment: { title, offering: { schoolId } } },
+    },
+  })
+}
+
+// 取一批重评目标 + 各自的 aiResult(恢复感知缓存用)。不用游标:apply 会把处理过的行置回 UPLOADED、
+// 移出本谓词,所以下一批自然是还没处理的——反复 apply 即分批排空(同 resolveMissingMedia 的 more 模式)。
+export function listRegradeTargets(prisma: PrismaClient, schoolId: number, title: string, order: number, limit: number) {
+  return prisma.submission.findMany({
+    where: {
+      status: { in: ['GRADED', 'FLAGGED'] },
+      teacherScore: null,
+      phase: { order, assignment: { title, offering: { schoolId } } },
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, aiResult: true, perceptionJson: true },
+  })
+}
+
+// 重评前置(逐行:perceptionJson 每行不同):把感知缓存写回(从 aiResult 提取,null=不写,重评会重新感知)
+// 并把 status 置回 UPLOADED,让后台重评认领、复用感知、只重判。不碰 aiScore/finalScore/feedback——
+// 由重评落库时覆盖(老师分优先仍在 applyGradeResult 里守着)。
+export function resetForRegrade(prisma: PrismaClient, id: number, perceptionJson: string | null) {
+  return prisma.submission.update({
+    where: { id },
+    data: { status: 'UPLOADED', ...(perceptionJson !== null ? { perceptionJson } : {}) },
+  })
+}
+
 // 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是
 // 历史遗留,只虚增看板「待批」数。谓词必须钉死「无答案键」——带答案键的单选在答案键
 // 缺失/损坏时会**刻意**落 needsReview 转人工(actions/submissions 的客观判分回退),
