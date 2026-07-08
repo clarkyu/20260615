@@ -731,7 +731,8 @@ export function findForStudentPhaseList(prisma: PrismaClient, id: number, classI
           _count: { select: { sentences: true } },
           // Top 2 attempts so a redo's in-progress DRAFT can't shadow the submitted one
           // (see representativeSubmission); the checklist picks the latest non-DRAFT.
-          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 2, select: { status: true, finalScore: true } },
+          // recitedText: 甲·分流要读学生在「选题·分流」环节里选的题目(= 分流依据)。
+          submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, take: 2, select: { status: true, finalScore: true, recitedText: true } },
         },
       },
     },
