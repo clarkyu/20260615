@@ -509,6 +509,10 @@ model Submission {
   geminiFileUri   String?
   geminiFileName  String?
   geminiFileAt    DateTime?
+  // 重评回退快照(评分标准更新重评的安全网):regrade-phase 首次重置本行前,把当时的完整评分态
+  // (status/finalScore/aiScore/feedback/needsReview/aiResult)序列化存这里;restore-scores 据此一键还原到
+  // 重评前。只在快照为空时写(保住"最初"那份,历经多轮重评不被覆盖);还原后清空。
+  regradeSnapshot String?
   aiScore         Float?
   confidence      Float?
   // Real token usage + cost of this grade (perception + judge), captured from the

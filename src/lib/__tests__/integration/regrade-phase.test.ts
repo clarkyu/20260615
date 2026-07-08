@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { regradePhase } from '@/lib/domain/grading-backfill'
+import { regradePhase, restoreScores } from '@/lib/domain/grading-backfill'
 import type { PrismaClient } from '@prisma/client'
 
 const TITLE = '期末考核：2025-2026-2'
@@ -56,6 +56,8 @@ describe('regradePhase (廉价重评)', () => {
     expect(JSON.parse(g.perceptionJson!)).toEqual({ perceptionModel: 'pm', perception: { transcript: 'hello', perSentence: [], observations: {} } })
     // aiScore/finalScore 不动(由重评落库时覆盖)
     expect(g).toMatchObject({ aiScore: 80, finalScore: 80 })
+    // 回退快照:首次重置捕获旧评分态(GRADED/80/80)
+    expect(JSON.parse(g.regradeSnapshot!)).toMatchObject({ status: 'GRADED', finalScore: 80, aiScore: 80 })
     // 入队了一份 submission 评阅任务
     expect(await db.prisma.gradingJob.findFirst({ where: { submissionId: d.graded.id } })).toMatchObject({ kind: 'submission', status: 'PENDING' })
 
@@ -97,5 +99,53 @@ describe('regradePhase (廉价重评)', () => {
     expect((await regradePhase(db.prisma, d.school.id, TITLE, 4, true)).ok).toBe(false)
     // 错标题
     expect((await regradePhase(db.prisma, d.school.id, '不存在', 3, true)).ok).toBe(false)
+  })
+})
+
+describe('restoreScores (重评回退)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('重评把分覆盖后,restore 一键还原到重评前(分/态/评语),清空快照、删任务', async () => {
+    const d = await seed(db.prisma)
+    // 重评环节3(捕获快照、置回 UPLOADED、入队)
+    await regradePhase(db.prisma, d.school.id, TITLE, 3, true)
+    // 模拟重评落库把分覆盖了(status GRADED、新分 40、新评语)
+    await db.prisma.submission.update({ where: { id: d.graded.id }, data: { status: 'GRADED', aiScore: 40, finalScore: 40, feedback: '重评后', needsReview: false } })
+
+    // dry-run 报有 2 份可还原(graded+flagged 都被重评动过)、零写入
+    const dry = await restoreScores(db.prisma, d.school.id, TITLE, 3, false)
+    if (!dry.ok) throw new Error(dry.error)
+    expect(dry).toMatchObject({ applied: false, total: 2, restored: 0 })
+
+    // apply:还原成重评前(GRADED / 80 / 80 / 原 aiResult),清空快照
+    const r = await restoreScores(db.prisma, d.school.id, TITLE, 3, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, total: 2, restored: 2 })
+    const g = await db.prisma.submission.findUniqueOrThrow({ where: { id: d.graded.id } })
+    expect(g).toMatchObject({ status: 'GRADED', finalScore: 80, aiScore: 80 })
+    expect(g.regradeSnapshot).toBeNull()
+    // 重评任务被作废
+    expect(await db.prisma.gradingJob.findFirst({ where: { submissionId: d.graded.id } })).toBeNull()
+  })
+
+  it('没有快照(没重评过)→ 报错;幂等(还原后再跑就没目标了)', async () => {
+    const d = await seed(db.prisma)
+    expect((await restoreScores(db.prisma, d.school.id, TITLE, 3, true)).ok).toBe(false)
+    // 重评→还原→再还原:第二次没目标
+    await regradePhase(db.prisma, d.school.id, TITLE, 3, true)
+    expect((await restoreScores(db.prisma, d.school.id, TITLE, 3, true)).ok).toBe(true)
+    expect((await restoreScores(db.prisma, d.school.id, TITLE, 3, true)).ok).toBe(false)
+  })
+
+  it('多轮重评保住"最初"那份快照:regrade→(改分)→regrade→restore 仍还原到最初', async () => {
+    const d = await seed(db.prisma)
+    await regradePhase(db.prisma, d.school.id, TITLE, 3, true) // 快照=最初(80)
+    await db.prisma.submission.update({ where: { id: d.graded.id }, data: { status: 'GRADED', aiScore: 40, finalScore: 40 } })
+    await regradePhase(db.prisma, d.school.id, TITLE, 3, true) // 第二轮不覆盖快照
+    await db.prisma.submission.update({ where: { id: d.graded.id }, data: { status: 'GRADED', aiScore: 55, finalScore: 55 } })
+    await restoreScores(db.prisma, d.school.id, TITLE, 3, true)
+    expect((await db.prisma.submission.findUniqueOrThrow({ where: { id: d.graded.id } })).finalScore).toBe(80)
   })
 })

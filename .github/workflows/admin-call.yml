@@ -21,6 +21,7 @@ on:
           - requeue-shadow-grading
           - requeue-writing-grading
           - resolve-missing-media
+          - restore-scores
           - set-phase-rubric
           - set-selection-mode
           - unify-poll-phase
