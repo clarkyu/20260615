@@ -80,6 +80,17 @@ describe('regradePhase (廉价重评)', () => {
     expect(await db.prisma.gradingJob.findFirst({ where: { submissionId: w.id } })).toMatchObject({ kind: 'writing', status: 'PENDING' })
   })
 
+  it('limit 试点:只处理指定份数、more=true 表示还有', async () => {
+    const d = await seed(db.prisma)
+    // 环节3 有 2 份可重评(graded+flagged);limit=1 只处理 1 份
+    const r = await regradePhase(db.prisma, d.school.id, TITLE, 3, true, 1)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, total: 2, scanned: 1, more: true, requeued: 1 })
+    // 只有 1 份被置回 UPLOADED,另一份原样
+    const speak3 = await db.prisma.submission.findMany({ where: { phaseId: d.speak.id, status: 'UPLOADED' } })
+    expect(speak3.length).toBe(1)
+  })
+
   it('没有目标 / 环节不存在 → 报错,不静默空跑', async () => {
     const d = await seed(db.prisma)
     // 环节4 不存在
