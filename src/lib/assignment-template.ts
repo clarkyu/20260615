@@ -19,6 +19,7 @@ export const templatePhaseSchema = z.object({
   correctChoice: z.string().nullable().default(null),
   multiChoice: z.boolean().default(false),
   correctChoices: z.string().nullable().default(null),
+  selectionMode: z.enum(['poll', 'theme', 'branch']).nullable().default(null),
   fillBlank: z.boolean().default(false),
   blanksJson: z.string().nullable().default(null),
   requireFreeText: z.boolean().default(false),
@@ -69,6 +70,7 @@ export interface TemplateSourcePhase {
   correctChoice?: string | null
   multiChoice?: boolean
   correctChoices?: string | null
+  selectionMode?: string | null
   fillBlank?: boolean
   blanksJson?: string | null
   requireFreeText?: boolean
@@ -111,6 +113,7 @@ export function buildTemplatePayload(
       correctChoice: p.correctChoice ?? null,
       multiChoice: p.multiChoice ?? false,
       correctChoices: p.correctChoices ?? null,
+      selectionMode: (p.selectionMode as 'poll' | 'theme' | 'branch' | null) ?? null,
       fillBlank: p.fillBlank ?? false,
       blanksJson: p.blanksJson ?? null,
       requireFreeText: p.requireFreeText ?? false,

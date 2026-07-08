@@ -39,6 +39,8 @@ export interface PhaseInitial {
   // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
   multiChoice: boolean
   correctIndices: number[]
+  // 选题模式（仅当纯选择、无正确答案时有意义）：'poll'=课堂民调（默认，= 历史纯投票）；'theme'=选题·主题。'branch' 留待 P2。
+  selectionMode: 'poll' | 'theme' | null
   // 填空题：fillText 是带 ____ 挖空标记的题干；fillAccept 是每个空的可接受答案
   // （编辑时用「|」分隔多个），空数 = fillText 里的 ____ 个数。落库成 blanksJson。
   fillBlank: boolean
@@ -123,6 +125,8 @@ interface PhaseState {
   // （空 = 多选投票）。落库时映射成选项文本 JSON 数组 correctChoices。
   multiChoice: boolean
   correctIndices: number[]
+  // 选题模式（仅当纯选择、无正确答案时有意义）：'poll'=课堂民调（默认，= 历史纯投票）；'theme'=选题·主题。'branch' 留待 P2。
+  selectionMode: 'poll' | 'theme' | null
   // 填空题：fillText 是带 ____ 挖空标记的题干；fillAccept 是每个空的可接受答案
   // （编辑时用「|」分隔多个），空数 = fillText 里的 ____ 个数。落库成 blanksJson。
   fillBlank: boolean
@@ -166,6 +170,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     correctIndex: -1,
     multiChoice: false,
     correctIndices: [],
+    selectionMode: null,
     fillBlank: false,
     fillText: '',
     fillAccept: [],
@@ -314,6 +319,8 @@ export function AssignmentForm({
       correctChoices: p.requireChoice && p.multiChoice && p.correctIndices.length > 0
         ? JSON.stringify(p.correctIndices.map((i) => p.choices[i]?.trim()).filter(Boolean))
         : null,
+      // 选题模式只在「纯选择、无答案键」时有意义：设了答案键(客观判分题)或非选择环节一律 null。
+      selectionMode: p.requireChoice && !(p.multiChoice ? p.correctIndices.length > 0 : p.correctIndex >= 0) ? p.selectionMode : null,
       fillBlank: p.fillBlank,
       // blanksJson = { text, accept }；accept 长度按题干 ____ 个数取（= 总空数），
       // 每空的可接受答案由「|」分隔。空数为准，多余/缺失的 fillAccept 自动对齐。
@@ -783,6 +790,21 @@ function PhaseCard({
                 </button>
               ) : null}
             </div>
+            {/* 用途开关：仅当纯选择、无答案键时出现——把「选题」从「投票 hack」升格为一等公民。
+                课堂民调(poll,默认) vs 选题·主题(theme,学生选一个感兴趣的主题)。分流(branch)留待后续。 */}
+            {!(phase.multiChoice ? phase.correctIndices.length > 0 : phase.correctIndex >= 0) ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-input pt-2">
+                <span className="text-xs font-medium text-muted-foreground">{t('asg.choiceUse')}</span>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input type="radio" name={`use-${index}`} checked={(phase.selectionMode ?? 'poll') === 'poll'} onChange={() => onPatch({ selectionMode: 'poll' })} className="h-3.5 w-3.5 accent-primary" />
+                  {t('asg.choiceUsePoll')}
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input type="radio" name={`use-${index}`} checked={phase.selectionMode === 'theme'} onChange={() => onPatch({ selectionMode: 'theme' })} className="h-3.5 w-3.5 accent-primary" />
+                  {t('asg.choiceUseTheme')}
+                </label>
+              </div>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               {phase.multiChoice
                 ? (phase.correctIndices.length > 0 ? t('asg.multiGradedHint') : t('asg.multiPollHint'))
