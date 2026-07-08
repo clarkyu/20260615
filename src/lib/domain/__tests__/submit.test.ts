@@ -95,6 +95,42 @@ describe('resolveAttempt', () => {
   })
 })
 
+// ── 甲·分流提交门(硬完整性:防绕过前端 POST 到别人分支) ────────────────────────────
+// gated 环节(branchTopicsJson 非空)只放行「选题·分流环节选中对应题目」的学生。
+describe('resolveAttempt — 甲·分流提交门', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fakeBranchPrisma = (opts: { gatedPhase: any; selPhaseId: number | null; chosenTopic: string | null; used?: number }): any => ({
+    phase: {
+      // findChosenTopic 查的是 selectionMode='branch' 的选题环节;resolveAttempt 查的是本环节。
+      findFirst: async (args: { where?: { selectionMode?: string } }) =>
+        args?.where?.selectionMode === 'branch' ? (opts.selPhaseId ? { id: opts.selPhaseId } : null) : opts.gatedPhase,
+    },
+    submission: {
+      count: async () => opts.used ?? 0,
+      findFirst: async () => (opts.chosenTopic !== null ? { recitedText: opts.chosenTopic } : null),
+    },
+  })
+  const gated = (topics: string) => A({ maxAttempts: 3, branchTopicsJson: topics })
+
+  it('选了对应题目 → 放行', async () => {
+    const r = await resolveAttempt(fakeBranchPrisma({ gatedPhase: gated('["自我介绍"]'), selPhaseId: 1, chosenTopic: '自我介绍', used: 0 }), 7, [2], 5)
+    expect(r.ok).toBe(true)
+  })
+  it('选了别的题目 → 拒绝', async () => {
+    const r = await resolveAttempt(fakeBranchPrisma({ gatedPhase: gated('["自我介绍"]'), selPhaseId: 1, chosenTopic: '课文背诵', used: 0 }), 7, [2], 5)
+    expect(r).toEqual({ ok: false, error: 'err.phaseNotYours' })
+  })
+  it('还没选题 → 拒绝', async () => {
+    const r = await resolveAttempt(fakeBranchPrisma({ gatedPhase: gated('["自我介绍"]'), selPhaseId: 1, chosenTopic: null, used: 0 }), 7, [2], 5)
+    expect(r).toEqual({ ok: false, error: 'err.phaseNotYours' })
+  })
+  it('公共环节(无归属题目)→ 放行,不查选题(零开销)', async () => {
+    // fakePrisma 里没有 submission.findFirst：若门去查它就会抛,证明公共环节根本没走查询。
+    const r = await resolveAttempt(fakePrisma(A({ maxAttempts: 3 }), 0), 7, [2], 5)
+    expect(r.ok).toBe(true)
+  })
+})
+
 describe('requiredMediaUnhealthy — 提交完整性门(期末考核复盘)', () => {
   const probe = (table: Record<string, 'ok' | 'empty' | 'missing' | 'unknown'>) => async (key: string) => table[key] ?? 'missing'
 
