@@ -665,6 +665,35 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
   })
 }
 
+// 选题落地(维护):按 school+title+order 圈定「纯选择环节」(requireChoice + 无答案键),供
+// set-selection-mode 把它标成 theme/branch(把历史「投票 hack」正式升格为选题)。只认无答案键的,
+// 避免误改客观判分题(有 correctChoice/correctChoices 的单/多选题)。
+export function findSelectionModeTargets(prisma: PrismaClient, schoolId: number, title: string, order: number) {
+  return prisma.phase.findMany({
+    where: {
+      order,
+      requireChoice: true,
+      assignment: { title, offering: { schoolId } },
+      AND: [
+        { OR: [{ correctChoice: null }, { correctChoice: '' }] },
+        { OR: [{ correctChoices: null }, { correctChoices: '' }] },
+      ],
+    },
+    select: { id: true, selectionMode: true, assignmentId: true },
+  })
+}
+
+// 把一批环节的 selectionMode 设成给定值(选题落地)。分块避 D1 绑定上限。只写 Phase,绝不碰 Submission。
+export async function setPhaseSelectionModeByIds(prisma: PrismaClient, ids: number[], mode: string | null): Promise<number> {
+  const CHUNK = 100
+  let count = 0
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const r = await prisma.phase.updateMany({ where: { id: { in: ids.slice(i, i + CHUNK) } }, data: { selectionMode: mode } })
+    count += r.count
+  }
+  return count
+}
+
 export function findPhaseShadowVideoForClasses(prisma: PrismaClient, phaseId: number, classIds: number[]) {
   return prisma.phase.findFirst({
     where: { id: phaseId, assignment: { offering: { classId: { in: classIds } } } },

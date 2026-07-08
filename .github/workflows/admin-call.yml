@@ -20,6 +20,7 @@ on:
           - requeue-shadow-grading
           - requeue-writing-grading
           - resolve-missing-media
+          - set-selection-mode
           - unify-poll-phase
       payload:
         description: 'JSON body,如 {"schoolId":1,"title":"期末考核：2025-2026-2"}(执行加 ,"apply":true)'
