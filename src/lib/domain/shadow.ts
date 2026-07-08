@@ -72,6 +72,14 @@ export function summarizeShadow(
   return { overall, minScore, weakestOrder: weakest[0], weakestScore: weakest[1], needsReview }
 }
 
+// 该句录音永久缺失:mediaPart 取不到对象抛「无法获取视频（404）」——对象从没落 R2(该句当初上传就
+// 没成功,#405 逐句提交门上线前的历史空/缺上传;探针与评阅对该句都读到 404,一致)。与瞬时错误
+// (网络抖/5xx/429,重试可补回)不同,重试补不回;逐句评阅遇到这种句应「跳过该句、按剩余句评并转老师
+// 复核」,而不是整份无限 revert 进死信空转——同一份里另有句上传成功时,就是这次的「混合提交」根因。
+function isMediaGone(msg: string): boolean {
+  return msg.includes('无法获取视频（404）')
+}
+
 // `onBatch` (the durable queue passes a job heartbeat) is awaited after each sentence
 // batch so a large, slow shadow grade keeps its job row fresh and isn't reclaimed +
 // double-run mid-flight.
@@ -115,6 +123,9 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     // that happened to succeed — the missing (often weakest) sentence would be silently
     // dropped and the submission could auto-pass on incomplete data.
     let hadFailure = false
+    // 永久缺失(404)的句子 order:该句当初上传就没成功、对象从没落 R2,重试补不回。不算 hadFailure(不 revert),
+    // 而是跳过这些句、按剩余句评并强制转老师复核(见下)——修「部分句音频没了就无限 revert」的死循环。
+    const missingOrders: number[] = []
     // Retry dedup: a prior interrupted run may have already scored some takes. Each take
     // is a PAID perception call, so reuse the stored scores and only grade the ones still
     // missing one — a reclaimed/retried run no longer re-pays for the whole set (this is
@@ -124,32 +135,40 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     }
     const pending = submission.shadowTakes.filter((tk) => tk.aiScore == null)
     // Grade in small batches to stay within Worker limits without firing 50 at once.
+    // 显式判别联合:成功带 score、失败带 error——让下面的 'error' in res 干净窄化(否则 TS 把 error 宽成 string|undefined)。
+    type TakeOutcome = { order: number; score: number; usage?: TokenUsage; audioSeconds?: number } | { order: number; error: string } | null
     for (let i = 0; i < pending.length; i += 4) {
       const batch = pending.slice(i, i + 4)
-      const results = await Promise.allSettled(
-        batch.map(async (tk) => {
+      // 每句自己 catch,失败按类别分流(见下),不让一句异常掀翻整批。
+      const results = await Promise.all(
+        batch.map(async (tk): Promise<TakeOutcome> => {
           const text = textByOrder.get(tk.order)
           if (!text) return null
-          const url = await presignDownload(tk.audioKey)
-          const r = await gradeShadowTake(url, text, perceptionModel)
-          await submissionRepo.setShadowTakeScore(prisma, tk.id, { aiScore: r.score, spokenText: r.spokenText })
-          return { order: tk.order, score: r.score, usage: r.usage, audioSeconds: r.audioSeconds }
+          try {
+            const url = await presignDownload(tk.audioKey)
+            const r = await gradeShadowTake(url, text, perceptionModel)
+            await submissionRepo.setShadowTakeScore(prisma, tk.id, { aiScore: r.score, spokenText: r.spokenText })
+            return { order: tk.order, score: r.score, usage: r.usage, audioSeconds: r.audioSeconds }
+          } catch (e) {
+            return { order: tk.order, error: e instanceof Error ? e.message : String(e) }
+          }
         }),
       )
       for (const res of results) {
-        if (res.status === 'fulfilled') {
-          if (res.value) {
-            scoreByOrder.set(res.value.order, res.value.score)
-            if (res.value.usage) { gotUsage = true; usedIn += res.value.usage.inputTokens ?? 0; usedOut += res.value.usage.outputTokens ?? 0 }
-            if (res.value.audioSeconds) { gotUsage = true; usedAudioSec += res.value.audioSeconds } // per-minute (Whisper) cost
-          }
-        } else {
-          const msg = res.reason instanceof Error ? res.reason.message : String(res.reason)
+        if (!res) continue // 缺参考句文本，跳过
+        if ('error' in res) {
+          const msg = res.error
           if (isUnavailable(msg)) { await revert(); return } // model not configured — leave for teacher
-          hadFailure = true
+          // 该句录音永久缺失(404):跳过、按剩余句评并转老师复核(见 finalize)——不算失败、不 revert。
+          if (isMediaGone(msg)) { missingOrders.push(res.order); if (!takeError) takeError = msg; continue }
+          hadFailure = true // 瞬时错误(网络/5xx/429):整份 revert 重试,已评的句复用不重付
           if (!takeError) takeError = msg // 首个失败原因,末尾交给 durable job 落进 lastError
-          logError('gradeShadowSubmission', 'take failed', res.reason, { submissionId })
+          logError('gradeShadowSubmission', 'take failed', msg, { submissionId })
+          continue
         }
+        scoreByOrder.set(res.order, res.score)
+        if (res.usage) { gotUsage = true; usedIn += res.usage.inputTokens ?? 0; usedOut += res.usage.outputTokens ?? 0 }
+        if (res.audioSeconds) { gotUsage = true; usedAudioSec += res.audioSeconds } // per-minute (Whisper) cost
       }
       // Heartbeat between batches so a slow-but-alive run isn't reclaimed as orphaned.
       try { await onBatch?.() } catch { /* heartbeat is best-effort */ }
@@ -164,11 +183,15 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
     const summary = summarizeShadow(scoreByOrder, shadowAutoPassOverall, shadowAutoPassMin)
     if (!summary) { await revert(); return }
     const { overall, minScore, weakestOrder, weakestScore } = summary
-    // 自由练习环节：即使分数不够也不进待批队列。
-    const needsReview = submission.phase?.freePractice ? false : summary.needsReview
-    const feedback = minScore < shadowAutoPassMin
-      ? `逐句平均 ${overall} 分；最弱第 ${weakestOrder} 句仅 ${weakestScore} 分，注意发音与完整度。`
-      : `逐句平均 ${overall} 分，整体不错，继续保持。`
+    // 自由练习环节：即使分数不够也不进待批队列。缺句(音频永久缺失)一律强制转老师复核——不能自动
+    // 定分(缺的可能正是最弱句),老师需知道哪几句缺、酌情处理。
+    const hasMissing = missingOrders.length > 0
+    const needsReview = submission.phase?.freePractice ? false : (summary.needsReview || hasMissing)
+    const feedback = hasMissing
+      ? `第 ${[...missingOrders].sort((a, b) => a - b).join('、')} 句录音已缺失、无法评阅；其余 ${scoreByOrder.size} 句平均 ${overall} 分，请老师复核。`
+      : minScore < shadowAutoPassMin
+        ? `逐句平均 ${overall} 分；最弱第 ${weakestOrder} 句仅 ${weakestScore} 分，注意发音与完整度。`
+        : `逐句平均 ${overall} 分，整体不错，继续保持。`
 
     const shadowMicro = gotUsage ? perceptionCostMicroUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : 0
     await submissionRepo.applyShadowResult(prisma, submissionId, {
