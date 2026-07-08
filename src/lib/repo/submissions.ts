@@ -608,11 +608,25 @@ export function savePerception(prisma: PrismaClient, id: number, perceptionJson:
   return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { perceptionJson } })
 }
 
+// Preserve a Gemini File API handle whose upload succeeded but was still PROCESSING at the readiness
+// deadline, so the next durable-queue retry polls THAT file (ACTIVE by then) instead of re-uploading.
+// Fenced to PROCESSING (the failing run still owns the row here — markFailed comes after). geminiFileAt
+// stamps freshness (files expire ~48h; the reader skips a staler handle).
+export function saveGeminiFile(prisma: PrismaClient, id: number, uri: string, name: string) {
+  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { geminiFileUri: uri, geminiFileName: name, geminiFileAt: new Date() } })
+}
+
+// Drop a preserved Gemini file handle (perceive succeeded → the file was used + deleted). Fenced to
+// PROCESSING so only the owning run clears it.
+export function clearGeminiFile(prisma: PrismaClient, id: number) {
+  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { geminiFileUri: null, geminiFileName: null, geminiFileAt: null } })
+}
+
 // Fenced to PROCESSING (see markFailed): a late AI write never overwrites a teacher
 // override or a faster concurrent run. Clears the mid-grade perception cache — the finalized
 // aiResult now holds the full result, so the cache is no longer needed.
 export function applyGradeResult(prisma: PrismaClient, id: number, data: GradeResult) {
-  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { ...data, gradedAt: new Date(), perceptionJson: null } })
+  return prisma.submission.updateMany({ where: { id, status: 'PROCESSING' }, data: { ...data, gradedAt: new Date(), perceptionJson: null, geminiFileUri: null, geminiFileName: null, geminiFileAt: null } })
 }
 
 export interface ShadowResult {

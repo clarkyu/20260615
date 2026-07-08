@@ -36,6 +36,21 @@ export interface PerceptionInput {
   audioUrl?: string
   referenceSentences: ReferenceSentence[]
   requireEyesClosed: boolean
+  // A media-upload handle preserved by a prior attempt whose upload succeeded but was still
+  // PROCESSING when the readiness poll gave up. A provider that supports it (Gemini File API)
+  // reuses this — polls the same (now-ACTIVE) file instead of re-uploading. Others ignore it.
+  resumeFile?: { uri: string; name: string }
+}
+
+// Thrown by perceive when a media upload succeeded but the file is still not ready (PROCESSING)
+// after the readiness poll. Carries the upload handle so the caller can persist it and have the
+// next durable-queue retry resume polling the same file rather than re-uploading from scratch.
+// A retryable failure (not "model unavailable") — the queue retries with backoff.
+export class PerceptionFileNotReady extends Error {
+  constructor(readonly fileUri: string, readonly fileName: string, message?: string) {
+    super(message ?? `Gemini 文件未就绪（PROCESSING）`)
+    this.name = 'PerceptionFileNotReady'
+  }
 }
 
 export interface PerceptionObservation {

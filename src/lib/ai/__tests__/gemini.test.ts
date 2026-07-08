@@ -12,8 +12,10 @@ import {
   uploadInitBackoffMs,
   chunkMedia,
   purgeFiles,
+  geminiPerception,
 } from '@/lib/ai/providers/gemini'
 import { withAiKeys } from '@/lib/ai/key-context'
+import { PerceptionFileNotReady } from '@/lib/ai/types'
 
 const refs = [
   { order: 1, text: 'The early bird catches the worm.' },
@@ -256,5 +258,48 @@ describe('purgeFiles', () => {
   it('respects the max cap and reports that files remain', async () => {
     vi.stubGlobal('fetch', stubGemini([page('p', 100), page('q', 100), []], () => true))
     expect(await withAiKeys({ gemini: 'k' }, () => purgeFiles(100))).toEqual({ deleted: 100, remaining: true })
+  })
+})
+
+// Gemini File API handle reuse — a video Gemini takes >60s to ingest used to re-upload (and restart
+// the ingest clock) on every retry and dead-letter. perceive now polls a preserved handle instead.
+const perceptionResponse = () => ({
+  ok: true,
+  json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ transcript: 'hi', perSentence: [], observations: {} }) }] } }] }),
+})
+describe('geminiPerception — File API 句柄复用', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+
+  it('resume 的文件已 ACTIVE → 复用它,不重传媒体、也不发上传初始化', async () => {
+    const calls: { url: string; method: string }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, init?: { method?: string }) => {
+      const u = String(url); const method = init?.method ?? 'GET'
+      calls.push({ url: u, method })
+      if (u.includes(':generateContent')) return perceptionResponse() as unknown as Response
+      if (method === 'DELETE') return { ok: true } as Response
+      return { ok: true, status: 200, json: async () => ({ name: 'files/u', uri: 'files/u', state: 'ACTIVE', mimeType: 'video/webm' }) } as unknown as Response
+    }))
+
+    const res = await withAiKeys({ gemini: 'k' }, () => geminiPerception.perceive(
+      { videoUrl: 'https://signed/v', referenceSentences: refs, requireEyesClosed: false, resumeFile: { uri: 'files/u', name: 'files/u' } },
+      'gemini-x',
+    ))
+    expect(res.transcript).toBe('hi')
+    expect(calls.some((c) => c.url.includes('/upload/v1beta/files'))).toBe(false) // 没重新上传
+    expect(calls.some((c) => c.url.includes('signed/v'))).toBe(false) // 没重新拉媒体
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(true) // 评完删文件释放配额
+  })
+
+  it('resume 的文件仍 PROCESSING 到点 → 抛 PerceptionFileNotReady 带回句柄(交下次重试续)', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ name: 'files/u', state: 'PROCESSING' }) } as unknown as Response)))
+    const p = withAiKeys({ gemini: 'k' }, () => geminiPerception.perceive(
+      { videoUrl: 'https://signed/v', referenceSentences: refs, requireEyesClosed: false, resumeFile: { uri: 'files/u', name: 'files/u' } },
+      'gemini-x',
+    )).then(() => null, (e) => e)
+    await vi.advanceTimersByTimeAsync(70_000) // 走完 30×2s 就绪轮询窗口
+    const err = await p
+    expect(err).toBeInstanceOf(PerceptionFileNotReady)
+    expect(err.fileName).toBe('files/u')
   })
 })
