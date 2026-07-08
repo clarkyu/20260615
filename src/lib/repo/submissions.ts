@@ -274,8 +274,9 @@ export function countRegradeTargets(prisma: PrismaClient, schoolId: number, titl
   })
 }
 
-// 取一批重评目标 + 各自的 aiResult(恢复感知缓存用)。不用游标:apply 会把处理过的行置回 UPLOADED、
-// 移出本谓词,所以下一批自然是还没处理的——反复 apply 即分批排空(同 resolveMissingMedia 的 more 模式)。
+// 取一批重评目标 + 恢复感知缓存(aiResult)与回退快照(旧评分态)所需的字段。不用游标:apply 会把
+// 处理过的行置回 UPLOADED、移出本谓词,所以下一批自然是还没处理的——反复 apply 即分批排空
+// (同 resolveMissingMedia 的 more 模式)。
 export function listRegradeTargets(prisma: PrismaClient, schoolId: number, title: string, order: number, limit: number) {
   return prisma.submission.findMany({
     where: {
@@ -285,18 +286,48 @@ export function listRegradeTargets(prisma: PrismaClient, schoolId: number, title
     },
     orderBy: { id: 'asc' },
     take: limit,
-    select: { id: true, aiResult: true, perceptionJson: true },
+    select: {
+      id: true, aiResult: true, perceptionJson: true,
+      // 回退快照要存的旧评分态(仅在 regradeSnapshot 尚空时首次捕获)。
+      status: true, finalScore: true, aiScore: true, feedback: true, needsReview: true, regradeSnapshot: true,
+    },
   })
 }
 
-// 重评前置(逐行:perceptionJson 每行不同):把感知缓存写回(从 aiResult 提取,null=不写,重评会重新感知)
-// 并把 status 置回 UPLOADED,让后台重评认领、复用感知、只重判。不碰 aiScore/finalScore/feedback——
-// 由重评落库时覆盖(老师分优先仍在 applyGradeResult 里守着)。
-export function resetForRegrade(prisma: PrismaClient, id: number, perceptionJson: string | null) {
+// 重评前置(逐行:perceptionJson/快照每行不同):① 把感知缓存写回(从 aiResult 提取,null=不写,重评会
+// 重新感知);② 首次重置存下回退快照(旧评分态,已有则不覆盖——保住最初那份);③ status 置回 UPLOADED
+// 让后台重评认领、复用感知、只重判。不碰 aiScore/finalScore/feedback——由重评落库时覆盖(老师分优先仍在
+// applyGradeResult 里守着)。
+export function resetForRegrade(prisma: PrismaClient, id: number, perceptionJson: string | null, regradeSnapshot: string) {
   return prisma.submission.update({
     where: { id },
-    data: { status: 'UPLOADED', ...(perceptionJson !== null ? { perceptionJson } : {}) },
+    data: { status: 'UPLOADED', regradeSnapshot, ...(perceptionJson !== null ? { perceptionJson } : {}) },
   })
+}
+
+// 回退目标(某环节存了回退快照的行——即被重评动过、可还原的行)。同 more 模式:还原后清空快照、移出谓词。
+export function countRestoreTargets(prisma: PrismaClient, schoolId: number, title: string, order: number) {
+  return prisma.submission.count({
+    where: { regradeSnapshot: { not: null }, phase: { order, assignment: { title, offering: { schoolId } } } },
+  })
+}
+
+export function listRestoreTargets(prisma: PrismaClient, schoolId: number, title: string, order: number, limit: number) {
+  return prisma.submission.findMany({
+    where: { regradeSnapshot: { not: null }, phase: { order, assignment: { title, offering: { schoolId } } } },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, regradeSnapshot: true },
+  })
+}
+
+// 一键还原:把回退快照里的旧评分态写回本行并清空快照(重评前是什么样、就还原成什么样)。
+export function restoreScoreRow(
+  prisma: PrismaClient,
+  id: number,
+  data: { status: SubmissionStatus; finalScore: number | null; aiScore: number | null; feedback: string | null; needsReview: boolean; aiResult: string | null },
+) {
+  return prisma.submission.update({ where: { id }, data: { ...data, regradeSnapshot: null } })
 }
 
 // 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是

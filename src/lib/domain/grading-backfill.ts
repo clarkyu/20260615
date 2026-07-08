@@ -9,7 +9,7 @@
 // 的重置、已清的不再计数);评阅本身仍走耐久队列的既有围栏(objective 自弃、GRADED
 // 不覆盖、老师分优先),补登只负责「把任务放进队列」。
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient, SubmissionStatus } from '@prisma/client'
 import * as submissions from '@/lib/repo/submissions'
 import * as assignments from '@/lib/repo/assignments'
 import { probeObject, type ObjectHealth } from '@/lib/storage'
@@ -213,11 +213,57 @@ export async function regradePhase(prisma: PrismaClient, schoolId: number, title
         }
       } catch { /* aiResult 损坏 → 不写缓存,重评会重新感知(仍正确,只是贵一次) */ }
     }
-    await submissions.resetForRegrade(prisma, row.id, perceptionJson)
+    // 回退安全网:首次重置捕获旧评分态快照;已有(此前重评过)则沿用,保住"最初"那份不被覆盖。
+    const snapshot = row.regradeSnapshot ?? JSON.stringify({
+      status: row.status, finalScore: row.finalScore, aiScore: row.aiScore,
+      feedback: row.feedback, needsReview: row.needsReview, aiResult: row.aiResult,
+    })
+    await submissions.resetForRegrade(prisma, row.id, perceptionJson, snapshot)
   }
   const { created, reset } = await enqueueGradingBulk(prisma, ids, kind)
   await kickDrain()
   return { ok: true, applied: true, total, scanned: rows.length, more: total > rows.length, restored, requeued: created + reset, kind, sampleIds }
+}
+
+// ── 重评回退(安全网:一键还原到重评前) ────────────────────────────────────────────────
+//
+// regrade-phase 在首次重置每行前把旧评分态存进 regradeSnapshot。本函数据此把某环节被重评动过的行
+// 全部还原成重评前的样子(status/finalScore/aiScore/feedback/needsReview/aiResult),清空快照,并作废
+// 其重评任务。"看结果不满意就一键退回"靠这个。与其它维护端点同款:默认 dry-run 报总盘子 + 本批,
+// apply 才写;分批(more=true 再 apply 续到排空);可选 limit;幂等(还原过的清了快照、移出谓词)。
+export type RestoreReport =
+  | { ok: true; applied: boolean; total: number; scanned: number; more: boolean; restored: number; sampleIds: number[] }
+  | { ok: false; error: string }
+
+export async function restoreScores(prisma: PrismaClient, schoolId: number, title: string, order: number, apply: boolean, limit?: number): Promise<RestoreReport> {
+  const total = await submissions.countRestoreTargets(prisma, schoolId, title, order)
+  if (total === 0) return { ok: false, error: 'no regrade snapshots for this school+title+order (nothing was regraded, or already restored)' }
+
+  const take = limit != null ? Math.max(1, Math.min(limit, REGRADE_BATCH)) : REGRADE_BATCH
+  const rows = await submissions.listRestoreTargets(prisma, schoolId, title, order, take)
+  const sampleIds = rows.slice(0, 20).map((r) => r.id)
+  if (!apply) return { ok: true, applied: false, total, scanned: rows.length, more: total > rows.length, restored: 0, sampleIds }
+
+  const ids: number[] = []
+  let restored = 0
+  for (const row of rows) {
+    if (!row.regradeSnapshot) continue
+    try {
+      const snap = JSON.parse(row.regradeSnapshot) as {
+        status: SubmissionStatus; finalScore: number | null; aiScore: number | null
+        feedback: string | null; needsReview: boolean; aiResult: string | null
+      }
+      await submissions.restoreScoreRow(prisma, row.id, {
+        status: snap.status, finalScore: snap.finalScore, aiScore: snap.aiScore,
+        feedback: snap.feedback, needsReview: snap.needsReview, aiResult: snap.aiResult,
+      })
+      ids.push(row.id)
+      restored++
+    } catch { /* 快照损坏 → 跳过,不误写(极少见,交人工) */ }
+  }
+  // 行已还原成 GRADED/FLAGGED,任何在途/待跑的重评任务作废。
+  if (ids.length) await deleteJobsForSubmissions(prisma, ids)
+  return { ok: true, applied: true, total, scanned: rows.length, more: total > rows.length, restored, sampleIds }
 }
 
 // ── 幽灵死信对账(看板对得上账 + 降老师负担) ────────────────────────────────────────
