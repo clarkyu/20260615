@@ -142,12 +142,12 @@ describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P
     ...over,
   })
   // perceive succeeds for every sentence except the one whose text === failOn.
-  const wirePerception = (failOn: string | null) => {
+  const wirePerception = (failOn: string | null, errMsg = 'perceive 500') => {
     ;(getModel as Mock).mockReturnValue({ id: 'pm-default', provider: 'prov', capabilities: ['perception'] })
     ;(getPerceptionProvider as Mock).mockReturnValue({
       perceive: async (input: { referenceSentences: { text: string }[] }) => {
         const text = input.referenceSentences[0].text
-        if (text === failOn) throw new Error('perceive 500') // transient, NOT an unavailable sentinel
+        if (text === failOn) throw new Error(errMsg) // 默认瞬时错误;测试可注入「永久缺失」等其它类别
         // usage present ⇒ each successful take is a paid call whose spend must reach the ledger.
         return { transcript: '', perSentence: [{ order: 1, spokenText: text, accuracy: 0.9, completeness: 0.9 }], usage: { inputTokens: 10, outputTokens: 20 } }
       },
@@ -167,6 +167,22 @@ describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P
     // …and the take's underlying failure reason is surfaced (durable job records it as lastError,
     // so "audio healthy but won't grade" is diagnosable instead of a generic "did not complete").
     expect(err).toBe('perceive 500')
+  })
+
+  it('部分句录音永久缺失(404) → 跳过该句、按剩余句评并强制转老师复核,绝不 revert', async () => {
+    ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
+    wirePerception('b', '无法获取视频（404）') // 第 2 句音频永久缺失(留存清理删了/当初没传成)
+    await gradeShadowSubmission({} as never, 1)
+    // 缺句不是瞬时失败、重试补不回 → 绝不 revert(否则无限死信空转,正是这次的根因)。
+    expect(shadowRepo.revertToQueue).not.toHaveBeenCalled()
+    // 剩余 2 句(第 1、3)评出并定稿;缺的第 2 句跳过(只 setShadowTakeScore 两次)。
+    expect(shadowRepo.setShadowTakeScore).toHaveBeenCalledTimes(2)
+    expect(shadowRepo.applyShadowResult).toHaveBeenCalledTimes(1)
+    // 强制转老师复核,反馈点名缺哪句。
+    const data = (shadowRepo.applyShadowResult as Mock).mock.calls[0][2]
+    expect(data.needsReview).toBe(true)
+    expect(data.feedback).toContain('第 2 句')
+    expect(data.feedback).toContain('缺失')
   })
 
   it('finalizes normally when every sentence scores (no error surfaced)', async () => {
