@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { freshDb, type TestDb } from './harness'
-import { backfillWritingGrading, requeueMediaGrading } from '@/lib/domain/grading-backfill'
+import { backfillWritingGrading, requeueMediaGrading, requeueShadowGrading } from '@/lib/domain/grading-backfill'
 import { claimForProcessing } from '@/lib/repo/submissions'
 import type { PrismaClient } from '@prisma/client'
 
@@ -148,6 +148,50 @@ describe('requeueMediaGrading (修复 ③)', () => {
     const jobs = await db.prisma.gradingJob.findMany({ orderBy: { submissionId: 'asc' } })
     expect(jobs.map((j) => j.submissionId).sort((a, b) => a - b)).toEqual([failed.id, stuck.id, uploaded.id].sort((a, b) => a - b))
     for (const j of jobs) expect(j).toMatchObject({ kind: 'submission', status: 'PENDING', attempts: 0 })
+  })
+})
+
+// ── 逐句跟读重评(清扫盲区补漏):163 份真背诵漏在死信里 ──────────────────────────
+describe('requeueShadowGrading (清扫盲区补漏)', () => {
+  let db: TestDb
+  beforeEach(() => { db = freshDb() })
+  afterEach(async () => { await db?.cleanup() })
+
+  it('只捞有 ShadowTake 的失败/卡死/未评提交,重置成 kind=shadow;空提交/已评/有分不碰', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03', '04', '05'].map(d.student))
+    // 逐句音频存在 ShadowTake 里(不在 videoKey/audioKey)——这正是 media 重评看不到的盲区。
+    const withTake = async (studentId: number, over: object) => {
+      const sub = await d.sub(studentId, over)
+      await db.prisma.shadowTake.create({ data: { submissionId: sub.id, order: 1, audioKey: `t/${sub.id}` } })
+      return sub
+    }
+    const failed = await withTake(s[0].id, { status: 'FAILED', needsReview: true })
+    const stuck = await withTake(s[1].id, { status: 'PROCESSING' })
+    const uploaded = await withTake(s[2].id, { status: 'UPLOADED' })
+    await withTake(s[3].id, { status: 'GRADED', finalScore: 90 }) // 已定稿不碰
+    await d.sub(s[4].id, { status: 'UPLOADED' }) // 无 ShadowTake(空提交)不碰
+    // failed 行已有耗尽死信——重评必须重置(attempts 归零),不是新建。
+    await db.prisma.gradingJob.create({ data: { submissionId: failed.id, kind: 'shadow', status: 'FAILED', attempts: 4, lastError: 'x' } })
+
+    const dry = await requeueShadowGrading(db.prisma, d.school.id, TITLE, false)
+    if (!dry.ok) throw new Error(dry.error)
+    expect(dry).toMatchObject({ applied: false, targets: 3, jobsCreated: 0, jobsReset: 0 })
+    expect(dry.perPhaseOrder).toEqual([{ phaseOrder: 3, count: 3 }])
+    expect(await db.prisma.gradingJob.count()).toBe(1) // 零写入
+
+    const r = await requeueShadowGrading(db.prisma, d.school.id, TITLE, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, targets: 3, jobsCreated: 2, jobsReset: 1 })
+    const jobs = await db.prisma.gradingJob.findMany({ orderBy: { submissionId: 'asc' } })
+    expect(jobs.map((j) => j.submissionId).sort((a, b) => a - b)).toEqual([failed.id, stuck.id, uploaded.id].sort((a, b) => a - b))
+    for (const j of jobs) expect(j).toMatchObject({ kind: 'shadow', status: 'PENDING', attempts: 0 })
+  })
+
+  it('无匹配时报错(标题打错要响,不是静默空跑)', async () => {
+    const d = await seedSpeech(db.prisma)
+    const r = await requeueShadowGrading(db.prisma, d.school.id, '不存在的标题', true)
+    expect(r.ok).toBe(false)
   })
 })
 

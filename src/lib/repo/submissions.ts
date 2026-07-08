@@ -105,6 +105,27 @@ export function listMediaProbeTargets(prisma: PrismaClient, schoolId: number, ti
   })
 }
 
+// 逐句跟读(shadow)重评目标:逐句音频存在 ShadowTake 行里,不在 videoKey/audioKey——所以
+// listMediaProbeTargets 完全看不到它们(期末收官清扫的盲区,163 份真背诵被漏在死信里)。这里
+// 按 school+title 圈定、状态同口径(失败/卡死/未评/标记却无分),且必须至少有一条 ShadowTake
+// (真有录音),排除空提交。id 游标分页。
+export function listShadowGradingTargets(prisma: PrismaClient, schoolId: number, title: string, afterId: number, limit: number) {
+  return prisma.submission.findMany({
+    where: {
+      id: { gt: afterId },
+      shadowTakes: { some: {} }, // 有逐句录音才算目标,空提交不碰
+      assignment: { title, offering: { schoolId } },
+      OR: [
+        { status: { in: ['FAILED', 'PROCESSING', 'UPLOADED'] } },
+        { status: 'FLAGGED', aiScore: null },
+      ],
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, phase: { select: { order: true } } },
+  })
+}
+
 // 幽灵复核:**纯投票**环节(无答案键)上 needsReview=1 的行。投票不进复核队列,这些是
 // 历史遗留,只虚增看板「待批」数。谓词必须钉死「无答案键」——带答案键的单选在答案键
 // 缺失/损坏时会**刻意**落 needsReview 转人工(actions/submissions 的客观判分回退),
