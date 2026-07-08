@@ -25,11 +25,13 @@ vi.mock('@/lib/repo/assignments', () => ({ offeringTeacher: vi.fn(async () => ({
 vi.mock('@/lib/storage', () => ({ storageConfigured: () => true, presignDownload: vi.fn(async () => 'https://signed') }))
 vi.mock('@/lib/ai/key-context', () => ({ withAiKeys: async (_k: unknown, fn: () => unknown) => fn() }))
 vi.mock('@/lib/ai/teacher-keys', () => ({ resolveTeacherKeys: async () => ({}) }))
+vi.mock('@/lib/repo/ai-usage', () => ({ logAiCall: vi.fn(async () => {}) }))
 
 import { summarizeShadow, gradeShadowTake, gradeShadowSubmission } from '../shadow'
 import { getModel } from '@/lib/ai/registry'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
 import * as shadowRepo from '@/lib/repo/submissions'
+import { logAiCall } from '@/lib/repo/ai-usage'
 
 const m = (entries: [number, number][]) => new Map<number, number>(entries)
 
@@ -146,7 +148,8 @@ describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P
       perceive: async (input: { referenceSentences: { text: string }[] }) => {
         const text = input.referenceSentences[0].text
         if (text === failOn) throw new Error('perceive 500') // transient, NOT an unavailable sentinel
-        return { transcript: '', perSentence: [{ order: 1, spokenText: text, accuracy: 0.9, completeness: 0.9 }] }
+        // usage present ⇒ each successful take is a paid call whose spend must reach the ledger.
+        return { transcript: '', perSentence: [{ order: 1, spokenText: text, accuracy: 0.9, completeness: 0.9 }], usage: { inputTokens: 10, outputTokens: 20 } }
       },
     })
   }
@@ -169,6 +172,25 @@ describe('gradeShadowSubmission — never finalizes an incomplete grade (audit P
     await gradeShadowSubmission({} as never, 1)
     expect(shadowRepo.applyShadowResult).toHaveBeenCalledTimes(1)
     expect(shadowRepo.revertToQueue).not.toHaveBeenCalled()
+  })
+
+  it('books this run\'s real spend to the ledger EVEN when it reverts (was invisible before)', async () => {
+    ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
+    wirePerception('b') // sentence 2 fails → whole submission reverts
+    await gradeShadowSubmission({} as never, 1)
+    expect(shadowRepo.revertToQueue).toHaveBeenCalled()
+    // The 2 sentences that DID score are paid perception calls — their spend must still hit the
+    // ledger (else the daily guardrail can't see shadow spend). 2 takes × {in:10,out:20}.
+    expect(logAiCall).toHaveBeenCalledTimes(1)
+    expect((logAiCall as Mock).mock.calls[0][1]).toMatchObject({ kind: 'shadow', ok: true, inputTokens: 20, outputTokens: 40 })
+  })
+
+  it('logs spend exactly once on the finalize path too (no double-book)', async () => {
+    ;(shadowRepo.findGradableShadow as Mock).mockResolvedValue(submission())
+    wirePerception(null) // all 3 succeed
+    await gradeShadowSubmission({} as never, 1)
+    expect(logAiCall).toHaveBeenCalledTimes(1)
+    expect((logAiCall as Mock).mock.calls[0][1]).toMatchObject({ kind: 'shadow', ok: true, inputTokens: 30, outputTokens: 60 })
   })
 
   it('bails without grading when the claim is lost to a teacher (audit P1-1)', async () => {

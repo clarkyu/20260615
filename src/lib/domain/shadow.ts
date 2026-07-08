@@ -97,13 +97,15 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   // Grade on the assignment-owning teacher's own API key (BYOK); empty → platform key.
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
   await withAiKeys(keys, async () => {
+  // Real usage summed across the takes graded IN THIS run (each take is one paid perception
+  // call). Hoisted out of the try so the `finally` can book this run's ACTUAL spend to the
+  // ledger even when the submission reverts (partial failure) — otherwise shadow spend is
+  // INVISIBLE to the cost ledger + daily guardrail (历史 19426 条 take 打过分却 0 条入账的根因).
+  // Reused takes from a prior run aren't re-graded (dedup below), so each run logs only its own
+  // new spend — no double-count across retries.
+  let usedIn = 0, usedOut = 0, usedAudioSec = 0, gotUsage = false
   try {
     const scoreByOrder = new Map<number, number>()
-    // Real usage summed across the takes graded IN THIS run (each take is one perception
-    // call). Reused takes from a prior interrupted run aren't re-fetched, so this can
-    // undercount cost across retries — acceptable for observability; the dedup below keeps
-    // re-grading (and thus double-spend) to a minimum anyway.
-    let usedIn = 0, usedOut = 0, usedAudioSec = 0, gotUsage = false
     // Whether any pending take failed to score this run (transient model/network error,
     // not a missing-key sentinel). If so we must NOT finalize an average over the takes
     // that happened to succeed — the missing (often weakest) sentence would be silently
@@ -175,15 +177,22 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
       costUsd: gotUsage ? perceptionCostUsd(perceptionModel, usedIn, usedOut, usedAudioSec) : null,
       costMicroUsd: shadowMicro || null,
     })
-    // 成本流水账(真账,永不覆盖):逐句跟读整份记一行,成本汇总本次实际评的各句(复用旧句
-    // 不重记——与 Submission.costMicroUsd 同口径,重试下会少计,可接受)。仅在定稿成功路径记录:
-    // 逐句评的失败语义(部分句失败即整体 revert 重试)不映射为单条「调用失败」,不强记 ok:false。
-    await logAiCall(prisma, { submissionId, schoolId: owner?.schoolId ?? null, kind: 'shadow', model: perceptionModel, inputTokens: usedIn, outputTokens: usedOut, costMicroUsd: shadowMicro, ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
     if (!isUnavailable(msg)) logError('gradeShadowSubmission', 'failed', err, { submissionId })
     // Never mark FAILED — the teacher can still review the per-sentence takes.
     await revert()
+  } finally {
+    // 成本流水账(真账,append-only):逐句跟读每条 take 都是一次付费感知调用,本次实际评出来的
+    // 花费一律入账——finalize 成功 / 部分句失败 revert / 异常 catch 三条路都记,免得 shadow 花费
+    // 对账本与单日护栏隐形。重试只评未打分的 take(去重),各轮记各轮的新花费,不重复计。
+    if (gotUsage) {
+      await logAiCall(prisma, {
+        submissionId, schoolId: owner?.schoolId ?? null, kind: 'shadow', model: perceptionModel,
+        inputTokens: usedIn, outputTokens: usedOut,
+        costMicroUsd: perceptionCostMicroUsd(perceptionModel, usedIn, usedOut, usedAudioSec), ok: true,
+      })
+    }
   }
   })
 }
