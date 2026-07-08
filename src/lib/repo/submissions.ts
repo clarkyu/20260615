@@ -38,6 +38,19 @@ export function listShadowTakes(prisma: PrismaClient, submissionId: number) {
   })
 }
 
+// 甲·分流:读学生在某作业「选题·分流」环节(selectionMode='branch')里选的题目——最新非草稿提交的
+// recitedText。没有分流选题环节 / 学生还没选 → null。用于提交门:带门环节仅放行选中对应题目的学生。
+export async function findChosenTopic(prisma: PrismaClient, assignmentId: number, studentId: number): Promise<string | null> {
+  const selPhase = await prisma.phase.findFirst({ where: { assignmentId, selectionMode: 'branch' }, select: { id: true } })
+  if (!selPhase) return null
+  const sub = await prisma.submission.findFirst({
+    where: { phaseId: selPhase.id, studentId, status: { not: 'DRAFT' } },
+    orderBy: { attempt: 'desc' },
+    select: { recitedText: true },
+  })
+  return sub?.recitedText?.trim() || null
+}
+
 // 归票:把一份提交的作答改写为某个选项的规范原文(投票分布按 recitedText 与选项精确
 // 匹配计票)。needsReview 一并清掉——投票环节不进复核列表,留着会变成幽灵计数。
 // voteSourceText 归票留痕(原始作答,undefined = 不动该列):有它即可无损撤销。

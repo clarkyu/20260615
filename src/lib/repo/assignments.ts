@@ -658,6 +658,7 @@ export function findPhaseForClasses(prisma: PrismaClient, phaseId: number, class
       id: true, assignmentId: true, openAt: true, dueAt: true, maxAttempts: true, freePractice: true,
       requireText: true, requireVideo: true, requireAudio: true, requireHandwriting: true,
       requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, fillBlank: true, blanksJson: true, requireFreeText: true,
+      branchTopicsJson: true, // 甲·分流门:提交前判定本环节是否属于该学生所选主题
       // the owning offering — denormalized onto each new Submission so per-offering reads use the index
       assignment: { select: { offeringId: true } },
     },

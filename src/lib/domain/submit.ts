@@ -6,6 +6,7 @@ import type { PrismaClient, SubmissionStatus } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
 import { phaseItemType } from '@/lib/phase-item-type'
+import { isPhaseActiveFor, branchTopicsOf } from '@/lib/domain/selection'
 
 // The submission that represents a phase's state on the student's STATUS screens (home
 // list + multi-phase checklist): the latest non-DRAFT attempt if one exists, otherwise
@@ -45,6 +46,13 @@ export async function resolveAttempt(
   if (classIds.length === 0) return { ok: false, error: 'err.noClassAssigned' }
   const phase = await assignments.findPhaseForClasses(prisma, phaseId, classIds)
   if (!phase) return { ok: false, error: 'err.assignNotFound' }
+
+  // 甲·分流硬门:本环节若挂了「归属题目」(带门),只有在「选题·分流」环节选中对应题目的学生能提交——
+  // 防绕过前端直接 POST 到别人的分支。只有带门环节才多查一次(公共环节零开销,保持原路径不变)。
+  if (branchTopicsOf(phase.branchTopicsJson).length > 0) {
+    const chosenTopic = await submissions.findChosenTopic(prisma, phase.assignmentId, studentId)
+    if (!isPhaseActiveFor(phase.branchTopicsJson, chosenTopic)) return { ok: false, error: 'err.phaseNotYours' }
+  }
 
   const now = new Date()
   if (phase.openAt && now < phase.openAt) return { ok: false, error: 'err.notOpen' }
