@@ -3,6 +3,7 @@
 // 学期总评工作台(客户端):比例滑杆即时重算(与服务端同一纯函数,口径不分叉)、
 // 逐格改分/免计、保存配置(乐观锁)。发布/AI 推荐在后续 PR 接到本页。
 import { useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -203,7 +204,17 @@ export function ReviewWorkbench(props: {
             </div>
           )}
           {weightErr && <p className="text-sm text-destructive">{t(weightErr)}</p>}
-          {!props.classPerf && <p className="text-xs text-muted-foreground">{t('review.noClassPerf')}</p>}
+          <p className="text-xs text-muted-foreground">
+            {props.classPerf
+              ? t('review.classPerfSource', { file: props.classPerf.fileName, n: props.classPerf.sessions })
+              : t('review.noClassPerf')}{' '}
+            <Link
+              href={`/dashboard/teaching/${props.offeringId}/review/import`}
+              className="font-medium text-primary hover:underline"
+            >
+              {props.classPerf ? t('review.reimport') : t('review.importLink')}
+            </Link>
+          </p>
           <p className="text-xs text-muted-foreground">{t('review.missingZeroNote')}</p>
           {msg && (
             <p className="text-sm" aria-live="polite">
