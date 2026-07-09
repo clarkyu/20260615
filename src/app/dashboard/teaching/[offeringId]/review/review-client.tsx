@@ -18,7 +18,7 @@ import {
   type ReviewConfig,
 } from '@/lib/domain/review'
 import type { WorkbenchStudent } from '@/lib/domain/review-load'
-import { clearReviewOverride, saveReviewConfig, setReviewOverride } from '@/actions/review'
+import { clearReviewOverride, saveReviewConfig, setReviewOverride, suggestReviewWeights } from '@/actions/review'
 
 const CATS: ReviewCategoryKey[] = ['classroom', 'training', 'final']
 
@@ -38,6 +38,7 @@ export function ReviewWorkbench(props: {
   const [editing, setEditing] = useState<{ studentId: number; cat: ReviewCategoryKey } | null>(null)
   const [editScore, setEditScore] = useState('')
   const [editReason, setEditReason] = useState('')
+  const [advice, setAdvice] = useState<{ weights: ReviewConfig['weights']; rationale: string; cautions: string[] } | null>(null)
 
   const dirty = JSON.stringify(config.weights) !== JSON.stringify(props.config.weights) ||
     JSON.stringify(config.categories.training.assignmentWeights) !== JSON.stringify(props.config.categories.training.assignmentWeights)
@@ -132,7 +133,35 @@ export function ReviewWorkbench(props: {
               {t('review.save')}
             </Button>
             {dirty && <Badge tone="warning">{t('review.unsaved')}</Badge>}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await suggestReviewWeights(props.offeringId, '')
+                  if (res.error) setMsg(res.error)
+                  else if (res.advice) setAdvice(res.advice)
+                })
+              }
+            >
+              {t('review.aiBtn')}
+            </Button>
           </div>
+          {advice && (
+            <div className="space-y-1 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm" aria-live="polite">
+              <p className="font-medium">
+                {t('review.aiTitle')}: {t('review.classroom')} {advice.weights.classroom} · {t('review.training')} {advice.weights.training} · {t('review.final')} {advice.weights.final}
+              </p>
+              <p className="text-muted-foreground">{advice.rationale}</p>
+              {advice.cautions.map((c, i) => (
+                <p key={i} className="text-xs text-muted-foreground">⚠ {c}</p>
+              ))}
+              <Button size="sm" variant="outline" onClick={() => setConfig((c) => ({ ...c, weights: { ...advice.weights } }))}>
+                {t('review.aiApply')}
+              </Button>
+            </div>
+          )}
           {config.categories.training.assignmentIds.length > 1 && (
             <div className="flex flex-wrap items-end gap-4 border-t pt-3">
               <span className="text-xs text-muted-foreground">{t('review.trainingInner')}</span>

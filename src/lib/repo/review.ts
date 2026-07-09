@@ -78,3 +78,25 @@ export function deleteOverride(
 export function isStudentInClass(prisma: PrismaClient, classId: number, studentId: number) {
   return prisma.studentClass.count({ where: { classId, studentId } }).then((n) => n > 0)
 }
+
+// AI 建议留痕:写 aiAdviceJson(不动 version——建议不是配置变更);无配置行时先以当前
+// 生效配置建行(version=1),保证留痕总有落点。调用方先验 offering 归属。
+export async function saveAdvice(
+  prisma: PrismaClient,
+  offeringId: number,
+  schoolId: number | null | undefined,
+  userId: number,
+  role: Role,
+  adviceJson: string,
+  fallbackConfigJson: string,
+): Promise<void> {
+  const updated = await prisma.semesterReviewConfig.updateMany({
+    where: { offeringId, offering: offeringScopeFor(schoolId, userId, role) },
+    data: { aiAdviceJson: adviceJson },
+  })
+  if (updated.count === 0) {
+    await prisma.semesterReviewConfig.create({
+      data: { offeringId, configJson: fallbackConfigJson, aiAdviceJson: adviceJson, version: 1, updatedById: userId },
+    })
+  }
+}

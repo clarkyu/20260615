@@ -116,6 +116,11 @@ async function chat(cfg: CompatConfig, model: string, messages: { role: string; 
   return { data: parseChatJson(raw), usage: extractCompatUsage(raw) }
 }
 
+// 通用 chat-JSON 出口(比例推荐等轻量文本任务用):复用同一网络/BYOK/超时/JSON 解析管线。
+export function compatChatJson(cfg: CompatConfig, model: string, messages: { role: string; content: Content }[]): Promise<{ data: unknown; usage?: TokenUsage }> {
+  return chat(cfg, model, messages)
+}
+
 // Must include `confidence` — decideReview reads it to auto-approve high-confidence clean
 // submissions ("AI 先批、只看例外"). Omitting it makes normalizeJudge yield undefined, which
 // decideReview treats as fail-safe (always needs review), silently disabling auto-approval.
