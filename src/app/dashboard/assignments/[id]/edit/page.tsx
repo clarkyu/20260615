@@ -5,6 +5,7 @@ import * as assignmentRepo from '@/lib/repo/assignments'
 import { AssignmentForm, type AssignmentInitial } from '@/components/assignment-form'
 import { parseChoices } from '@/lib/choices'
 import { parseFillBlank } from '@/lib/fill-blank'
+import { parseRubricPoints } from '@/lib/domain/rubric'
 
 export default async function EditAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -62,6 +63,7 @@ export default async function EditAssignmentPage({ params }: { params: Promise<{
       fillAccept: parseFillBlank(p.blanksJson).accept.map((a) => a.join(' | ')),
       requireFreeText: p.requireFreeText,
       rubric: p.rubric ?? '',
+      rubricPoints: parseRubricPoints(p.rubricPoints),
       perceptionModel: p.defaultPerceptionModel ?? '',
       judgeModel: p.defaultJudgeModel ?? '',
       graded: p.graded,

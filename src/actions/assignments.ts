@@ -66,6 +66,8 @@ const phaseJsonSchema = z.object({
   blanksJson: z.string().nullable().optional().default(null),
   requireFreeText: z.boolean().optional().default(false),
   rubric: z.string().nullable().optional().default(null),
+  // 分值（各维度点数，与 rubric 标准文字分开）：[{name,points}]，规范化/满分求和在 domain 层做。
+  rubricPoints: z.array(z.object({ name: z.string().max(50), points: z.coerce.number() })).max(20).optional().default([]),
   perceptionModel: z.string().nullable().optional().default(null),
   judgeModel: z.string().nullable().optional().default(null),
   graded: z.boolean().optional().default(true),
@@ -111,6 +113,7 @@ function readForm(formData: FormData): ParseResult<{ meta: AssignmentMeta; phase
     blanksJson: p.blanksJson ?? null,
     requireFreeText: p.requireFreeText,
     rubric: p.rubric ?? null,
+    rubricPoints: p.rubricPoints,
     perceptionModel: p.perceptionModel ?? null,
     judgeModel: p.judgeModel ?? null,
     graded: p.graded,

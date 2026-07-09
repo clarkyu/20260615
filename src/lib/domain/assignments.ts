@@ -10,6 +10,7 @@ import * as submissions from '@/lib/repo/submissions'
 import { weakSentences, latestPhaseSubmissions } from '@/lib/domain/analytics'
 import type { AssignmentMeta, PhaseInput, SentenceRow } from '@/lib/repo/assignments'
 import { parseChoices } from '@/lib/choices'
+import { serializeRubricPoints, type RubricPoint } from '@/lib/domain/rubric'
 
 export type { AssignmentMeta }
 
@@ -45,6 +46,8 @@ export interface PhaseDraft {
   requireFreeText?: boolean
   // 每环节批阅配置（可选，空=跟随作业/平台默认）。
   rubric?: string | null
+  // 分值（各维度点数，与 rubric 标准文字分开）——domain 层序列化后落库。
+  rubricPoints?: RubricPoint[]
   perceptionModel?: string | null
   judgeModel?: string | null
   graded: boolean
@@ -115,6 +118,7 @@ async function resolvePhases(
       blanksJson: d.blanksJson ?? null,
       requireFreeText: d.requireFreeText ?? false,
       rubric: d.rubric ?? null,
+      rubricPoints: serializeRubricPoints(d.rubricPoints ?? []),
       perceptionModel: d.perceptionModel ?? null,
       judgeModel: d.judgeModel ?? null,
       graded: d.graded,

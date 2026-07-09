@@ -16,6 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { RubricPointsEditor } from '@/components/rubric-points-editor'
+import type { RubricPoint } from '@/lib/domain/rubric'
 
 export interface PhaseInitial {
   id?: number // present when editing an existing phase; absent for a template prefill
@@ -51,6 +53,7 @@ export interface PhaseInitial {
   requireFreeText: boolean
   // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
   rubric: string
+  rubricPoints: RubricPoint[]
   perceptionModel: string
   judgeModel: string
   graded: boolean
@@ -139,6 +142,7 @@ interface PhaseState {
   requireFreeText: boolean
   // 每环节单独的批阅配置（可选，空=跟随作业/平台默认）：评分标准 + 感知/评分模型。
   rubric: string
+  rubricPoints: RubricPoint[]
   perceptionModel: string
   judgeModel: string
   graded: boolean
@@ -181,6 +185,7 @@ function newPhase(bank: boolean, recite = false): PhaseState {
     fillAccept: [],
     requireFreeText: false,
     rubric: '',
+    rubricPoints: [],
     perceptionModel: '',
     judgeModel: '',
     graded: true,
@@ -346,6 +351,7 @@ export function AssignmentForm({
         : null,
       requireFreeText: p.requireFreeText,
       rubric: p.rubric.trim() || null,
+      rubricPoints: p.rubricPoints,
       perceptionModel: p.perceptionModel || null,
       judgeModel: p.judgeModel || null,
       graded: p.graded,
@@ -972,6 +978,7 @@ function PhaseCard({
               <Label>{t('grade.rubric')}</Label>
               <Textarea value={phase.rubric} onChange={(e) => onPatch({ rubric: e.target.value })} rows={3} placeholder={isWriting ? t('grade.rubricPhWriting') : t('grade.rubricPh')} />
             </div>
+            <RubricPointsEditor value={phase.rubricPoints} onChange={(v) => onPatch({ rubricPoints: v })} />
           </div>
         </details>
         )
