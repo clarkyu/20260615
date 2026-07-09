@@ -8,6 +8,7 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { modelsForCapability } from '@/lib/ai/registry'
 import { countViolations } from '@/lib/domain/grading'
+import { parseRubricPoints } from '@/lib/domain/rubric'
 import { representativeSubmission } from '@/lib/domain/submit'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
 import { clip } from '@/lib/text'
@@ -104,6 +105,7 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
       id: p.id,
       label: p.title?.trim() || t('phase.nth', { n: p.order }),
       rubric: p.rubric ?? '',
+      rubricPoints: parseRubricPoints(p.rubricPoints),
       perceptionModel: p.defaultPerceptionModel ?? '',
       judgeModel: p.defaultJudgeModel ?? '',
       sentenceCount: p._count.sentences,

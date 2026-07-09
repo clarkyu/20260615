@@ -26,6 +26,13 @@ export function parseRubricPoints(json: string | null | undefined): RubricPoint[
   }
 }
 
+// 把「分值」数组规范化后序列化成 Phase.rubricPoints 落库串（复用 parseRubricPoints 的校验：
+// 丢空名/负数/非数，四舍五入）。全被丢弃 / 空数组 → null（= 不设分值，评分回退默认满分）。
+export function serializeRubricPoints(points: RubricPoint[]): string | null {
+  const clean = parseRubricPoints(JSON.stringify(points ?? []))
+  return clean.length ? JSON.stringify(clean) : null
+}
+
 // 各维度分值之和 = 满分。无分值 → null（调用方回退到默认满分）。
 export function rubricMaxScore(points: RubricPoint[]): number | null {
   if (points.length === 0) return null
