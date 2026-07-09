@@ -33,7 +33,11 @@
     // 等)、本地 workerd enforce 下浏览器零违规。worker 用 set 覆盖 HTML 响应的 CSP 头为
     // 严格策略;next.config 的 unsafe-inline 静态头仅剩非 HTML/中间件旁路的兜底作用。
     // 回退:改回 "report-only" + 部署,秒级。
-    "CSP_ENFORCE": "enforce"
+    "CSP_ENFORCE": "enforce",
+    // 后台评阅单日花费护栏(lib/config.ts 默认 $50)。"0" = 关闭护栏,由 Gemini/上游
+    // 控制台的硬上限兜底,不再在应用层暂停排空(排空积压时 $50 会误触、连便宜的
+    // DeepSeek 文本判分一起停)。调回一个正数即可重新启用。
+    "GRADING_DAILY_CAP_USD": "0"
   },
   "observability": {
     "enabled": true

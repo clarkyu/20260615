@@ -182,6 +182,33 @@ describe('claimAndRunDue', () => {
     expect(ran).toBe(1)
     expect(jobs[0].status).toBe('DONE')
   })
+
+  // ── kind lane filter ── drain one queue lane so a fast lane isn't starved behind a
+  // slow, earlier-enqueued lane in the strict nextAttemptAt FIFO.
+  it('with a kind filter, claims ONLY that lane even when another lane is older', async () => {
+    // shadow enqueued earlier (would win the FIFO) + writing enqueued later.
+    const jobs = [
+      job({ id: 1, submissionId: 100, kind: 'shadow', nextAttemptAt: new Date(Date.now() - 60_000) }),
+      job({ id: 2, submissionId: 200, kind: 'writing', nextAttemptAt: new Date(Date.now() - 30_000) }),
+    ]
+    const db = fakePrisma(jobs)
+    const runner = vi.fn(ok)
+    const { ran } = await claimAndRunDue(db, 5, runner, 'writing')
+    expect(ran).toBe(1)
+    expect(jobs[1].status).toBe('DONE') // writing ran
+    expect(jobs[0].status).toBe('PENDING') // older shadow left untouched
+  })
+
+  it('without a kind filter, drains all lanes oldest-first (unchanged default)', async () => {
+    const jobs = [
+      job({ id: 1, submissionId: 100, kind: 'shadow', nextAttemptAt: new Date(Date.now() - 60_000) }),
+      job({ id: 2, submissionId: 200, kind: 'writing', nextAttemptAt: new Date(Date.now() - 30_000) }),
+    ]
+    const db = fakePrisma(jobs)
+    const { ran } = await claimAndRunDue(db, 5, ok)
+    expect(ran).toBe(2)
+    expect(jobs.every((j) => j.status === 'DONE')).toBe(true)
+  })
 })
 
 describe('enqueueGrading', () => {

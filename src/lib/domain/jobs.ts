@@ -102,6 +102,7 @@ export async function claimAndRunDue(
   prisma: PrismaClient,
   limit = 5,
   runner: JobRunner = defaultRunner,
+  kind?: GradingKind,
 ): Promise<{ ran: number }> {
   const now = new Date()
 
@@ -136,9 +137,13 @@ export async function claimAndRunDue(
     data: { status: 'FAILED', lastError: 'grading did not complete after retries' },
   })
 
-  // 3) Due PENDING jobs, oldest first.
+  // 3) Due PENDING jobs, oldest first. `kind` narrows to one queue lane so a slow,
+  //    earlier-enqueued backlog of one kind (e.g. Gemini 逐句) can't starve a fast,
+  //    later-enqueued backlog of another (e.g. DeepSeek writing): the strict
+  //    nextAttemptAt-FIFO otherwise hands every slot to whatever was enqueued first,
+  //    regardless of cost/lane. Omit `kind` for the normal all-lanes drain.
   const due = await prisma.gradingJob.findMany({
-    where: { status: 'PENDING', nextAttemptAt: { lte: now } },
+    where: { status: 'PENDING', nextAttemptAt: { lte: now }, ...(kind ? { kind } : {}) },
     orderBy: { nextAttemptAt: 'asc' },
     take: limit,
   })

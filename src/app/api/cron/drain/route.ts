@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { config } from '@/lib/config'
 import { timingSafeEqual } from '@/lib/safe-compare'
 import { getDb } from '@/lib/db'
-import { claimAndRunDue } from '@/lib/domain/jobs'
+import { claimAndRunDue, type GradingKind } from '@/lib/domain/jobs'
 import { logError } from '@/lib/log'
 
 // Scheduled/manual drain of the durable grading queue (driven by the grading-drain
@@ -18,16 +18,21 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
   let limit = 5
+  // Optional `kind` narrows the drain to one queue lane (submission | shadow | writing),
+  // so a fast lane isn't starved behind a slow, earlier-enqueued lane in the nextAttemptAt
+  // FIFO. Omit for the normal all-lanes drain (schedule path sends no body).
+  let kind: GradingKind | undefined
   try {
-    const body = (await req.json()) as { limit?: unknown }
+    const body = (await req.json()) as { limit?: unknown; kind?: unknown }
     if (Number.isInteger(body.limit)) limit = Math.min(Math.max(body.limit as number, 1), 10)
+    if (body.kind === 'submission' || body.kind === 'shadow' || body.kind === 'writing') kind = body.kind
   } catch {
     // 无 body / 非 JSON → 默认批量(schedule 路径不带 body)。
   }
   try {
     const prisma = await getDb()
-    const { ran } = await claimAndRunDue(prisma, limit)
-    return NextResponse.json({ ran, limit })
+    const { ran } = await claimAndRunDue(prisma, limit, undefined, kind)
+    return NextResponse.json({ ran, limit, ...(kind ? { kind } : {}) })
   } catch (err) {
     logError('cron/drain', 'drain failed', err)
     return NextResponse.json({ ok: false, error: 'drain failed' }, { status: 500 })
