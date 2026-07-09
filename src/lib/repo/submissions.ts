@@ -274,6 +274,17 @@ export function countRegradeTargets(prisma: PrismaClient, schoolId: number, titl
   })
 }
 
+// 该环节的提交里是否有逐句跟读录音(ShadowTake)——重评时据此判定评阅任务种类:有 ShadowTake=shadow
+// (逐句跟读,走 gradeShadowSubmission),否则整段媒体=submission。itemType 只到 speech/writing 粗粒度,
+// 区分不了 shadow,所以按「有没有逐句录音」这个硬信号判。
+export async function phaseHasShadowTakes(prisma: PrismaClient, schoolId: number, title: string, order: number): Promise<boolean> {
+  const one = await prisma.shadowTake.findFirst({
+    where: { submission: { phase: { order, assignment: { title, offering: { schoolId } } } } },
+    select: { id: true },
+  })
+  return one != null
+}
+
 // 取一批重评目标 + 恢复感知缓存(aiResult)与回退快照(旧评分态)所需的字段。不用游标:apply 会把
 // 处理过的行置回 UPLOADED、移出本谓词,所以下一批自然是还没处理的——反复 apply 即分批排空
 // (同 resolveMissingMedia 的 more 模式)。
