@@ -159,3 +159,25 @@ export function revokePublish(
     data: { revokedAt: new Date(), revokedById: userId },
   })
 }
+
+// ── 学生端读取(只回本人可见的快照行) ────────────────────────────────────────────
+
+// 学生所在班级各课头的「在线」快照(未撤回最大版):按 offering 分组取最新。
+// snapshotJson 含全班行——**绝不整包出 repo**,由 domain extractStudentView 抽本人行+匿名聚合。
+export async function listLivePublishesForStudent(prisma: PrismaClient, studentId: number) {
+  const rows = await prisma.semesterReviewPublish.findMany({
+    where: { revokedAt: null, offering: { class: { studentMemberships: { some: { studentId } } } } },
+    orderBy: [{ offeringId: 'asc' }, { version: 'desc' }],
+    select: {
+      offeringId: true,
+      version: true,
+      snapshotJson: true,
+      configJson: true,
+      publishedAt: true,
+      offering: { select: { year: true, semester: true, course: { select: { name: true } }, class: { select: { name: true } } } },
+    },
+  })
+  // 每 offering 只保留最大 version(已按 desc 排,取首见)。
+  const seen = new Set<number>()
+  return rows.filter((r) => (seen.has(r.offeringId) ? false : (seen.add(r.offeringId), true)))
+}
