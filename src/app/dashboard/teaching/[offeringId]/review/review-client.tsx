@@ -18,7 +18,7 @@ import {
   type ReviewConfig,
 } from '@/lib/domain/review'
 import type { WorkbenchStudent } from '@/lib/domain/review-load'
-import { clearReviewOverride, previewReviewPublish, publishReviewAction, revokeReviewPublish, saveReviewConfig, setReviewOverride, suggestReviewWeights } from '@/actions/review'
+import { clearReviewOverride, fillSixtyReviewOverrides, previewReviewPublish, publishReviewAction, revokeReviewPublish, saveReviewConfig, setReviewOverride, suggestReviewWeights } from '@/actions/review'
 
 const CATS: ReviewCategoryKey[] = ['classroom', 'training', 'final']
 
@@ -150,6 +150,20 @@ export function ReviewWorkbench(props: {
               }
             >
               {t('review.aiBtn')}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await fillSixtyReviewOverrides(props.offeringId)
+                  setMsg(res.error ?? t('review.fill60Done', { n: res.filled ?? 0 }))
+                  if (!res.error) router.refresh()
+                })
+              }
+            >
+              {t('review.fill60Btn')}
             </Button>
           </div>
           {advice && (
