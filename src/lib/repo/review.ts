@@ -100,3 +100,62 @@ export async function saveAdvice(
     })
   }
 }
+
+// ── 发布快照(SemesterReviewPublish) ────────────────────────────────────────────
+
+// 学生可见 = revokedAt IS NULL 的最大 version;老师端 diff 的「上一版」也用它。
+export function latestLivePublish(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.semesterReviewPublish.findFirst({
+    where: { offeringId, revokedAt: null, offering: offeringScopeFor(schoolId, userId, role) },
+    orderBy: { version: 'desc' },
+    select: { id: true, version: true, configJson: true, snapshotJson: true, note: true, publishedAt: true },
+  })
+}
+
+export function listPublishes(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.semesterReviewPublish.findMany({
+    where: { offeringId, offering: offeringScopeFor(schoolId, userId, role) },
+    orderBy: { version: 'desc' },
+    select: { version: true, note: true, publishedAt: true, revokedAt: true },
+    take: 20,
+  })
+}
+
+export async function maxPublishVersion(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<number> {
+  const row = await prisma.semesterReviewPublish.findFirst({
+    where: { offeringId, offering: offeringScopeFor(schoolId, userId, role) },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  })
+  return row?.version ?? 0
+}
+
+// 单条 create 天然原子(D1 无交互事务也安全);@@unique([offeringId,version]) 防并发双击,
+// 撞唯一键返回 'conflict'。调用方先验 offering 归属。
+export async function createPublish(
+  prisma: PrismaClient,
+  params: { offeringId: number; version: number; configJson: string; snapshotJson: string; note: string | null; publishedById: number },
+): Promise<'ok' | 'conflict'> {
+  try {
+    await prisma.semesterReviewPublish.create({ data: params })
+    return 'ok'
+  } catch (e) {
+    if (e && typeof e === 'object' && (e as { code?: string }).code === 'P2002') return 'conflict'
+    throw e
+  }
+}
+
+// 撤回=标记(行保留审计);学生端立即回落「未发布」。幂等(已撤回的不再改)。
+export function revokePublish(
+  prisma: PrismaClient,
+  offeringId: number,
+  version: number,
+  schoolId: number | null | undefined,
+  userId: number,
+  role: Role,
+) {
+  return prisma.semesterReviewPublish.updateMany({
+    where: { offeringId, version, revokedAt: null, offering: offeringScopeFor(schoolId, userId, role) },
+    data: { revokedAt: new Date(), revokedById: userId },
+  })
+}

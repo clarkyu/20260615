@@ -18,7 +18,7 @@ import {
   type ReviewConfig,
 } from '@/lib/domain/review'
 import type { WorkbenchStudent } from '@/lib/domain/review-load'
-import { clearReviewOverride, saveReviewConfig, setReviewOverride, suggestReviewWeights } from '@/actions/review'
+import { clearReviewOverride, previewReviewPublish, publishReviewAction, revokeReviewPublish, saveReviewConfig, setReviewOverride, suggestReviewWeights } from '@/actions/review'
 
 const CATS: ReviewCategoryKey[] = ['classroom', 'training', 'final']
 
@@ -29,6 +29,8 @@ export function ReviewWorkbench(props: {
   students: WorkbenchStudent[]
   assignments: { id: number; title: string }[]
   classPerf: { fileName: string; sessions: number } | null
+  liveVersion: number | null
+  publishes: { version: number; note: string | null; publishedAt: string; revokedAt: string | null }[]
 }) {
   const t = useT()
   const router = useRouter()
@@ -39,6 +41,8 @@ export function ReviewWorkbench(props: {
   const [editScore, setEditScore] = useState('')
   const [editReason, setEditReason] = useState('')
   const [advice, setAdvice] = useState<{ weights: ReviewConfig['weights']; rationale: string; cautions: string[] } | null>(null)
+  const [preview, setPreview] = useState<{ nextVersion: number; changed: number; passFlips: { studentId: number; dir: string }[]; missingZero: number; blocker: string | null } | null>(null)
+  const [publishNote, setPublishNote] = useState('')
 
   const dirty = JSON.stringify(config.weights) !== JSON.stringify(props.config.weights) ||
     JSON.stringify(config.categories.training.assignmentWeights) !== JSON.stringify(props.config.categories.training.assignmentWeights)
@@ -245,6 +249,100 @@ export function ReviewWorkbench(props: {
               ))}
             </tbody>
           </table>
+        </CardContent>
+      </Card>
+
+      {/* 发布区:预览 diff → 确认发布 vN;撤回;版本历史 */}
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium">
+              {props.liveVersion != null
+                ? `${t('review.publishedV')} v${props.liveVersion}`
+                : t('review.notPublished')}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await previewReviewPublish(props.offeringId)
+                  if (res.error) setMsg(res.error)
+                  else if (res.preview) setPreview(res.preview)
+                })
+              }
+            >
+              {t('review.publishPreview')}
+            </Button>
+            {props.liveVersion != null && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await revokeReviewPublish(props.offeringId, props.liveVersion!)
+                    setMsg(res.error ?? t('review.revoked'))
+                    if (!res.error) router.refresh()
+                  })
+                }
+              >
+                {t('review.revoke')}
+              </Button>
+            )}
+          </div>
+          {preview && (
+            <div className="space-y-2 rounded-lg border p-3 text-sm" aria-live="polite">
+              <p className="font-medium">v{preview.nextVersion} · {t('review.diffChanged')}: {preview.changed} · {t('review.diffMissingZero')}: {preview.missingZero}</p>
+              {preview.passFlips.length > 0 && (
+                <p className="text-destructive">
+                  {t('review.diffPassFlips')}:{' '}
+                  {preview.passFlips
+                    .map((f) => `${props.students.find((x) => x.id === f.studentId)?.name ?? f.studentId}(${f.dir === 'pass->fail' ? '↓' : '↑'})`)
+                    .join('、')}
+                </p>
+              )}
+              {preview.blocker ? (
+                <p className="text-destructive">{preview.blocker}</p>
+              ) : (
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-muted-foreground">{t('review.publishNote')}</span>
+                    <Input value={publishNote} onChange={(e) => setPublishNote(e.target.value)} className="w-64" aria-label={t('review.publishNote')} />
+                  </label>
+                  <Button
+                    size="sm"
+                    disabled={pending || dirty}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const res = await publishReviewAction(props.offeringId, publishNote)
+                        setMsg(res.error ?? `${t('review.publishedV')} v${res.version}`)
+                        if (!res.error) {
+                          setPreview(null)
+                          router.refresh()
+                        }
+                      })
+                    }
+                  >
+                    {t('review.publishConfirm')}
+                  </Button>
+                  {dirty && <span className="text-xs text-muted-foreground">{t('review.publishSaveFirst')}</span>}
+                </div>
+              )}
+            </div>
+          )}
+          {props.publishes.length > 0 && (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {props.publishes.map((pub) => (
+                <li key={pub.version}>
+                  v{pub.version} · {new Date(pub.publishedAt).toLocaleString()}
+                  {pub.note ? ` · ${pub.note}` : ''}
+                  {pub.revokedAt ? ` · ${t('review.revokedBadge')}` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

@@ -8,6 +8,7 @@ import * as reviewRepo from '@/lib/repo/review'
 import { validateReviewConfig, type ReviewCategoryKey, type ReviewConfig } from '@/lib/domain/review'
 import { loadReviewWorkbench } from '@/lib/domain/review-load'
 import { suggestWeights } from '@/lib/domain/review-advice'
+import { previewPublish, publishReview } from '@/lib/domain/review-publish'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -95,4 +96,52 @@ export async function suggestReviewWeights(
   const res = await suggestWeights(prisma, offeringId, data, course, actor, teacherNote)
   if (!res.ok) return { error: t(res.error) }
   return { advice: res.advice }
+}
+
+// 发布预览:下一版 vs 当前在线版逐生 diff + 及格翻转 + 计0名单——确认前强制过目。
+export async function previewReviewPublish(offeringId: number): Promise<{
+  preview?: { nextVersion: number; changed: number; passFlips: { studentId: number; dir: string }[]; missingZero: number; blocker: string | null }
+  error?: string
+}> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(offeringId)) return { error: t('err.notFound') }
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
+  if (!offering) return { error: t('err.notFound') }
+  const actor = { schoolId: user.schoolId, userId: user.userId, role: user.role }
+  const data = await loadReviewWorkbench(prisma, { id: offering.id, classId: offering.classId }, actor)
+  const p = await previewPublish(prisma, offeringId, data, actor)
+  return {
+    preview: {
+      nextVersion: p.nextVersion,
+      changed: p.diff.changed.length,
+      passFlips: p.diff.passFlips,
+      missingZero: p.missingZeroStudents.length,
+      blocker: p.blocker ? t(p.blocker) : null,
+    },
+  }
+}
+
+// 一键发布:以发布时刻活数据现场重算 → 不可变快照 vN(学生即刻可见)。
+export async function publishReviewAction(offeringId: number, note: string): Promise<{ version?: number; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(offeringId)) return { error: t('err.notFound') }
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
+  if (!offering) return { error: t('err.notFound') }
+  const actor = { schoolId: user.schoolId, userId: user.userId, role: user.role }
+  const data = await loadReviewWorkbench(prisma, { id: offering.id, classId: offering.classId }, actor)
+  const res = await publishReview(prisma, offeringId, data, actor, note)
+  if (!res.ok) return { error: t(res.error) }
+  revalidatePath(`/dashboard/teaching/${offeringId}/review`)
+  return { version: res.version }
+}
+
+// 撤回当前在线版(标记保留审计;学生端回落「未发布」)。
+export async function revokeReviewPublish(offeringId: number, version: number): Promise<ActionState> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(offeringId) || !Number.isInteger(version)) return { error: t('err.notFound') }
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
+  if (!offering) return { error: t('err.notFound') }
+  await reviewRepo.revokePublish(prisma, offeringId, version, user.schoolId, user.userId, user.role)
+  revalidatePath(`/dashboard/teaching/${offeringId}/review`)
+  return { success: true }
 }

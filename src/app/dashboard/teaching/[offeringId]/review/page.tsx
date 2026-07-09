@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as offeringRepo from '@/lib/repo/offerings'
+import * as reviewRepo from '@/lib/repo/review'
 import { loadReviewWorkbench } from '@/lib/domain/review-load'
 import { ReviewWorkbench } from './review-client'
 
@@ -23,11 +24,12 @@ export default async function ReviewPage({ params }: { params: Promise<{ offerin
   const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId, user.userId, user.role)
   if (!offering) notFound()
 
-  const data = await loadReviewWorkbench(prisma, { id: offering.id, classId: offering.classId }, {
-    schoolId: user.schoolId,
-    userId: user.userId,
-    role: user.role,
-  })
+  const actor = { schoolId: user.schoolId, userId: user.userId, role: user.role }
+  const data = await loadReviewWorkbench(prisma, { id: offering.id, classId: offering.classId }, actor)
+  const [live, publishes] = await Promise.all([
+    reviewRepo.latestLivePublish(prisma, offering.id, actor.schoolId, actor.userId, actor.role),
+    reviewRepo.listPublishes(prisma, offering.id, actor.schoolId, actor.userId, actor.role),
+  ])
 
   return (
     <div className="space-y-4">
@@ -51,6 +53,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ offerin
         students={data.students}
         assignments={data.assignments}
         classPerf={data.classPerf ? { fileName: data.classPerf.fileName, sessions: data.classPerf.sessions } : null}
+        liveVersion={live?.version ?? null}
+        publishes={publishes.map((x) => ({
+          version: x.version,
+          note: x.note,
+          publishedAt: x.publishedAt.toISOString(),
+          revokedAt: x.revokedAt ? x.revokedAt.toISOString() : null,
+        }))}
       />
     </div>
   )
