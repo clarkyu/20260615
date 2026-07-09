@@ -235,6 +235,13 @@ model User {
   feedback                Feedback[]
   bankFavorites           BankFavorite[]
   createdInvites          SchoolInvite[]
+  semesterReviewConfigEdits    SemesterReviewConfig[]   @relation("SemesterReviewConfigUpdatedBy")
+  semesterReviewOverrides      SemesterReviewOverride[] @relation("SemesterReviewOverrideStudent")
+  semesterReviewOverridesGiven SemesterReviewOverride[] @relation("SemesterReviewOverrideCreatedBy")
+  semesterReviewsPublished     SemesterReviewPublish[]  @relation("SemesterReviewPublishedBy")
+  semesterReviewsRevoked       SemesterReviewPublish[]  @relation("SemesterReviewRevokedBy")
+  classPerfImportsCreated      ClassPerfImport[]        @relation("ClassPerfImportedBy")
+  classPerfRows                ClassPerfStudent[]       @relation("ClassPerfStudentUser")
 
   @@unique([schoolId, studentNo])
   @@unique([schoolId, staffNo])
@@ -271,6 +278,10 @@ model CourseOffering {
   teacher   User        @relation("OfferingTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
   class     ClassGroup  @relation(fields: [classId], references: [id], onDelete: Cascade)
   assignments Assignment[]
+  semesterReviewConfig    SemesterReviewConfig?
+  semesterReviewOverrides SemesterReviewOverride[]
+  semesterReviewPublishes SemesterReviewPublish[]
+  classPerfImports        ClassPerfImport[]
 
   @@unique([courseId, classId, year, semester])
   @@index([schoolId])
@@ -707,4 +718,107 @@ model AiUsageLog {
 
   @@index([createdAt])
   @@index([schoolId])
+}
+
+// ── 学期总评(成绩档案) ──────────────────────────────────────────────────────────
+// 三类别(课堂表现/训练/期末)加权总评。草稿分数一律由 lib/domain/review.ts 纯函数读时
+// 现算、不落库;只有「发布」落一行不可变快照(版本+审计+学生可见性的唯一开关)。
+
+// 草稿配置(每课头一份):类别构成+整数权重(Σ=100,代码校验)+AI 建议留痕+乐观锁。
+// configJson: { v, weights:{classroom,training,final}, categories:[{key,assignmentIds?,
+// assignmentWeights?,classPerfImportId?,excludePhaseIds?}], missingZero }
+model SemesterReviewConfig {
+  id           Int      @id @default(autoincrement())
+  offeringId   Int      @unique
+  configJson   String
+  aiAdviceJson String? // 最近一次 AI 推荐 {weights,rationale,cautions,model,at,adopted} 留痕
+  version      Int      @default(0) // 乐观锁(仿 Assignment.version 栅栏)
+  updatedById  Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  offering  CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  updatedBy User?          @relation("SemesterReviewConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+// 类别级老师改分:自动分永远读时重算,改分是独立行;删行=撤销回自动值。
+// state=EXEMPT(免计,其余类别权重按比例重归一)时 score 为 null。总评不允许 override。
+model SemesterReviewOverride {
+  id          Int      @id @default(autoincrement())
+  offeringId  Int
+  studentId   Int
+  categoryKey String // 'classroom' | 'training' | 'final'
+  score       Float?
+  state       String   @default("OVERRIDE") // 'OVERRIDE' | 'EXEMPT'
+  reason      String?
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  offering  CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  student   User           @relation("SemesterReviewOverrideStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation("SemesterReviewOverrideCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([offeringId, studentId, categoryKey])
+  @@index([studentId])
+}
+
+// 发布快照:一版一行、不可变(冻结比例+每生 自动/改分/生效/总评+匿名分布)。
+// 学生可见 = revokedAt IS NULL 的最大 version;撤回=标记(行保留审计);修订=发布新版本。
+model SemesterReviewPublish {
+  id            Int       @id @default(autoincrement())
+  offeringId    Int
+  version       Int
+  configJson    String // 发布时冻结的配置(含是否采纳 AI 建议)
+  snapshotJson  String // { students:[{id,no,name,cat:{...auto/ovr/fin...},total}], classAgg }
+  note          String?
+  publishedById Int?
+  publishedAt   DateTime  @default(now())
+  revokedById   Int?
+  revokedAt     DateTime?
+  offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  publishedBy User?          @relation("SemesterReviewPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  revokedBy   User?          @relation("SemesterReviewRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@unique([offeringId, version])
+}
+
+// ── 课堂表现(雨课堂导入) ────────────────────────────────────────────────────────
+// 每次导入一行台账 + 每生一行原始信号。分数不落库:detailJson 只存逐节原始信号(到课/弹幕/
+// 投稿/答题),课堂表现分由 lib/domain 纯函数读时按 weightsJson(老师可调)+保底/追溯宽松/
+// 剔除重开节 口径现算——方案与公平性护栏见 docs/SESSION-2026-07-09-RECOVERY.md §3。
+
+model ClassPerfImport {
+  id             Int      @id @default(autoincrement())
+  offeringId     Int
+  fileName       String
+  sessionsJson   String // 节次元数据:[{label,date,countsAttendance,danmakuOpen,postOpen,questionsOpen}]
+  weightsJson    String // 评分权重(考勤/弹幕/投稿/答题)+保底/模式开关,老师可调
+  rowCount       Int      @default(0)
+  matchedCount   Int      @default(0)
+  unmatchedCount Int      @default(0)
+  duplicateCount Int      @default(0)
+  importedById   Int?
+  createdAt      DateTime @default(now())
+  offering   CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  importedBy User?          @relation("ClassPerfImportedBy", fields: [importedById], references: [id], onDelete: SetNull)
+  students   ClassPerfStudent[]
+
+  @@index([offeringId])
+}
+
+// 每生一行:studentNo 匹配花名册(重复学号已合并:签到 OR、计数 SUM);userId 可空(未匹配
+// 学号仅预览警示不建号);summaryJson 存汇总列快照(权威考勤数等)供对账。
+model ClassPerfStudent {
+  id          Int      @id @default(autoincrement())
+  importId    Int
+  studentNo   String
+  userId      Int?
+  name        String?
+  summaryJson String
+  detailJson  String // 逐节原始信号:[{attended,danmaku,posts,answered,counted}]
+  createdAt   DateTime @default(now())
+  import ClassPerfImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  user   User?           @relation("ClassPerfStudentUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([importId, studentNo])
+  @@index([userId])
 }
