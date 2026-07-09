@@ -17,6 +17,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge, statusTone } from '@/components/ui/badge'
 import { useConfirm } from '@/components/ui/confirm'
+import { RubricPointsEditor } from '@/components/rubric-points-editor'
+import type { RubricPoint } from '@/lib/domain/rubric'
 import { groupUnmatched, type UnmatchedRow } from '@/lib/poll-workbench'
 import { GradeFocus } from './grade-focus'
 
@@ -41,8 +43,10 @@ interface Row {
   violations: number
 }
 interface ModelOpt { id: string; label: string }
-// 一个可 AI 评阅的环节 + 它当前保存的批阅配置（评分标准 + 感知/评分模型）。
-interface PhaseCfg { id: number; label: string; rubric: string; perceptionModel: string; judgeModel: string; sentenceCount: number }
+// 一个可 AI 评阅的环节 + 它当前保存的批阅配置（评分标准 + 分值 + 感知/评分模型）。
+interface PhaseCfg { id: number; label: string; rubric: string; rubricPoints: RubricPoint[]; perceptionModel: string; judgeModel: string; sentenceCount: number }
+// 表单里现编的一套批阅配置（标准文字 + 分值 + 两模型）——分值与标准分开编辑。
+type CfgState = { rubric: string; rubricPoints: RubricPoint[]; perceptionModel: string; judgeModel: string }
 interface PollResult {
   phaseId: number
   // 可作「统一其它班」的模板:纯单选投票(无答案键、≥2 选项)。
@@ -94,16 +98,17 @@ export function GradingClient(props: {
   const defaultJudge = (props.judgeModels.some((m) => m.id === DEFAULT_JUDGE_MODEL) ? DEFAULT_JUDGE_MODEL : props.judgeModels[0]?.id) ?? ''
   // 每环节一套批阅配置（评分标准 + 感知/评分模型）。初值取该环节已保存的，空则回退到
   // 默认模型 / 默认评分标准。逐条评阅、本环节全部评阅、聚焦评阅都按各自环节的这套配置走。
-  const seedCfg = (p: PhaseCfg) => ({
+  const seedCfg = (p: PhaseCfg): CfgState => ({
     rubric: p.rubric || props.defaultRubric,
+    rubricPoints: p.rubricPoints ?? [],
     perceptionModel: p.perceptionModel || defaultPerception,
     judgeModel: p.judgeModel || defaultJudge,
   })
-  const [cfgByPhase, setCfgByPhase] = useState<Record<number, { rubric: string; perceptionModel: string; judgeModel: string }>>(
+  const [cfgByPhase, setCfgByPhase] = useState<Record<number, CfgState>>(
     () => Object.fromEntries(props.phases.map((p) => [p.id, seedCfg(p)])),
   )
-  const cfgFor = (phaseId: number) => cfgByPhase[phaseId] ?? { rubric: props.defaultRubric, perceptionModel: defaultPerception, judgeModel: defaultJudge }
-  const patchCfg = (phaseId: number, patch: Partial<{ rubric: string; perceptionModel: string; judgeModel: string }>) =>
+  const cfgFor = (phaseId: number): CfgState => cfgByPhase[phaseId] ?? { rubric: props.defaultRubric, rubricPoints: [], perceptionModel: defaultPerception, judgeModel: defaultJudge }
+  const patchCfg = (phaseId: number, patch: Partial<CfgState>) =>
     setCfgByPhase((prev) => ({ ...prev, [phaseId]: { ...cfgFor(phaseId), ...patch } }))
 
   const [editing, setEditing] = useState<number | null>(null)
@@ -203,6 +208,7 @@ export function GradingClient(props: {
       fd.set('perceptionModel', cfg.perceptionModel)
       fd.set('judgeModel', cfg.judgeModel)
       fd.set('rubric', cfg.rubric)
+      fd.set('rubricPoints', JSON.stringify(cfg.rubricPoints))
       const res = await runGrading(null, fd)
       setBusyId(null)
       if (res.error) setError(res.error)
@@ -224,6 +230,7 @@ export function GradingClient(props: {
         fd.set('perceptionModel', cfg.perceptionModel)
         fd.set('judgeModel', cfg.judgeModel)
         fd.set('rubric', cfg.rubric)
+        fd.set('rubricPoints', JSON.stringify(cfg.rubricPoints))
         const res = await runGrading(null, fd)
         if (res.error) { setError(res.error); break }
       }
@@ -246,7 +253,7 @@ export function GradingClient(props: {
     const cfg = cfgFor(phaseId)
     setError(null)
     startTransition(async () => {
-      const res = await savePhaseGradingConfig(props.assignmentId, phaseId, cfg.rubric, cfg.perceptionModel, cfg.judgeModel, [...syncTargets])
+      const res = await savePhaseGradingConfig(props.assignmentId, phaseId, cfg.rubric, cfg.perceptionModel, cfg.judgeModel, cfg.rubricPoints, [...syncTargets])
       if (res.error) setError(res.error)
       else router.refresh()
     })
@@ -478,6 +485,7 @@ export function GradingClient(props: {
                     <Label>{t('grade.rubric')}</Label>
                     <Textarea value={cfg.rubric} onChange={(e) => patchCfg(p.id, { rubric: e.target.value })} rows={3} placeholder={t('grade.rubricPh')} />
                   </div>
+                  <RubricPointsEditor value={cfg.rubricPoints} onChange={(v) => patchCfg(p.id, { rubricPoints: v })} />
                   <div className="rounded-xl bg-secondary p-3">
                     <div className="text-xs font-medium text-muted-foreground">{t('grade.estimate')}</div>
                     <div className="mt-1 text-sm">

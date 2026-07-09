@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/domain/grading'
-import { composeRubric, parseRubricPoints } from '@/lib/domain/rubric'
+import { composeRubric, parseRubricPoints, serializeRubricPoints, type RubricPoint } from '@/lib/domain/rubric'
 import { assignPollVote as assignPollVoteService, assignPollVotesBulk as assignPollVotesBulkService, unassignPollVote as unassignPollVoteService, unifyPollSiblings, type UnifyReport } from '@/lib/domain/poll-unify'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
@@ -66,8 +66,14 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   if (!submission) return { error: t('err.subNoAccess') }
   if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
-  // 标准/分值分离：把环节分值拼进 rubric、满分取分值之和（无分值 → 满分默认）。
-  const composed = composeRubric(rubric, parseRubricPoints(submission.phase?.rubricPoints))
+  // 标准/分值分离：把环节分值拼进 rubric、满分取分值之和（无分值 → 满分默认）。分值优先取表单
+  // （评分页现编即时生效，与现编 rubric 一致）；表单没带则回退该环节已存的分值。用原始 formData
+  // 取值以区分「没带」（回退 DB）与「带了空数组」（老师清空 = 回退默认满分）；optText 会把两者都并成 null。
+  const rawPoints = formData.get('rubricPoints')
+  const points = typeof rawPoints === 'string' && rawPoints.length <= 4000
+    ? parseRubricPoints(rawPoints)
+    : parseRubricPoints(submission.phase?.rubricPoints)
+  const composed = composeRubric(rubric, points)
   const res = await autoGradeSubmission(prisma, submission, { perceptionModel, judgeModel, rubric: composed.text, maxScore: composed.maxScore ?? DEFAULT_MAX_SCORE, graderUserId: user.userId })
   // res.error is an i18n key (e.g. err.mediaUnavailable) or a raw model message; t()
   // translates the former and passes the latter through unchanged.
@@ -77,14 +83,16 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   return { success: true }
 }
 
-// 保存某环节的批阅配置（评分标准 + 感知/评分模型）。空串=清空，回退到作业/平台默认。
+// 保存某环节的批阅配置（评分标准 + 分值 + 感知/评分模型）。空串/空数组=清空，回退到作业/平台
+// 默认（分值清空 = 回退默认满分）。标准（rubric 文字）与分值（rubricPoints）分开存、分开覆盖。
 // applyToAssignmentIds：勾选的兄弟作业（其它班的同名/同批次作业）——保存后把同一份配置
 // 同步到它们同序的环节。
-export async function savePhaseGradingConfig(assignmentId: number, phaseId: number, rubric: string, perceptionModel: string, judgeModel: string, applyToAssignmentIds: number[] = []): Promise<ActionState> {
+export async function savePhaseGradingConfig(assignmentId: number, phaseId: number, rubric: string, perceptionModel: string, judgeModel: string, rubricPoints: RubricPoint[] = [], applyToAssignmentIds: number[] = []): Promise<ActionState> {
   const { user, prisma, t } = await staffContext()
   if (!Number.isInteger(phaseId)) return { error: t('err.assignNotFound') }
   const data = {
     rubric: (rubric ?? '').trim().slice(0, 2000) || null,
+    rubricPoints: serializeRubricPoints(Array.isArray(rubricPoints) ? rubricPoints : []),
     defaultPerceptionModel: (perceptionModel ?? '').trim().slice(0, 100) || null,
     defaultJudgeModel: (judgeModel ?? '').trim().slice(0, 100) || null,
   }

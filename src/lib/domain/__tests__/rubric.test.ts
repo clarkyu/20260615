@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseRubricPoints, rubricMaxScore, composeRubric } from '../rubric'
+import { parseRubricPoints, serializeRubricPoints, rubricMaxScore, composeRubric } from '../rubric'
 
 describe('parseRubricPoints', () => {
   it('parses a valid points array', () => {
@@ -19,6 +19,18 @@ describe('parseRubricPoints', () => {
     expect(parseRubricPoints('')).toEqual([])
     expect(parseRubricPoints('{"name":"x","points":1}')).toEqual([]) // object, not array
     expect(parseRubricPoints('not json')).toEqual([])
+  })
+})
+
+describe('serializeRubricPoints', () => {
+  it('round-trips a valid array (normalizing) to a compact JSON string', () => {
+    expect(serializeRubricPoints([{ name: '完整度', points: 40.4 }, { name: '发音', points: 20 }])).toBe(
+      '[{"name":"完整度","points":40},{"name":"发音","points":20}]',
+    )
+  })
+  it('drops empty/invalid rows and returns null when nothing survives', () => {
+    expect(serializeRubricPoints([{ name: '', points: 10 }, { name: 'x', points: -1 }])).toBeNull()
+    expect(serializeRubricPoints([])).toBeNull()
   })
 })
 

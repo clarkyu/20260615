@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge, statusTone } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { RubricPoint } from '@/lib/domain/rubric'
 
 export interface FocusRow {
   id: number
@@ -41,8 +42,8 @@ export function GradeFocus({
   index: number
   setIndex: (i: number) => void
   onClose: () => void
-  // 按聚焦中那一份提交所属环节，取该环节的批阅配置（评分标准 + 模型）。
-  cfgFor: (phaseId: number) => { perceptionModel: string; judgeModel: string; rubric: string }
+  // 按聚焦中那一份提交所属环节，取该环节的批阅配置（评分标准 + 分值 + 模型）。
+  cfgFor: (phaseId: number) => { perceptionModel: string; judgeModel: string; rubric: string; rubricPoints: RubricPoint[] }
   onChanged: () => void
 }) {
   const t = useT()
@@ -106,6 +107,7 @@ export function GradeFocus({
     fd.set('perceptionModel', cfg.perceptionModel)
     fd.set('judgeModel', cfg.judgeModel)
     fd.set('rubric', cfg.rubric)
+    fd.set('rubricPoints', JSON.stringify(cfg.rubricPoints))
     const res = await runGrading(null, fd)
     setBusy(false)
     if (res.error) setError(res.error)

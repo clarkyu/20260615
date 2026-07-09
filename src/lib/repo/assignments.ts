@@ -111,7 +111,7 @@ export function findDetailForStaff(prisma: PrismaClient, id: number, schoolId: n
       id: true, title: true, category: true, rubric: true, offeringId: true,
       _count: { select: { sentences: true } },
       offering: { include: { course: true, class: { select: { id: true, name: true } } } },
-      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireVideo: true, requireAudio: true, requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, requireFreeText: true, rubric: true, defaultPerceptionModel: true, defaultJudgeModel: true, _count: { select: { sentences: true } } } },
+      phases: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true, graded: true, requireVideo: true, requireAudio: true, requireChoice: true, choicesJson: true, correctChoice: true, multiChoice: true, correctChoices: true, requireFreeText: true, rubric: true, rubricPoints: true, defaultPerceptionModel: true, defaultJudgeModel: true, _count: { select: { sentences: true } } } },
       submissions: {
         orderBy: [{ studentId: 'asc' }, { attempt: 'desc' }],
         select: {
@@ -389,7 +389,7 @@ export async function updateWithPhases(
 }
 
 // The edit screen: assignment + its ordered phases, each with sentences + chunk-set name.
-// Persist a phase's 批阅配置（评分标准 + 感知/评分模型）. Scoped to the staff member's
+// Persist a phase's 批阅配置（评分标准 + 分值 + 感知/评分模型）. Scoped to the staff member's
 // own offerings via assignment.offering — a TEACHER can only touch their own phases.
 export function updatePhaseGradingConfig(
   prisma: PrismaClient,
@@ -397,7 +397,7 @@ export function updatePhaseGradingConfig(
   schoolId: number | null | undefined,
   userId: number,
   role: Role,
-  data: { rubric: string | null; defaultPerceptionModel: string | null; defaultJudgeModel: string | null },
+  data: { rubric: string | null; rubricPoints?: string | null; defaultPerceptionModel: string | null; defaultJudgeModel: string | null },
 ) {
   return prisma.phase.updateMany({
     where: { id: phaseId, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
@@ -447,7 +447,7 @@ export async function applyPhaseConfigToSiblings(
   userId: number,
   role: Role,
   targetAssignmentIds: number[],
-  data: { rubric: string | null; defaultPerceptionModel: string | null; defaultJudgeModel: string | null },
+  data: { rubric: string | null; rubricPoints?: string | null; defaultPerceptionModel: string | null; defaultJudgeModel: string | null },
 ): Promise<number> {
   if (targetAssignmentIds.length === 0) return 0
   const src = await prisma.phase.findFirst({
