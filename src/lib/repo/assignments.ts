@@ -708,7 +708,7 @@ export function findPhaseRubricTargets(prisma: PrismaClient, schoolId: number, t
 export async function setPhaseRubricByIds(
   prisma: PrismaClient,
   ids: number[],
-  data: { rubric?: string; referenceSource?: string | null; complianceScoring?: boolean },
+  data: { rubric?: string; referenceSource?: string | null; complianceScoring?: boolean; rubricPoints?: string | null },
 ): Promise<number> {
   const CHUNK = 100
   let count = 0
