@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { Plus, Pencil, ChevronRight, ChevronLeft, ClipboardList, TrendingUp } from 'lucide-react'
+import { Plus, Pencil, ChevronRight, ChevronLeft, ClipboardList, TrendingUp, GraduationCap } from 'lucide-react'
 import { requireStaff, getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
@@ -63,6 +63,21 @@ export default async function OfferingPage({ params }: { params: Promise<{ offer
             <div className="min-w-0 flex-1">
               <p className="font-semibold leading-snug">{t('insights.title')}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">{t('insights.cardDesc')}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </Link>
+
+      <Link href={`/dashboard/teaching/${offering.id}/review`}>
+        <Card className="tap hover:shadow-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted text-foreground">
+              <GraduationCap className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold leading-snug">{t('review.title')}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{t('review.cardDesc')}</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
           </CardContent>
