@@ -186,7 +186,10 @@ export async function regradePhase(prisma: PrismaClient, schoolId: number, title
   const phases = await assignments.findPhaseRubricTargets(prisma, schoolId, title, order)
   if (phases.length === 0) return { ok: false, error: 'no phase at this school+title+order' }
   if (phases[0].itemType === 'objective') return { ok: false, error: 'objective phase is not AI-graded — nothing to regrade' }
-  const kind: 'submission' | 'writing' = phases[0].itemType === 'writing' ? 'writing' : 'submission'
+  // 评阅任务种类:writing→文本判分;逐句跟读(有 ShadowTake)→shadow(走 gradeShadowSubmission,
+  // 复用逐句缓存重评);否则整段媒体→submission(感知+判分)。itemType 区分不了 shadow,靠硬信号判。
+  const kind: 'submission' | 'writing' | 'shadow' =
+    phases[0].itemType === 'writing' ? 'writing' : (await submissions.phaseHasShadowTakes(prisma, schoolId, title, order)) ? 'shadow' : 'submission'
 
   const total = await submissions.countRegradeTargets(prisma, schoolId, title, order)
   if (total === 0) return { ok: false, error: 'no finalized (non-teacher-graded) submissions to regrade for this school+title+order' }

@@ -6,19 +6,22 @@
 // uncertain ones. Best-effort + graceful: no model key ⇒ leave it for the teacher.
 
 import type { PrismaClient } from '@prisma/client'
-import type { TokenUsage } from '@/lib/ai/types'
+import type { TokenUsage, PerceptionResult } from '@/lib/ai/types'
 import { logError } from '../log'
 import { config } from '@/lib/config'
-import { getModel, DEFAULT_PERCEPTION_MODEL } from '@/lib/ai/registry'
-import { perceptionCostUsd, perceptionCostMicroUsd } from '@/lib/ai/cost'
+import { getModel, DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
+import { perceptionCostUsd, perceptionCostMicroUsd, costUsd, costMicroUsd } from '@/lib/ai/cost'
 import { getPerceptionProvider } from '@/lib/ai/adapters'
+import { judgeForGrading } from '@/lib/ai/grade'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { withAiKeys } from '@/lib/ai/key-context'
 import { resolveTeacherKeys } from '@/lib/ai/teacher-keys'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as bankRepo from '@/lib/repo/bank'
 import { logAiCall } from '@/lib/repo/ai-usage'
-import { isUnavailable } from './grading'
+import { isUnavailable, decideReview } from './grading'
+import { type ChunkItem, chunkCentralReferences, buildChunkRubric, chunkBonus, readBonusFlags } from './chunk-grading'
 import { unavailable } from '@/lib/ai/errors'
 
 // Score one sentence's audio: weighted accuracy + completeness, 0..100. The accuracy
@@ -46,6 +49,11 @@ export async function gradeShadowTake(audioUrl: string, sentenceText: string, pe
 // defaults (and the pure-function fallbacks).
 const AUTO_PASS_OVERALL = 85
 const AUTO_PASS_MIN = 60
+
+// 语块「逐句跟读」的基础 rubric（中心句四维，满分100）——buildChunkRubric 会在其后附上三件套 +
+// 解释/情景复述的判定项。只按中心句评，学生没读解释/情景不扣分（加分另算）。
+const SHADOW_CHUNK_RUBRIC =
+  '本环节为「逐句跟读」，学生逐句朗读。基础分只按各语块的【中心句】评（满分100）：完整度40（读出中心句主体即高分）、准确度20、发音20、流利20。'
 
 export interface ShadowSummary {
   overall: number
@@ -104,6 +112,66 @@ export async function gradeShadowSubmission(prisma: PrismaClient, submissionId: 
   if (claimed.count === 0) return
   // Grade on the assignment-owning teacher's own API key (BYOK); empty → platform key.
   const keys = await resolveTeacherKeys(prisma, owner?.teacherId)
+
+  // 语块题库评分(referenceSource='chunk'):逐句跟读**不重新感知**——复用每条已缓存的 spokenText
+  // 转写拼成本次跟读文本,复用逐句发音均分作发音参考,用一次便宜的文本判分按【中心句】给基础分 +
+  // 解释/情景【复述】加分(代码算,封顶+20、夹0~100)定稿。零感知调用。
+  if (submission.phase?.referenceSource === 'chunk' && submission.phase.chunkSetId) {
+    const rows = await bankRepo.listChunksForGrading(prisma, submission.phase.chunkSetId)
+    const chunks: ChunkItem[] = rows
+      .filter((c) => (c.english ?? '').trim())
+      .map((c) => ({ order: c.order, central: c.english, explanation: c.meaningEn ?? undefined, example: c.exampleEn ?? undefined }))
+    const saidByOrder = new Map(
+      submission.shadowTakes.filter((t) => (t.spokenText ?? '').trim()).map((t) => [t.order, t.spokenText as string]),
+    )
+    // 没有语块、或一条转写都没有 → 无从文本重评,退回老师队列(不凭空定分)。
+    if (chunks.length === 0 || saidByOrder.size === 0) { await revert(); return }
+    const recited = chunks.map((c) => `${c.order}. ${saidByOrder.get(c.order) ?? '（未跟读/无转写）'}`).join('\n')
+    const scored = submission.shadowTakes.map((t) => t.aiScore).filter((s): s is number => s != null)
+    const pronAvg = scored.length ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : null
+    const judgeModel = submission.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL
+    const rubric =
+      buildChunkRubric(SHADOW_CHUNK_RUBRIC, chunks) +
+      (pronAvg != null ? `\n\n参考：学生本次逐句发音质量均分约 ${pronAvg}/100，据此把握发音、流利维度。` : '')
+    const synthPerception: PerceptionResult = { transcript: recited, perSentence: [], observations: {} }
+    try {
+      const { judge } = await withAiKeys(keys, () =>
+        judgeForGrading(synthPerception, { judgeModelId: judgeModel, referenceSentences: chunkCentralReferences(chunks), rubric, maxScore: 100 }),
+      )
+      const bonus = chunkBonus(readBonusFlags(judge.breakdown))
+      const base = judge.score
+      const finalScore = Math.max(0, Math.min(100, base + bonus.delta))
+      const decision = decideReview(
+        { confidence: judge.confidence, hasViolation: false, freePractice: submission.phase?.freePractice ?? false },
+        config.calibration().reviewConfidenceThreshold,
+      )
+      const feedback = `${judge.feedback}\n\n【加分】${bonus.notes.join('；')}（基础分 ${base} → 最终 ${finalScore}）`
+      const ju = judge.usage
+      const jMicro = costMicroUsd(judgeModel, ju?.inputTokens ?? 0, ju?.outputTokens ?? 0)
+      await submissionRepo.applyShadowResult(prisma, submissionId, {
+        needsReview: decision.needsReview,
+        aiScore: finalScore,
+        finalScore: submission.teacherScore ?? finalScore,
+        confidence: judge.confidence ?? finalScore / 100,
+        feedback,
+        inputTokens: ju?.inputTokens ?? null,
+        outputTokens: ju?.outputTokens ?? null,
+        costUsd: ju ? costUsd(judgeModel, ju.inputTokens ?? 0, ju.outputTokens ?? 0) : null,
+        costMicroUsd: ju ? jMicro : null,
+      })
+      await logAiCall(prisma, { submissionId, schoolId: owner?.schoolId ?? null, kind: 'judge', model: judgeModel, inputTokens: ju?.inputTokens ?? 0, outputTokens: ju?.outputTokens ?? 0, costMicroUsd: jMicro, ok: true })
+      return
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      // 判分模型没配 → 退回老师、不计费；其它错 → 记失败流水后退回重试。
+      await revert()
+      if (!isUnavailable(msg)) {
+        logError('gradeShadowSubmission', 'chunk judge failed', err, { submissionId })
+        await logAiCall(prisma, { submissionId, schoolId: owner?.schoolId ?? null, kind: 'judge', model: judgeModel, costMicroUsd: 0, ok: false })
+      }
+      return msg
+    }
+  }
   // 逐句失败的底层原因(首个 take 的报错):以前只 logError 进不了库,死信只留一句泛化的
   // 「grading did not complete」——「音频完好却评不出」为何,无从查。这里捕获后由 durable job
   // 写进 GradingJob.lastError,便于诊断(纯观测,不改评阅/revert 行为)。

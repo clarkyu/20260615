@@ -383,7 +383,7 @@ describe('autoGradeSubmission — 评分个性化(主题 / 本人文本 / 合规
     await autoGradeSubmission(prisma, sub({ violations: null, phase: compliancePhase() }), opts)
     const g = gradeData()
     expect(g.aiScore).toBe(90) // 70 + 10(闭眼) + 10(未离开)
-    expect(g.feedback).toContain('合规加减分')
+    expect(g.feedback).toContain('加减分')
   })
 
   it('合规: peeking −10; a tab-switch violation does NOT deduct (只奖不罚)', async () => {

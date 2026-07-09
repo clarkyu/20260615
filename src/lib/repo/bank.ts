@@ -46,6 +46,16 @@ function chunkRows(setId: number, chunks: ChunkInput[]) {
   }))
 }
 
+// 评分用：某句集的三件套（中心句 english / 解释句 meaningEn / 情景例句 exampleEn），按 order 取全。
+// 系统级读——评分管线按 phase.chunkSetId 直接取，不做租户 scope（评分是系统流程，非老师面向读）。
+export function listChunksForGrading(prisma: PrismaClient, chunkSetId: number) {
+  return prisma.chunk.findMany({
+    where: { chunkSetId },
+    orderBy: { order: 'asc' },
+    select: { order: true, english: true, meaningEn: true, exampleEn: true },
+  })
+}
+
 // Authorize a mutation (edit/delete/video): returns the set only if this actor
 // owns it (own school, or global when super-admin).
 export function findOwned(prisma: PrismaClient, id: number, schoolId: number | null | undefined, isSuperAdmin: boolean) {

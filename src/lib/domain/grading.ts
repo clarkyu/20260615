@@ -19,6 +19,8 @@ import { presignDownload, probeObject, storageConfigured } from '@/lib/storage'
 import { DEFAULT_PERCEPTION_MODEL, DEFAULT_JUDGE_MODEL } from '@/lib/ai/registry'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as bankRepo from '@/lib/repo/bank'
+import { type ChunkItem, chunkCentralReferences, buildChunkRubric, chunkBonus, readBonusFlags } from './chunk-grading'
 import { logAiCall } from '@/lib/repo/ai-usage'
 import { isUnavailable } from '@/lib/ai/errors'
 
@@ -128,6 +130,8 @@ interface PhaseGradingExtras {
   order?: number
   referenceSource?: string | null
   complianceScoring?: boolean
+  // 语块题库(题库句集)——referenceSource='chunk' 时按该句集的三件套(中心句/解释句/情景例句)评分。
+  chunkSetId?: number | null
 }
 export interface GradableSubmission {
   id: number
@@ -247,6 +251,22 @@ export async function autoGradeSubmission(
     const own = priorText ? splitReferenceText(priorText) : []
     if (own.length) refs = own
   }
+  // 语块题库评分(referenceSource='chunk'):基础分只按各语块的【中心句】评,参照句换成中心句;
+  // 三件套(中心/解释/情景)附进 rubric,让判分在 breakdown 额外回「解释句/情景例句是否复述」两个 flag——
+  // 加分的算术由代码在 judge 之后确定性地做(见下),LLM 只做判断。
+  let rubric = opts.rubric
+  let chunks: ChunkItem[] | null = null
+  if (phase?.referenceSource === 'chunk' && phase.chunkSetId) {
+    const rows = await bankRepo.listChunksForGrading(prisma, phase.chunkSetId)
+    const loaded: ChunkItem[] = rows
+      .filter((c) => (c.english ?? '').trim())
+      .map((c) => ({ order: c.order, central: c.english, explanation: c.meaningEn ?? undefined, example: c.exampleEn ?? undefined }))
+    if (loaded.length) {
+      chunks = loaded
+      refs = chunkCentralReferences(loaded)
+      rubric = buildChunkRubric(opts.rubric, loaded)
+    }
+  }
   // B:评分读该生在选题环节选定的主题,喂给判分让评语有针对性(按所选主题批阅)。
   const theme = (await submissionRepo.findChosenTheme(prisma, submission.assignmentId, submission.studentId)) ?? undefined
   // Reuse a perception cached by a prior attempt (perceived OK but failed at the judge stage) so
@@ -296,22 +316,27 @@ export async function autoGradeSubmission(
     const { judgeModel, judge } = await withAiKeys(keys, () => judgeForGrading(perception!, {
       judgeModelId: opts.judgeModel,
       referenceSentences: refs,
-      rubric: opts.rubric,
+      rubric,
       maxScore,
       recitedText: submission.recitedText ?? undefined,
       theme,
     }))
+    // 语块加分(仅 referenceSource='chunk' 环节):中心句基础分之上,代码按判分回的两个 flag 加分
+    // (复述解释句 +10 / 情景例句 +10,封顶 +20)——LLM 只判断有没有复述,加分算术不交给它。
+    const chunkB = chunks ? chunkBonus(readBonusFlags(judge.breakdown)) : null
     // 合规加减分(仅 complianceScoring 环节):judge 出学术分后,代码确定性地按闭眼/偷看(感知)与
     // 离开/切屏(违规)±10,再夹到 0~满分——LLM 不可靠的算术不参与,评语里说明加减明细。
     const compliance = phase?.complianceScoring
       ? complianceAdjustment(perception.observations, submission.violations)
       : null
     const baseScore = judge.score
-    const aiScore = compliance ? Math.max(0, Math.min(maxScore, baseScore + compliance.delta)) : baseScore
-    const feedback = compliance
-      ? `${judge.feedback}\n\n【合规加减分】${compliance.notes.join('；')}（基础分 ${baseScore} → 最终 ${aiScore}）`
+    const delta = (chunkB?.delta ?? 0) + (compliance?.delta ?? 0)
+    const aiScore = chunkB || compliance ? Math.max(0, Math.min(maxScore, baseScore + delta)) : baseScore
+    const adjNotes = [...(chunkB?.notes ?? []), ...(compliance?.notes ?? [])]
+    const feedback = adjNotes.length
+      ? `${judge.feedback}\n\n【加减分】${adjNotes.join('；')}（基础分 ${baseScore} → 最终 ${aiScore}）`
       : judge.feedback
-    const result = { perceptionModel, judgeModel, perception, judge, ...(compliance ? { compliance } : {}) }
+    const result = { perceptionModel, judgeModel, perception, judge, ...(chunkB ? { chunkBonus: chunkB } : {}), ...(compliance ? { compliance } : {}) }
 
     const decision = decideReview({
       confidence: judge.confidence,
