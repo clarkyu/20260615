@@ -8,7 +8,7 @@ import { setPhaseRubric, type SetPhaseRubricInput } from '@/lib/domain/phase-rub
 // (参照来源)+ complianceScoring(合规 ±10)一次写到该 title 在本校所有班级的同序环节。**只写 Phase
 // 这三列,绝不碰 Submission / 已出评分**——要让新标准生效得另走重评(PR-3)。schoolId + title + order 必填;
 // rubric / referenceSource / complianceScoring 任给其一(部分更新,省略即不动);默认 dry-run,{"apply":true}
-// 才执行;可安全重跑。referenceSource 传 "prior-text" 开、传 null 关。
+// 才执行;可安全重跑。referenceSource:"prior-text"=按本人前置文本评;"chunk"=按题库语块中心句评+解释/情景加分;null=关。
 //   curl -X POST $APP/api/admin/set-phase-rubric \
 //     -H "authorization: Bearer $CRON_SECRET" -H "content-type: application/json" \
 //     -d '{"schoolId":1,"title":"…","order":3,"rubric":"…","referenceSource":"prior-text"}'   # dry-run
@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
     input.rubric = body.rubric
   }
   if (body.referenceSource !== undefined) {
-    if (body.referenceSource !== null && body.referenceSource !== 'prior-text') {
-      return NextResponse.json({ ok: false, error: 'referenceSource must be "prior-text" or null' }, { status: 400 })
+    if (body.referenceSource !== null && body.referenceSource !== 'prior-text' && body.referenceSource !== 'chunk') {
+      return NextResponse.json({ ok: false, error: 'referenceSource must be "prior-text", "chunk", or null' }, { status: 400 })
     }
     input.referenceSource = body.referenceSource
   }
