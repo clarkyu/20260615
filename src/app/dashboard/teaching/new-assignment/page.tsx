@@ -90,6 +90,7 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
           fillAccept: parseFillBlank(p.blanksJson).accept.map((a) => a.join(' | ')),
           requireFreeText: p.requireFreeText,
           rubric: p.rubric ?? '',
+          rubricPoints: p.rubricPoints ?? [],
           perceptionModel: p.perceptionModel ?? '',
           judgeModel: p.judgeModel ?? '',
           graded: p.graded,

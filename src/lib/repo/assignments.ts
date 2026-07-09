@@ -53,6 +53,8 @@ export interface PhaseInput {
   blanksJson?: string | null
   requireFreeText?: boolean
   rubric?: string | null
+  // 分值（各维度点数）已在 domain 层序列化成 JSON 串（与 choicesJson/blanksJson 同款）——repo 只落库。
+  rubricPoints?: string | null
   perceptionModel?: string | null
   judgeModel?: string | null
   graded: boolean
@@ -174,6 +176,7 @@ function phaseData(p: PhaseInput) {
     // backfill so the stored column and the runtime derivation never disagree.
     itemType: phaseItemType(p),
     rubric: p.rubric ?? null,
+    rubricPoints: p.rubricPoints ?? null,
     defaultPerceptionModel: p.perceptionModel ?? null,
     defaultJudgeModel: p.judgeModel ?? null,
     graded: p.graded,

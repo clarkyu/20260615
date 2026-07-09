@@ -25,6 +25,8 @@ export const templatePhaseSchema = z.object({
   blanksJson: z.string().nullable().default(null),
   requireFreeText: z.boolean().default(false),
   rubric: z.string().nullable().default(null),
+  // 分值（各维度点数，与 rubric 标准文字分开）——旧模板无此字段时回退空数组。
+  rubricPoints: z.array(z.object({ name: z.string().max(50).default(''), points: z.coerce.number().default(0) })).max(20).default([]),
   perceptionModel: z.string().nullable().default(null),
   judgeModel: z.string().nullable().default(null),
   graded: z.boolean().default(true),
@@ -77,6 +79,7 @@ export interface TemplateSourcePhase {
   blanksJson?: string | null
   requireFreeText?: boolean
   rubric?: string | null
+  rubricPoints?: { name: string; points: number }[]
   perceptionModel?: string | null
   judgeModel?: string | null
   graded: boolean
@@ -121,6 +124,7 @@ export function buildTemplatePayload(
       blanksJson: p.blanksJson ?? null,
       requireFreeText: p.requireFreeText ?? false,
       rubric: p.rubric ?? null,
+      rubricPoints: (p.rubricPoints ?? []).map((r) => ({ name: r.name, points: r.points })),
       perceptionModel: p.perceptionModel ?? null,
       judgeModel: p.judgeModel ?? null,
       graded: p.graded,
