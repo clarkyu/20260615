@@ -8,7 +8,7 @@ import type { PrismaClient } from '@prisma/client'
 export interface AiCall {
   submissionId?: number | null
   schoolId?: number | null
-  kind: 'perception' | 'judge' | 'writing' | 'shadow'
+  kind: 'perception' | 'judge' | 'writing' | 'shadow' | 'advice'
   model: string
   inputTokens?: number
   outputTokens?: number

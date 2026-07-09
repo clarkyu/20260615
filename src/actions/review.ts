@@ -6,6 +6,8 @@ import { staffContext } from '@/lib/action-context'
 import * as offeringRepo from '@/lib/repo/offerings'
 import * as reviewRepo from '@/lib/repo/review'
 import { validateReviewConfig, type ReviewCategoryKey, type ReviewConfig } from '@/lib/domain/review'
+import { loadReviewWorkbench } from '@/lib/domain/review-load'
+import { suggestWeights } from '@/lib/domain/review-advice'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -75,4 +77,22 @@ export async function clearReviewOverride(offeringId: number, studentId: number,
   await reviewRepo.deleteOverride(prisma, offeringId, studentId, categoryKey, user.schoolId, user.userId, user.role)
   revalidatePath(`/dashboard/teaching/${offeringId}/review`)
   return { success: true }
+}
+
+// AI 推荐比例:构造班级聚合(零 PII)→ DeepSeek 严格 JSON → 校验 → 留痕;
+// 建议只回给工作台作可编辑草案,老师保存才生效。
+export async function suggestReviewWeights(
+  offeringId: number,
+  teacherNote: string,
+): Promise<{ advice?: { weights: { classroom: number; training: number; final: number }; rationale: string; cautions: string[] }; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(offeringId)) return { error: t('err.notFound') }
+  const offering = await offeringRepo.findForSchoolWithCourseClass(prisma, offeringId, user.schoolId, user.userId, user.role)
+  if (!offering) return { error: t('err.notFound') }
+  const actor = { schoolId: user.schoolId, userId: user.userId, role: user.role }
+  const data = await loadReviewWorkbench(prisma, { id: offering.id, classId: offering.classId }, actor)
+  const course = `${offering.course.name} · ${offering.year} 学期${offering.semester}(高职英语,16 节雨课堂 + 2 次背诵训练 + 1 次期末考核)`
+  const res = await suggestWeights(prisma, offeringId, data, course, actor, teacherNote)
+  if (!res.ok) return { error: t(res.error) }
+  return { advice: res.advice }
 }
