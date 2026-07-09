@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db'
 import { config } from '@/lib/config'
 import { timingSafeEqual } from '@/lib/safe-compare'
 import { setPhaseRubric, type SetPhaseRubricInput } from '@/lib/domain/phase-rubric-backfill'
+import { parseRubricPoints } from '@/lib/domain/rubric'
 
 // 维护端点(CRON_SECRET 鉴权):环节评分标准落地。把某作业指定序号环节的 rubric + referenceSource
 // (参照来源)+ complianceScoring(合规 ±10)一次写到该 title 在本校所有班级的同序环节。**只写 Phase
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   let body: {
     schoolId?: unknown; title?: unknown; order?: unknown
-    rubric?: unknown; referenceSource?: unknown; complianceScoring?: unknown; apply?: unknown
+    rubric?: unknown; referenceSource?: unknown; complianceScoring?: unknown; rubricPoints?: unknown; apply?: unknown
   }
   try {
     body = await req.json()
@@ -48,6 +49,17 @@ export async function POST(req: NextRequest) {
   if (body.complianceScoring !== undefined) {
     if (typeof body.complianceScoring !== 'boolean') return NextResponse.json({ ok: false, error: 'complianceScoring must be a boolean' }, { status: 400 })
     input.complianceScoring = body.complianceScoring
+  }
+  // 分值：数组 [{name,points}] → 规范化后存 JSON；null/[] → 清空（回退默认满分）。
+  if (body.rubricPoints !== undefined) {
+    if (body.rubricPoints === null) {
+      input.rubricPoints = null
+    } else if (Array.isArray(body.rubricPoints)) {
+      const normalized = parseRubricPoints(JSON.stringify(body.rubricPoints))
+      input.rubricPoints = normalized.length ? JSON.stringify(normalized) : null
+    } else {
+      return NextResponse.json({ ok: false, error: 'rubricPoints must be an array of {name, points} or null' }, { status: 400 })
+    }
   }
   const apply = body.apply === true
 

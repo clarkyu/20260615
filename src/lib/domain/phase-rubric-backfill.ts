@@ -13,6 +13,8 @@ export interface SetPhaseRubricInput {
   rubric?: string
   referenceSource?: string | null
   complianceScoring?: boolean
+  // 各维度分值的 JSON 字符串（[{"name","points"}]）——与 rubric 标准文字分开存。null = 清空（回退默认满分）。
+  rubricPoints?: string | null
 }
 
 export type SetPhaseRubricReport =
@@ -48,12 +50,13 @@ export async function setPhaseRubric(
     .sort((a, b) => a.assignmentId - b.assignmentId)
 
   // 只把明确给了的字段放进更新集(部分更新)——省略某字段 = 不动它,避免误清历史配置。
-  const data: { rubric?: string; referenceSource?: string | null; complianceScoring?: boolean } = {}
+  const data: { rubric?: string; referenceSource?: string | null; complianceScoring?: boolean; rubricPoints?: string | null } = {}
   if (typeof input.rubric === 'string') data.rubric = input.rubric
   if (input.referenceSource !== undefined) data.referenceSource = input.referenceSource
   if (typeof input.complianceScoring === 'boolean') data.complianceScoring = input.complianceScoring
+  if (input.rubricPoints !== undefined) data.rubricPoints = input.rubricPoints
   if (Object.keys(data).length === 0) {
-    return { ok: false, error: 'nothing to set: provide rubric and/or referenceSource and/or complianceScoring' }
+    return { ok: false, error: 'nothing to set: provide rubric / referenceSource / complianceScoring / rubricPoints' }
   }
 
   if (!apply) return { ok: true, applied: false, targets: rows.length, perAssignment, updated: 0 }

@@ -21,6 +21,7 @@ import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
 import * as bankRepo from '@/lib/repo/bank'
 import { type ChunkItem, chunkCentralReferences, buildChunkRubric, chunkBonus, readBonusFlags } from './chunk-grading'
+import { composeRubric, parseRubricPoints } from './rubric'
 import { logAiCall } from '@/lib/repo/ai-usage'
 import { isUnavailable } from '@/lib/ai/errors'
 
@@ -428,10 +429,14 @@ export async function autoGradeById(prisma: PrismaClient, submissionId: number):
   // assignment-level pin, then the teacher's own default, then the platform default.
   const owner = await assignmentRepo.offeringTeacher(prisma, submission.assignmentId)
   const phase = submission.phase
+  // 标准/分值分离：criteria=纯文字标准;分值(rubricPoints,仅环节级)由代码拼进 rubric、满分取分值之和。
+  const criteria = phase?.rubric || submission.assignment.rubric || DEFAULT_RUBRIC
+  const composed = composeRubric(criteria, parseRubricPoints(phase?.rubricPoints))
   return autoGradeSubmission(prisma, submission, {
     perceptionModel: phase?.defaultPerceptionModel || submission.assignment.defaultPerceptionModel || owner?.defaultPerceptionModel || DEFAULT_PERCEPTION_MODEL,
     judgeModel: phase?.defaultJudgeModel || submission.assignment.defaultJudgeModel || owner?.defaultJudgeModel || DEFAULT_JUDGE_MODEL,
-    rubric: phase?.rubric || submission.assignment.rubric || DEFAULT_RUBRIC,
+    rubric: composed.text,
+    maxScore: composed.maxScore ?? DEFAULT_MAX_SCORE,
     background: true, // durable-queue run — guarded claim so it can't overwrite a teacher grade
   })
 }

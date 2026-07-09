@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { staffContext } from '@/lib/action-context'
 import { presignDownload, storageConfigured } from '@/lib/storage'
 import { autoGradeSubmission, DEFAULT_MAX_SCORE, DEFAULT_RUBRIC } from '@/lib/domain/grading'
+import { composeRubric, parseRubricPoints } from '@/lib/domain/rubric'
 import { assignPollVote as assignPollVoteService, assignPollVotesBulk as assignPollVotesBulkService, unassignPollVote as unassignPollVoteService, unifyPollSiblings, type UnifyReport } from '@/lib/domain/poll-unify'
 import * as submissionRepo from '@/lib/repo/submissions'
 import * as assignmentRepo from '@/lib/repo/assignments'
@@ -65,7 +66,9 @@ export async function runGrading(prevState: unknown, formData: FormData): Promis
   if (!submission) return { error: t('err.subNoAccess') }
   if (!submission.videoKey) return { error: t('err.noVideoToGrade') }
 
-  const res = await autoGradeSubmission(prisma, submission, { perceptionModel, judgeModel, rubric, graderUserId: user.userId })
+  // 标准/分值分离：把环节分值拼进 rubric、满分取分值之和（无分值 → 满分默认）。
+  const composed = composeRubric(rubric, parseRubricPoints(submission.phase?.rubricPoints))
+  const res = await autoGradeSubmission(prisma, submission, { perceptionModel, judgeModel, rubric: composed.text, maxScore: composed.maxScore ?? DEFAULT_MAX_SCORE, graderUserId: user.userId })
   // res.error is an i18n key (e.g. err.mediaUnavailable) or a raw model message; t()
   // translates the former and passes the latter through unchanged.
   if (!res.ok) return { error: res.error ? t(res.error) : t('err.gradeFail') }
