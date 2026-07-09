@@ -107,3 +107,32 @@ export async function publishReview(
   if (res === 'conflict') return { ok: false, error: 'review.errPublishRace' }
   return { ok: true, version }
 }
+
+// ── 学生端抽取(minors 隐私边界) ─────────────────────────────────────────────────
+
+export interface StudentReviewView {
+  cat: SnapshotStudent['cat']
+  total: number | null
+  classAgg: ReviewSnapshot['classAgg'] // 匿名聚合(均值/中位/分布),无任何他人行
+  weights: { classroom: number; training: number; final: number } | null
+}
+
+// 从快照抽**本人行 + 匿名班级聚合**——其他学生的行绝不出此函数(学号/姓名/分数都不带)。
+// 快照损坏返回 null(学生端按「尚未发布」展示,不抛错)。
+export function extractStudentView(snapshotJson: string, configJson: string, studentId: number): StudentReviewView | null {
+  try {
+    const snap = JSON.parse(snapshotJson) as ReviewSnapshot
+    const mine = snap.students.find((s) => s.id === studentId)
+    if (!mine) return null
+    let weights: StudentReviewView['weights'] = null
+    try {
+      const cfg = JSON.parse(configJson) as { weights?: StudentReviewView['weights'] }
+      weights = cfg.weights ?? null
+    } catch {
+      /* 权重展示缺省为 null,不影响分数 */
+    }
+    return { cat: mine.cat, total: mine.total, classAgg: snap.classAgg, weights }
+  } catch {
+    return null
+  }
+}

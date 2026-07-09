@@ -153,6 +153,21 @@ export default async function StudentHome() {
         </Card>
       ) : null}
 
+      <Link href="/student/review">
+        <Card className="tap hover:shadow-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted">
+              <Target className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold leading-snug">{t('review.stuTitle')}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{t('review.stuCardDesc')}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </Link>
+
       {gradedScores.length > 0 ? (
         <Link href="/student/weak-points">
           <Card className="tap hover:shadow-card">

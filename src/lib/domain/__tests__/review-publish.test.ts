@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSnapshot, publishBlocker } from '../review-publish'
+import { buildSnapshot, publishBlocker, extractStudentView } from '../review-publish'
 import { defaultReviewConfig } from '../review'
 import type { WorkbenchData } from '../review-load'
 
@@ -54,5 +54,24 @@ describe('publishBlocker', () => {
     const bad = data()
     bad.config.weights = { classroom: 30, training: 30, final: 30 }
     expect(publishBlocker(bad)).toBe('review.errWeightSum')
+  })
+})
+
+describe('extractStudentView(学生端隐私边界)', () => {
+  it('只回本人行+匿名聚合,序列化结果不含其他学生的学号/姓名/分数行', () => {
+    const { snapshot } = buildSnapshot(data())
+    const view = extractStudentView(JSON.stringify(snapshot), JSON.stringify(data().config), 101)!
+    expect(view.total).not.toBeNull()
+    const json = JSON.stringify(view)
+    expect(json).not.toContain('"乙"')
+    expect(json).not.toContain('"02"')
+    expect(view.classAgg.total.n).toBe(2) // 聚合仍在(匿名)
+    expect(view.weights).toEqual({ classroom: 30, training: 30, final: 40 })
+  })
+
+  it('不在快照里的学生 / 快照损坏 → null(按未发布展示)', () => {
+    const { snapshot } = buildSnapshot(data())
+    expect(extractStudentView(JSON.stringify(snapshot), '{}', 999)).toBeNull()
+    expect(extractStudentView('not-json', '{}', 101)).toBeNull()
   })
 })
