@@ -522,7 +522,7 @@ export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId
 
 // Assignments of an offering as {id, title}, oldest first — the gradebook columns.
 export function listForOfferingBrief(prisma: PrismaClient, offeringId: number) {
-  return prisma.assignment.findMany({ where: { offeringId }, select: { id: true, title: true }, orderBy: { createdAt: 'asc' } })
+  return prisma.assignment.findMany({ where: { offeringId }, select: { id: true, title: true, mode: true }, orderBy: { createdAt: 'asc' } })
 }
 
 // ── the staff "作业" menu: every assignment in the actor's scope ──────────────────
