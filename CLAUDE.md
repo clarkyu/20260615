@@ -66,5 +66,11 @@ scoping)→ prisma。依赖只能向下。
   **`docs/GRADING-BACKLOG-2026-07.md`**(存档时队列还在排空,收官待办见该文 §五)。
   运维一律走 Actions 按钮(`admin-call.yml` / `grading-queue-drain` / `d1-query`),见
   `docs/OPERATIONS.md` §6。
+- **评分个性化 · 标准/分值分离**(2026-07-09 收官):`Phase.rubricPoints` 存各维度分值
+  JSON,与 `rubric` 标准文字**分开存/分开编辑**;评分时 `lib/domain/rubric.ts` 的
+  `composeRubric` 拼判分 prompt、**满分取各分值之和**(代码求和,不靠 LLM 算术)。老师两个入口
+  都能分开设 + 一键 AI 批阅:评分页每环节配置面板(#430)、作业创建/编辑表单(#431);后端 #429。
+  三批(期末 + Native English 五月/六月)已全采用 AI、`needsReview=0`。整条线复盘 + PR 台账
+  (#420–#431)见 **`docs/GRADING-BACKLOG-2026-07.md` §九**。
 - 其它文档:`docs/OPERATIONS.md`(运维)、`docs/VISION.md`、`docs/BACKLOG.md`、
   审计台账 `docs/CODE-AUDIT-2026-07*.md`。
