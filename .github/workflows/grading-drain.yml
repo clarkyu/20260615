@@ -17,6 +17,12 @@ on:
         required: false
         default: '12'
         type: string
+      kind:
+        description: '只评某条队列(留空=全部)。用于慢队列(逐句)积压时,单独把快队列(writing)排空,不被先到先评饿死。'
+        required: false
+        default: ''
+        type: choice
+        options: ['', 'submission', 'shadow', 'writing']
 
 jobs:
   drain:
@@ -27,9 +33,15 @@ jobs:
         env:
           SECRET: ${{ secrets.CRON_SECRET }}
           ROUNDS: ${{ github.event.inputs.rounds || '3' }}
+          KIND: ${{ github.event.inputs.kind }}
         run: |
           if [ -z "$SECRET" ]; then echo "CRON_SECRET not set — skipping."; exit 0; fi
           case "$ROUNDS" in ''|*[!0-9]*) echo "::error::rounds must be a number"; exit 1;; esac
+          # 可选 kind:只排某条队列(留空=全部)。坏值一律回退成全排,不构造非法 body。
+          case "$KIND" in
+            submission|shadow|writing) BODY="{\"limit\":3,\"kind\":\"$KIND\"}" ;;
+            *) BODY='{"limit":3}' ;;
+          esac
           # 容错连打(期末考核复盘):单轮偶发 502(个别超大视频/上游抖动)不该终止整场
           # 排空——队列是耐久的,被掐死的那份由过期回收接管,跳过继续即可。只有连续
           # 多轮全败(端点真不可用)才停。批内并发(修复 ⑦):一轮 3 份并行,墙钟 ≈
@@ -39,7 +51,7 @@ jobs:
           for i in $(seq 1 "$ROUNDS"); do
             code=$(curl -sS --max-time 420 -o /tmp/out -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $SECRET" -H "content-type: application/json" \
-              -d '{"limit":3}' \
+              -d "$BODY" \
               https://www.hihomework.com/api/cron/drain || true)
             body=$(cat /tmp/out 2>/dev/null | head -c 300 || true)
             echo "round $i: HTTP $code $body"
