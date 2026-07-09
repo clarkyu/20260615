@@ -136,3 +136,30 @@ export function extractStudentView(snapshotJson: string, configJson: string, stu
     return null
   }
 }
+
+// ── 「无成绩/0分 统一填60」(clark 规则) ─────────────────────────────────────────
+
+// 标注文案(存进 override.reason,快照/工作台原样展示;快照仍保留 auto 原值可追溯)。
+export const FILL60_REASON = '[统一填60] 无成绩或0分,按老师设定计60分'
+export const FILL60_SCORE = 60
+
+// 找出需要填60的格:类别生效分为 null 或 0,且尚无任何改分/免计。
+// 课堂表现仅在已导入时参与(未导入=等数据,不虚构);训练/期末始终参与。
+export function fillSixtyTargets(data: WorkbenchData): { studentId: number; categoryKey: 'classroom' | 'training' | 'final' }[] {
+  const out: { studentId: number; categoryKey: 'classroom' | 'training' | 'final' }[] = []
+  const classroomActive = data.classPerf != null
+  for (const s of data.students) {
+    const auto = categoryAuto(s.inputs, data.config)
+    const cats = effectiveCategories(auto, s.overrides)
+    const overridden = new Set(s.overrides.map((o) => o.categoryKey))
+    const check = (key: 'classroom' | 'training' | 'final', active: boolean) => {
+      if (!active || overridden.has(key)) return
+      const fin = cats[key].fin
+      if (fin == null || fin === 0) out.push({ studentId: s.id, categoryKey: key })
+    }
+    check('classroom', classroomActive)
+    check('training', data.config.categories.training.assignmentIds.length > 0)
+    check('final', data.config.categories.final.assignmentIds.length > 0)
+  }
+  return out
+}

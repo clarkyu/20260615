@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSnapshot, publishBlocker, extractStudentView } from '../review-publish'
+import { buildSnapshot, publishBlocker, extractStudentView, fillSixtyTargets } from '../review-publish'
 import { defaultReviewConfig } from '../review'
 import type { WorkbenchData } from '../review-load'
 
@@ -73,5 +73,33 @@ describe('extractStudentView(学生端隐私边界)', () => {
     const { snapshot } = buildSnapshot(data())
     expect(extractStudentView(JSON.stringify(snapshot), '{}', 999)).toBeNull()
     expect(extractStudentView('not-json', '{}', 101)).toBeNull()
+  })
+})
+
+describe('fillSixtyTargets(无成绩/0分统一填60)', () => {
+  it('挑出 fin=null 或 0 的格;已有改分/免计不重复;课堂未导入整列跳过', () => {
+    const d = data({
+      classPerf: null, // 课堂未导入 → classroom 列全部跳过
+      students: [
+        // 甲:训练缺一次→(90×50+0×50)/100=45 非0不填;期末 0 → 填
+        { id: 1, no: '01', name: '甲', inputs: { classroom: null, trainingParts: [90, null], final: 0 }, overrides: [] },
+        // 乙:训练两次都缺→0 → 填;期末已有老师改分 → 不动
+        { id: 2, no: '02', name: '乙', inputs: { classroom: null, trainingParts: [null, null], final: null }, overrides: [{ categoryKey: 'final', score: 88, state: 'OVERRIDE' }] },
+        // 丙:全有分 → 不填
+        { id: 3, no: '03', name: '丙', inputs: { classroom: null, trainingParts: [80, 90], final: 70 }, overrides: [] },
+      ],
+    })
+    const targets = fillSixtyTargets(d)
+    expect(targets).toEqual([
+      { studentId: 1, categoryKey: 'final' },
+      { studentId: 2, categoryKey: 'training' },
+    ])
+  })
+
+  it('课堂已导入时,无课堂数据的学生课堂格也填', () => {
+    const d = data({
+      students: [{ id: 9, no: '09', name: '丁', inputs: { classroom: null, trainingParts: [80, 80], final: 70 }, overrides: [] }],
+    })
+    expect(fillSixtyTargets(d)).toEqual([{ studentId: 9, categoryKey: 'classroom' }])
   })
 })

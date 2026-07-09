@@ -8,7 +8,7 @@ import * as reviewRepo from '@/lib/repo/review'
 import { validateReviewConfig, type ReviewCategoryKey, type ReviewConfig } from '@/lib/domain/review'
 import { loadReviewWorkbench } from '@/lib/domain/review-load'
 import { suggestWeights } from '@/lib/domain/review-advice'
-import { previewPublish, publishReview } from '@/lib/domain/review-publish'
+import { previewPublish, publishReview, fillSixtyTargets, FILL60_REASON, FILL60_SCORE } from '@/lib/domain/review-publish'
 
 type ActionState = { error?: string; success?: boolean }
 
@@ -144,4 +144,29 @@ export async function revokeReviewPublish(offeringId: number, version: number): 
   await reviewRepo.revokePublish(prisma, offeringId, version, user.schoolId, user.userId, user.role)
   revalidatePath(`/dashboard/teaching/${offeringId}/review`)
   return { success: true }
+}
+
+// 「无成绩/0分 统一填60」:对生效分为 null/0 且未被改分/免计的格,批量写 60 分改分
+// (带固定标注原因,快照保留原值可追溯;逐格可还原)。课堂表现未导入时整列跳过。
+export async function fillSixtyReviewOverrides(offeringId: number): Promise<{ filled?: number; error?: string }> {
+  const { user, prisma, t } = await staffContext()
+  if (!Number.isInteger(offeringId)) return { error: t('err.notFound') }
+  const offering = await offeringRepo.findForSchool(prisma, offeringId, user.schoolId, user.userId, user.role)
+  if (!offering) return { error: t('err.notFound') }
+  const actor = { schoolId: user.schoolId, userId: user.userId, role: user.role }
+  const data = await loadReviewWorkbench(prisma, { id: offering.id, classId: offering.classId }, actor)
+  const targets = fillSixtyTargets(data)
+  for (const tgt of targets) {
+    await reviewRepo.upsertOverride(prisma, {
+      offeringId,
+      studentId: tgt.studentId,
+      categoryKey: tgt.categoryKey,
+      score: FILL60_SCORE,
+      state: 'OVERRIDE',
+      reason: FILL60_REASON,
+      createdById: user.userId,
+    })
+  }
+  revalidatePath(`/dashboard/teaching/${offeringId}/review`)
+  return { filled: targets.length }
 }
