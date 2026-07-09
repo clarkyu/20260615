@@ -150,6 +150,21 @@ describe('requeueMediaGrading (修复 ③)', () => {
     expect(jobs.map((j) => j.submissionId).sort((a, b) => a - b)).toEqual([failed.id, stuck.id, uploaded.id].sort((a, b) => a - b))
     for (const j of jobs) expect(j).toMatchObject({ kind: 'submission', status: 'PENDING', attempts: 0 })
   })
+
+  it('也捞纯音频提交(audioKey 有、videoKey 空)——修复音频朗读/背诵的重排盲区', async () => {
+    const d = await seedSpeech(db.prisma)
+    const s = await Promise.all(['01', '02', '03'].map(d.student))
+    const audioUp = await d.sub(s[0].id, { status: 'UPLOADED', audioKey: 'a/1', needsReview: true })
+    const audioFlag = await d.sub(s[1].id, { status: 'FLAGGED', audioKey: 'a/2', needsReview: true }) // FLAGGED 且无 AI 分
+    await d.sub(s[2].id, { status: 'GRADED', audioKey: 'a/3', finalScore: 88 }) // 已定稿不碰
+
+    const r = await requeueMediaGrading(db.prisma, d.school.id, TITLE, true)
+    if (!r.ok) throw new Error(r.error)
+    expect(r).toMatchObject({ applied: true, targets: 2, jobsCreated: 2 })
+    const jobs = await db.prisma.gradingJob.findMany()
+    expect(jobs.map((j) => j.submissionId).sort((a, b) => a - b)).toEqual([audioUp.id, audioFlag.id].sort((a, b) => a - b))
+    for (const j of jobs) expect(j).toMatchObject({ kind: 'submission', status: 'PENDING' })
+  })
 })
 
 // ── 逐句跟读重评(清扫盲区补漏):163 份真背诵漏在死信里 ──────────────────────────

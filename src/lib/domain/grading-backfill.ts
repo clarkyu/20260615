@@ -70,12 +70,13 @@ export type RequeueReport =
   | { ok: false; error: string }
 
 export async function requeueMediaGrading(prisma: PrismaClient, schoolId: number, title: string, apply: boolean): Promise<RequeueReport> {
-  // 与媒体探针同口径(同一个 repo 读),游标翻页取全量 id。
+  // 整段媒体重评口径:视频**或音频**皆算(listMediaGradeTargets)。探测(probe)只认视频、单用
+  // listMediaProbeTargets;重排要连纯音频朗读/背诵一起捞,否则那类音频提交永远无端点可评。
   const ids: number[] = []
   const byPhase = new Map<number, number>()
   let after = 0
   for (;;) {
-    const rows = await submissions.listMediaProbeTargets(prisma, schoolId, title, after, 500)
+    const rows = await submissions.listMediaGradeTargets(prisma, schoolId, title, after, 500)
     for (const r of rows) {
       ids.push(r.id)
       const order = r.phase?.order ?? 0

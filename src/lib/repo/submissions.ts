@@ -153,6 +153,27 @@ export function listMediaProbeTargets(prisma: PrismaClient, schoolId: number, ti
   })
 }
 
+// 整段媒体(submission)重评目标:与 listMediaProbeTargets 同状态口径,但**视频或音频皆算**
+// (videoKey OR audioKey)。探测(probeSubmissionMedia)要对着 videoKey 发网络请求、只认视频,
+// 故它单用上面那支;但「重排评阅」对纯音频提交(audioKey 有、videoKey 空,如朗读/背诵音频)也该
+// 覆盖——早前 requeue 复用探测口径,把这类音频整段提交漏在了盲区(评不出分又无端点捞回)。
+export function listMediaGradeTargets(prisma: PrismaClient, schoolId: number, title: string, afterId: number, limit: number) {
+  return prisma.submission.findMany({
+    where: {
+      id: { gt: afterId },
+      assignment: { title, offering: { schoolId } },
+      // 两组 OR(有媒体键 / 未评态)必须各自成组,故用 AND 包起来——Prisma 顶层 OR 只能出现一次。
+      AND: [
+        { OR: [{ videoKey: { not: null } }, { audioKey: { not: null } }] },
+        { OR: [{ status: { in: ['FAILED', 'PROCESSING', 'UPLOADED'] } }, { status: 'FLAGGED', aiScore: null }] },
+      ],
+    },
+    orderBy: { id: 'asc' },
+    take: limit,
+    select: { id: true, phase: { select: { order: true } } },
+  })
+}
+
 // 逐句跟读(shadow)重评目标:逐句音频存在 ShadowTake 行里,不在 videoKey/audioKey——所以
 // listMediaProbeTargets 完全看不到它们(期末收官清扫的盲区,163 份真背诵被漏在死信里)。这里
 // 按 school+title 圈定、状态同口径(失败/卡死/未评/标记却无分),且必须至少有一条 ShadowTake
