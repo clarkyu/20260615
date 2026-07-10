@@ -17,6 +17,11 @@ function makeTemplate(rows: string[][], ext = 'xls'): { buf: Uint8Array; name: s
   return { buf: new Uint8Array(buf), name: `template.${ext}` }
 }
 
+function wb2sheet(wb: XLSX.WorkBook, ws: XLSX.WorkSheet): XLSX.WorkBook {
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  return wb
+}
+
 const config: ReviewConfig = {
   v: 1,
   weights: DEFAULT_REVIEW_WEIGHTS,
@@ -92,5 +97,43 @@ describe('fillSchoolTemplate', () => {
     const buf = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'biff8' }) as ArrayBuffer)
     const bad = fillSchoolTemplate(buf, 't.xls', new Map())
     expect(bad).toEqual({ ok: false, error: 'rexp.errHeader' })
+  })
+
+  it('无分必须显式清空:模板预填 0/旧分不得残留(复核必改项)', () => {
+    // 模拟平台预填 0 分,以及老师复用「已填文件」再导:乙的课堂/训练无分,旧值必须被清掉。
+    const preFilled = [row('80250001', '甲'), row('80250002', '乙')].map((r) => [...r])
+    preFilled[0][6] = '55' // 甲三格有旧值,应被新分覆盖
+    preFilled[0][7] = '55'
+    preFilled[0][8] = '55'
+    preFilled[1][6] = '0' // 乙:课堂 null → 预填 0 必须清空
+    preFilled[1][7] = '91' // 乙:训练 EXEMPT → 旧分 91 必须清空
+    preFilled[1][8] = '40'
+    const t = makeTemplate(preFilled)
+    const res = fillSchoolTemplate(t.buf, t.name, buildExportScores(data))
+    if (!res.ok) throw new Error(res.error)
+    const g = XLSX.utils.sheet_to_json<string[]>(XLSX.read(res.out, { type: 'array' }).Sheets['Sheet1'], {
+      header: 1,
+      raw: false,
+      defval: '',
+    })
+    expect(g[1].slice(6, 9)).toEqual(['87', '91', '78'])
+    expect(g[2].slice(6, 9)).toEqual(['', '', '66']) // 预填 0 与旧分都被清空,报告口径与文件一致
+  })
+
+  it('数值型学号带前导零格式:按显示文本(w)匹配;日期等格式化格回写不丢格式', () => {
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([HEADERS, row('x', '甲')])
+    // A2 = 数值 250001 + 前导零格式,显示 00250001;J2 = 日期序列数 + 格式(非成绩格)
+    ws['A2'] = { t: 'n', v: 250001, z: '00000000' }
+    ws['J2'] = { t: 'n', v: 46100, z: 'yyyy/m/d' }
+    const buf = new Uint8Array(XLSX.write(wb2sheet(wb, ws), { type: 'array', bookType: 'biff8' }) as ArrayBuffer)
+    const scores = new Map([['00250001', { classroom: 87, training: 91, final: 78 }]])
+    const res = fillSchoolTemplate(buf, 't.xls', scores)
+    if (!res.ok) throw new Error(res.error)
+    expect(res.report.matchedRows).toBe(1)
+    expect(res.report.unmatched).toHaveLength(0)
+    const ws2 = XLSX.read(res.out, { type: 'array' }).Sheets['Sheet1']
+    expect(ws2['G2']?.v).toBe(87)
+    expect(ws2['J2']?.w).toBe('2026/3/19') // cellNF:非成绩格的数字格式随文件带回,不变裸数
   })
 })

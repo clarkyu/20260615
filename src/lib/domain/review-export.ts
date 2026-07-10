@@ -47,14 +47,21 @@ export function fillSchoolTemplate(
 ): FillResult {
   let wb: XLSX.WorkBook
   try {
-    wb = XLSX.read(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer), { type: 'array' })
+    // cellNF:保留各格数字格式(z),否则回写时日期/前导零学号等格式化数值列全变 General
+    // 裸数字——非成绩格会被静默改值,平台按显示文本读取时行会错位/被拒。
+    wb = XLSX.read(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer), { type: 'array', cellNF: true })
   } catch {
     return { ok: false, error: 'rexp.errRead' }
   }
   const ws = wb.Sheets[wb.SheetNames[0]]
   if (!ws || !ws['!ref']) return { ok: false, error: 'rexp.errRead' }
   const range = XLSX.utils.decode_range(ws['!ref'])
-  const cellText = (r: number, c: number) => norm(ws[XLSX.utils.encode_cell({ r, c })]?.v)
+  // 取「显示文本」优先(w):数值型学号带前导零格式时 v=123 而显示 00000123,
+  // 花名册存的是显示文本——按 v 匹配必落空。
+  const cellText = (r: number, c: number) => {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })]
+    return norm(cell?.w ?? cell?.v)
+  }
 
   // 定位表头行与列
   let headerRow = -1
@@ -100,11 +107,15 @@ export function fillSchoolTemplate(
     const missingCats: ReviewCategoryKey[] = []
     const put = (c: number, key: ReviewCategoryKey, v: number | null) => {
       if (c < 0) return // 模板没这列就不填(实验成绩列有的模板可能缺)
+      const addr = XLSX.utils.encode_cell({ r, c })
       if (v == null) {
+        // 无分必须「显式清空」:模板可能预填 0、也可能是老师复用已填文件——留旧值
+        // 就是把错误分数当成绩导出(minors 成绩,零容忍)。删格不动 !ref,行列维度不变。
+        delete ws[addr]
         missingCats.push(key)
         return
       }
-      ws[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v }
+      ws[addr] = { t: 'n', v }
       report.filledCells++
     }
     put(cDaily, 'classroom', s.classroom)
