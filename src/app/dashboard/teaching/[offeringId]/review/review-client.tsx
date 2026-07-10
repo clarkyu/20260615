@@ -286,6 +286,12 @@ export function ReviewWorkbench(props: {
                 ? `${t('review.publishedV')} v${props.liveVersion}`
                 : t('review.notPublished')}
             </span>
+            <Link
+              href={`/dashboard/teaching/${props.offeringId}/review/export`}
+              className="order-last ml-auto text-sm font-medium text-primary hover:underline"
+            >
+              {t('rexp.link')}
+            </Link>
             <Button
               size="sm"
               variant="outline"
