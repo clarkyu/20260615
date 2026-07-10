@@ -40,6 +40,18 @@ export function listImportStudents(prisma: PrismaClient, importId: number, schoo
   })
 }
 
+// 成绩档案总览:每课头最新一次导入的时间(有=课堂表现列已点亮)。
+export async function latestImportByOffering(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+  const rows = await prisma.classPerfImport.findMany({
+    where: { offering: offeringScopeFor(schoolId, userId, role) },
+    orderBy: [{ offeringId: 'asc' }, { createdAt: 'desc' }],
+    select: { offeringId: true, createdAt: true },
+  })
+  const out = new Map<number, Date>()
+  for (const r of rows) if (!out.has(r.offeringId)) out.set(r.offeringId, r.createdAt)
+  return out
+}
+
 // ── 写入(导入落库) ────────────────────────────────────────────────────────────
 
 export function createImport(
