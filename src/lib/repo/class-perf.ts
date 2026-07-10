@@ -52,6 +52,32 @@ export async function latestImportByOffering(prisma: PrismaClient, schoolId: num
   return out
 }
 
+// 学生端「课堂表现原始记录」:只取**本人**的行(where userId = 本人)+ 导入元数据。
+// 隐私边界:他人行绝不出此查询;一个学生跨多次导入的行都取回,按 offering 择版在 domain。
+export function listRainRowsForUser(prisma: PrismaClient, userId: number) {
+  return prisma.classPerfStudent.findMany({
+    where: { userId },
+    select: {
+      studentNo: true,
+      name: true,
+      detailJson: true,
+      import: {
+        select: {
+          id: true,
+          offeringId: true,
+          sessionsJson: true,
+          weightsJson: true,
+          createdAt: true,
+          offering: {
+            select: { id: true, year: true, semester: true, course: { select: { name: true } }, class: { select: { name: true } } },
+          },
+        },
+      },
+    },
+    orderBy: { importId: 'asc' },
+  })
+}
+
 // ── 写入(导入落库) ────────────────────────────────────────────────────────────
 
 export function createImport(

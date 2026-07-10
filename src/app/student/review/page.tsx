@@ -7,9 +7,11 @@ import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as reviewRepo from '@/lib/repo/review'
 import { extractStudentView } from '@/lib/domain/review-publish'
+import { loadStudentRainViews } from '@/lib/domain/class-perf-view'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LocalDate } from '@/components/local-date'
+import { RainDetailTable } from '@/components/rain-detail-table'
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT()
@@ -24,7 +26,10 @@ export default async function StudentReviewPage() {
   const { t } = await getT()
   if (!user.userId) redirect('/login')
 
-  const publishes = await reviewRepo.listLivePublishesForStudent(prisma, user.userId)
+  const [publishes, rains] = await Promise.all([
+    reviewRepo.listLivePublishesForStudent(prisma, user.userId),
+    loadStudentRainViews(prisma, user.userId),
+  ])
   const views = publishes
     .map((p) => ({
       view: extractStudentView(p.snapshotJson, p.configJson, user.userId),
@@ -109,6 +114,49 @@ export default async function StudentReviewPage() {
           </CardContent>
         </Card>
       ))}
+
+      {/* 我的课堂记录(雨课堂原始数据):本人逐节信号 + 由此算出的课堂分——与老师端同一
+          数据版本/同一公式,发布与否都可见,学生可自行核对「课堂表现」怎么来的。 */}
+      {rains.length > 0 && (
+        <>
+          <h2 className="pt-2 text-lg font-bold">{t('rainview.stuTitle')}</h2>
+          {rains.map((rv) => (
+            <Card key={rv.offering.id}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <p className="font-semibold">
+                    {rv.offering.course} · {rv.offering.klass}
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    {rv.offering.year} {rv.offering.semester === '2' ? t('teach.sem2') : t('teach.sem1')} ·{' '}
+                    <LocalDate iso={rv.createdAt.toISOString()} />
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <span>
+                    {t('rainview.attend')} {rv.row.attended}/{rv.row.countedSessions}
+                  </span>
+                  <span>
+                    {t('rainview.danmaku')} {rv.row.danmaku}
+                  </span>
+                  <span>
+                    {t('rainview.posts')} {rv.row.posts}
+                  </span>
+                  <span>
+                    {t('rainview.answers')} {rv.row.answeredSessions}/{rv.row.questionSessions}
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    {t('rainview.score')} {rv.row.score == null ? '—' : rv.row.score.toFixed(1)}
+                  </span>
+                  {rv.row.floored && <Badge tone="muted">{t('rainview.floored')}</Badge>}
+                </div>
+                <RainDetailTable sessions={rv.sessions} detail={rv.row.detail} />
+                <p className="text-xs text-muted-foreground">{t('rainview.disclosure')}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </>
+      )}
     </div>
   )
 }

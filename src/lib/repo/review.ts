@@ -121,6 +121,14 @@ export function listPublishes(prisma: PrismaClient, offeringId: number, schoolId
   })
 }
 
+// 学生端钉版解析用:本人所在班级各课头的总评配置(只含配置 JSON,无任何分数/他人数据)。
+export function listConfigsForStudent(prisma: PrismaClient, studentId: number) {
+  return prisma.semesterReviewConfig.findMany({
+    where: { offering: { class: { studentMemberships: { some: { studentId } } } } },
+    select: { offeringId: true, configJson: true },
+  })
+}
+
 // 成绩档案总览:一次取出该老师(管理员=全校)所有课头的在线发布版(每课头最大 version)。
 export async function latestLivePublishByOffering(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
   const rows = await prisma.semesterReviewPublish.findMany({
