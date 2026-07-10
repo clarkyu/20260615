@@ -121,6 +121,18 @@ export function listPublishes(prisma: PrismaClient, offeringId: number, schoolId
   })
 }
 
+// 成绩档案总览:一次取出该老师(管理员=全校)所有课头的在线发布版(每课头最大 version)。
+export async function latestLivePublishByOffering(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+  const rows = await prisma.semesterReviewPublish.findMany({
+    where: { revokedAt: null, offering: offeringScopeFor(schoolId, userId, role) },
+    orderBy: [{ offeringId: 'asc' }, { version: 'desc' }],
+    select: { offeringId: true, version: true, publishedAt: true },
+  })
+  const out = new Map<number, { version: number; publishedAt: Date }>()
+  for (const r of rows) if (!out.has(r.offeringId)) out.set(r.offeringId, { version: r.version, publishedAt: r.publishedAt })
+  return out
+}
+
 export async function maxPublishVersion(prisma: PrismaClient, offeringId: number, schoolId: number | null | undefined, userId: number, role: Role): Promise<number> {
   const row = await prisma.semesterReviewPublish.findFirst({
     where: { offeringId, offering: offeringScopeFor(schoolId, userId, role) },

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, GraduationCap, BookOpenCheck, User, Library, ClipboardList, MessageSquarePlus } from 'lucide-react'
+import { LayoutDashboard, Users, GraduationCap, BookOpenCheck, User, Library, ClipboardList, MessageSquarePlus, Award } from 'lucide-react'
 import type { Role } from '@prisma/client'
 import { useT } from './i18n-provider'
 
@@ -17,6 +17,7 @@ export function BottomNav({ role, newScores = false }: { role: Role; newScores?:
     role === 'STUDENT'
       ? [
           { href: '/student', label: t('nav.myWork'), icon: BookOpenCheck, dot: newScores },
+          { href: '/student/review', label: t('nav.myScores'), icon: Award, dot: false },
           { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
         ]
       : role === 'SUPER_ADMIN'
@@ -30,13 +31,15 @@ export function BottomNav({ role, newScores = false }: { role: Role; newScores?:
             { href: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, dot: false },
             { href: '/dashboard/assignments', label: t('nav.assignments'), icon: ClipboardList, dot: false },
             { href: '/dashboard/teaching', label: t('nav.teaching'), icon: GraduationCap, dot: false },
+            { href: '/dashboard/review', label: t('nav.records'), icon: Award, dot: false },
             { href: '/dashboard/students', label: t('nav.students'), icon: Users, dot: false },
             { href: '/dashboard/bank', label: t('nav.bank'), icon: Library, dot: false },
             { href: '/profile', label: t('nav.profile'), icon: User, dot: false },
           ]
 
+  // '/dashboard' 与 '/student' 是「首页」型 tab,只精确匹配——否则会与各自的子页 tab 双亮。
   const isActive = (href: string) =>
-    href === '/dashboard' ? path === '/dashboard' : path === href || path.startsWith(href + '/')
+    href === '/dashboard' || href === '/student' ? path === href : path === href || path.startsWith(href + '/')
 
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/90 backdrop-blur-xl">
