@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ChevronRight, FileDown, UploadCloud } from 'lucide-react'
+import { ChevronRight, FileDown, TableProperties, UploadCloud } from 'lucide-react'
 import type { Metadata } from 'next'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
@@ -86,6 +86,15 @@ export default async function ReviewHubPage() {
                   <FileDown className="h-3.5 w-3.5" />
                   {t('rexp.link')}
                 </Link>
+                {imp && (
+                  <Link
+                    href={`/dashboard/teaching/${o.id}/review/classroom`}
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    <TableProperties className="h-3.5 w-3.5" />
+                    {t('rainview.link')}
+                  </Link>
+                )}
               </div>
             </CardContent>
           </Card>

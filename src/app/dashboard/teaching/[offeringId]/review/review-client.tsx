@@ -214,6 +214,17 @@ export function ReviewWorkbench(props: {
             >
               {props.classPerf ? t('review.reimport') : t('review.importLink')}
             </Link>
+            {props.classPerf && (
+              <>
+                {' · '}
+                <Link
+                  href={`/dashboard/teaching/${props.offeringId}/review/classroom`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {t('rainview.link')}
+                </Link>
+              </>
+            )}
           </p>
           <p className="text-xs text-muted-foreground">{t('review.missingZeroNote')}</p>
           {msg && (
