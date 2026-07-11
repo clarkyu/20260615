@@ -85,7 +85,8 @@ export default async function ClassroomRawPage({ params }: { params: Promise<{ o
               {view.students.map((s) => (
                 <details key={s.studentNo} className="rounded-xl border border-border/60 px-3 py-2">
                   <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 text-sm marker:content-none">
-                    <span className="font-medium tabular-nums">{s.studentNo}</span>
+                    {/* key 用原始学号(未匹配行含「!」隔离前缀,保证唯一);显示剥前缀 */}
+                    <span className="font-medium tabular-nums">{s.studentNo.replace(/^!/, '')}</span>
                     <span>{s.name}</span>
                     {!s.matched && <Badge tone="warning">{t('rainview.unmatched')}</Badge>}
                     <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

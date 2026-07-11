@@ -131,6 +131,8 @@ export async function loadClassRainView(prisma: PrismaClient, offeringId: number
     } catch {
       detail = []
     }
+    // 未匹配行可能带「!」隔离前缀(防与系统学号撞唯一键):保留原值作行身份
+    // (页面 key 依赖唯一),展示层再剥前缀。
     return buildStudentRow(r.studentNo, r.name, r.userId != null, detail, sessions, weights)
   })
   return { importId: imp.id, fileName: imp.fileName, createdAt: imp.createdAt, sessions, weights, students }

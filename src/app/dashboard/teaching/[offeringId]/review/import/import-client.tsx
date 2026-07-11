@@ -149,6 +149,16 @@ export function RainImportClient({ offeringId }: { offeringId: number }) {
                   {t('rain.duplicatedN')} {preview.duplicateCount}
                 </Badge>
               )}
+              {preview.corrections.length > 0 && (
+                <Badge tone="primary">
+                  {t('rain.correctedN')} {preview.corrections.length}
+                </Badge>
+              )}
+              {preview.merges.length > 0 && (
+                <Badge tone="primary">
+                  {t('rain.mergedN')} {preview.merges.length}
+                </Badge>
+              )}
               <Badge tone="default">
                 {t('rain.sessionsCounted')} {preview.countedSessions}
                 {preview.declaredSessions != null ? ` / ${t('rain.declared')} ${preview.declaredSessions}` : ''}
@@ -173,6 +183,33 @@ export function RainImportClient({ offeringId }: { offeringId: number }) {
               </div>
             )}
 
+            {preview.corrections.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium">{t('rain.correctionsList')}</p>
+                <div className="max-h-40 overflow-auto rounded-xl border border-border p-2 text-xs text-muted-foreground">
+                  {preview.corrections.map((c, i) => (
+                    <p key={i} className="tabular-nums">
+                      {c.fromNo} {c.fromName} → {c.toNo} {c.toName}
+                      <span className="ml-1 text-[10px]">
+                        ({c.via === 'name' ? t('rain.viaName') : c.via === 'no' ? t('rain.viaNo') : t('rain.viaNameNo')})
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+            {preview.merges.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium">{t('rain.mergesList')}</p>
+                <div className="max-h-40 overflow-auto rounded-xl border border-border p-2 text-xs text-muted-foreground">
+                  {preview.merges.map((m) => (
+                    <span key={m.studentNo} className="mr-3 inline-block tabular-nums">
+                      {m.studentNo} {m.name} ×{m.rows}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <NameList title={t('rain.unmatchedList')} rows={preview.unmatched} />
             <NameList title={t('rain.missingList')} rows={preview.missingFromFile} />
             <NameList title={t('rain.flooredList')} rows={preview.floored} />
