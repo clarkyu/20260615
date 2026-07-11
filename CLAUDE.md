@@ -79,5 +79,10 @@ scoping)→ prisma。依赖只能向下。
   **雨课堂原始数据透出**(师生两端逐节明细)。PR #437–#448 全部合并部署。单一算术源
   `lib/domain/review.ts` 纯函数(工作台/发布/学生页共用);课堂表现公式 B 在 `lib/domain/class-perf.ts`。
   **完整台账 + 8 班导入对照 + clark 侧待办(逐班填60→导出)见 `docs/SESSION-2026-07-10-RECOVERY.md`。**
+- **雨课堂名单匹配升级**(2026-07-11,#450 已部署):`lib/domain/class-perf-import.ts` 改
+  **姓名优先匹配 + 脏资料修正 + 同人多行合并再算分**(以系统名单为准)——去空白/全角/间隔号规范化、
+  姓名唯一命中归入、同名靠学号消歧消不了不猜、学号兜底;修正/合并/未匹配在导入预览列出。真实数据
+  捞回邹正宇/柯梦雅、零误配。**上线后需 clark 逐班重新导入 8 个雨课堂文件吃到新匹配**;
+  「免计」还原、导入直达链接、运维答疑见 **`docs/SESSION-2026-07-11-RECOVERY.md`**(最新恢复入口)。
 - 其它文档:`docs/OPERATIONS.md`(运维)、`docs/VISION.md`、`docs/BACKLOG.md`、
   审计台账 `docs/CODE-AUDIT-2026-07*.md`。
