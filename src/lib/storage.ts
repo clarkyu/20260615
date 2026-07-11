@@ -40,6 +40,68 @@ export async function presignDownload(key: string, expiresIn = 3600): Promise<st
   return presign(key, 'GET', expiresIn)
 }
 
+// ── R2 multipart(S3 兼容)——长视频分片上传 ────────────────────────────────────────
+// 单发整段 PUT 在弱网下必挂且只能整段重来(学生「长视频提交不成功」的根因之一)。
+// 分片:服务端建会话/逐片预签名,浏览器逐片 PUT(每片可独立重试);完成时服务端
+// ListParts 收集 ETag 再 Complete——不依赖浏览器读 ETag 响应头(免 R2 CORS expose 配置)。
+
+const xmlField = (xml: string, tag: string): string[] => {
+  const out: string[] = []
+  const re = new RegExp(`<${tag}>([^<]*)</${tag}>`, 'g')
+  for (let m = re.exec(xml); m; m = re.exec(xml)) out.push(m[1])
+  return out
+}
+
+// 纯函数导出便于单测:从 S3 XML 里解析。
+export function parseUploadId(xml: string): string | null {
+  return xmlField(xml, 'UploadId')[0] ?? null
+}
+export function parseListedParts(xml: string): { partNumber: number; etag: string }[] {
+  const nums = xmlField(xml, 'PartNumber')
+  const tags = xmlField(xml, 'ETag')
+  return nums
+    .map((n, i) => ({ partNumber: Number(n), etag: (tags[i] ?? '').replace(/&quot;/g, '"') }))
+    .filter((p) => Number.isInteger(p.partNumber) && p.partNumber > 0 && p.etag)
+    .sort((a, b) => a.partNumber - b.partNumber)
+}
+
+export async function createMultipartUpload(key: string, contentType: string): Promise<string> {
+  const res = await client().fetch(`${objectUrl(key)}?uploads`, { method: 'POST', headers: { 'Content-Type': contentType } })
+  if (!res.ok) throw new Error(`R2 create multipart failed: ${res.status}`)
+  const id = parseUploadId(await res.text())
+  if (!id) throw new Error('R2 create multipart: no UploadId in response')
+  return id
+}
+
+export async function presignUploadPart(key: string, uploadId: string, partNumber: number, expiresIn = 3600): Promise<string> {
+  const url = `${objectUrl(key)}?partNumber=${partNumber}&uploadId=${encodeURIComponent(uploadId)}&X-Amz-Expires=${expiresIn}`
+  const signed = await client().sign(new Request(url, { method: 'PUT' }), { aws: { signQuery: true } })
+  return signed.url
+}
+
+export async function completeMultipartUpload(key: string, uploadId: string): Promise<void> {
+  const base = `${objectUrl(key)}?uploadId=${encodeURIComponent(uploadId)}`
+  const list = await client().fetch(base, { method: 'GET' })
+  if (!list.ok) throw new Error(`R2 list parts failed: ${list.status}`)
+  const parts = parseListedParts(await list.text())
+  if (parts.length === 0) throw new Error('R2 complete multipart: no parts uploaded')
+  const body =
+    '<CompleteMultipartUpload>' +
+    parts.map((p) => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${p.etag.replace(/"/g, '&quot;')}</ETag></Part>`).join('') +
+    '</CompleteMultipartUpload>'
+  const res = await client().fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/xml' }, body })
+  if (!res.ok) throw new Error(`R2 complete multipart failed: ${res.status}`)
+  // S3 兼容层可能在 200 响应体里报错(体内 <Error>)——按失败处理,避免假成功。
+  const text = await res.text()
+  if (text.includes('<Error>')) throw new Error('R2 complete multipart returned error body')
+}
+
+// 清理未完成的分片会话(失败/放弃时 best-effort;404 = 已清)。
+export async function abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+  const res = await client().fetch(`${objectUrl(key)}?uploadId=${encodeURIComponent(uploadId)}`, { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) throw new Error(`R2 abort multipart failed: ${res.status}`)
+}
+
 // Delete one object. Best-effort: an already-gone object (404) counts as success.
 export async function deleteObject(key: string): Promise<void> {
   const res = await client().fetch(objectUrl(key), { method: 'DELETE' })

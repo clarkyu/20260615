@@ -3,7 +3,8 @@
 import { uploadErrorText } from '@/lib/upload-error'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, ListChecks, Video, Mic, Wifi } from 'lucide-react'
-import { getUploadUrl, recordMedia } from '@/actions/submissions'
+import { getUploadUrl, recordMedia, startMediaMultipart, getMediaPartUrl, finishMediaMultipart } from '@/actions/submissions'
+import { MAX_MEDIA_DURATION_SEC, mediaExceedsLimit } from '@/lib/media-limits'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { RecordConsentNotice, hasRecordConsent } from '@/components/record-consent'
@@ -41,6 +42,9 @@ function pickMimeType(mode: Mode): { mime: string; ext: string } {
   return { mime: '', ext: mode === 'audio' ? 'webm' : 'webm' }
 }
 
+// R2 multipart 最小片 5MB;8MB/片,100MB 上限 ≤13 片。
+const PART_BYTES = 8 * 1024 * 1024
+
 export function Recorder(props: {
   phaseId: number
   sentences: Sentence[]
@@ -55,6 +59,7 @@ export function Recorder(props: {
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [count, setCount] = useState(3)
+  const [uploadPct, setUploadPct] = useState<number | null>(null)
   const [violations, setViolations] = useState<Violation[]>([])
   const [needConsent, setNeedConsent] = useState(false)
 
@@ -192,27 +197,77 @@ export function Recorder(props: {
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
   }, [])
 
+  // 时长护栏(「长视频提交不成功」复盘):到上限自动停止,别让学生录出注定被拒的超长视频、
+  // 白传一整段流量才失败。上限与服务端 mediaExceedsLimit 同源。
+  useEffect(() => {
+    if (phase !== 'recording') return
+    if (elapsed >= MAX_MEDIA_DURATION_SEC) stopRecording()
+  }, [phase, elapsed, stopRecording])
+
+  // 单请求重试:弱网偶发失败别整段判死——最多 tries 次,指数退避。仅网络层异常/非 2xx 重试。
+  const putWithRetry = useCallback(async (url: string, body: Blob, contentType: string, tries = 3): Promise<void> => {
+    let lastErr: unknown
+    for (let i = 0; i < tries; i++) {
+      try {
+        const res = await fetch(url, { method: 'PUT', body, headers: { 'Content-Type': contentType } })
+        if (res.ok) return
+        lastErr = new Error(`HTTP ${res.status}`)
+      } catch (e) {
+        lastErr = e
+      }
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 1000 * 2 ** i))
+    }
+    throw lastErr
+  }, [])
+
   const submit = useCallback(async () => {
     const blob = blobRef.current
     if (!blob) return
+    // 本地预检(与服务端同源上限):超长/超大当场提示重录,不白传一整段再被拒。
+    if (mediaExceedsLimit(blob.size, elapsed)) {
+      setError(t('err.mediaTooLarge')); setPhase('recorded'); return
+    }
     setPhase('uploading')
     setError(null)
+    setUploadPct(0)
     const { ext } = pickMimeType(props.mode)
     const fileExt = blob.type.includes('mp4') ? (isAudio ? 'm4a' : 'mp4') : ext
+    const contentType = blob.type || (isAudio ? 'audio/webm' : 'video/webm')
     try {
-      const res = await getUploadUrl(props.phaseId, props.mode, blob.type || (isAudio ? 'audio/webm' : 'video/webm'), fileExt)
-      if ('error' in res || !res.url) {
-        setError(res.error ?? 'upload failed'); setPhase('recorded'); return
+      let submissionId: number
+      if (blob.size > PART_BYTES) {
+        // 长视频走分片:每片独立重试,弱网不再「一处断、整段废」。
+        const start = await startMediaMultipart(props.phaseId, props.mode, contentType, fileExt)
+        if ('error' in start || !start.uploadId) { setError(start.error ?? 'upload failed'); setPhase('recorded'); return }
+        submissionId = start.submissionId
+        const total = Math.ceil(blob.size / PART_BYTES)
+        for (let part = 1; part <= total; part++) {
+          const slice = blob.slice((part - 1) * PART_BYTES, part * PART_BYTES)
+          const pu = await getMediaPartUrl(props.phaseId, start.key, start.uploadId, part)
+          if ('error' in pu || !pu.url) { setError(pu.error ?? t('rec.uploadFail')); setPhase('recorded'); return }
+          await putWithRetry(pu.url, slice, contentType)
+          setUploadPct(Math.round((part / total) * 100))
+        }
+        const done = await finishMediaMultipart(props.phaseId, start.key, start.uploadId)
+        if ('error' in done && done.error) { setError(done.error); setPhase('recorded'); return }
+      } else {
+        const res = await getUploadUrl(props.phaseId, props.mode, contentType, fileExt)
+        if ('error' in res || !res.url) {
+          setError(res.error ?? 'upload failed'); setPhase('recorded'); return
+        }
+        submissionId = res.submissionId
+        await putWithRetry(res.url, blob, contentType)
+        setUploadPct(100)
       }
-      const put = await fetch(res.url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type || (isAudio ? 'audio/webm' : 'video/webm') } })
-      if (!put.ok) { setError(`${t('rec.uploadFail')} (${put.status})`); setPhase('recorded'); return }
-      const fin = await recordMedia(res.submissionId, props.mode, blob.size, elapsed, JSON.stringify(violations))
+      const fin = await recordMedia(submissionId, props.mode, blob.size, elapsed, JSON.stringify(violations))
       if ('error' in fin && fin.error) { setError(fin.error); setPhase('recorded'); return }
       props.onDone()
     } catch (e) {
       setError(uploadErrorText(e, t)); setPhase('recorded')
+    } finally {
+      setUploadPct(null)
     }
-  }, [props, elapsed, violations, t, isAudio])
+  }, [props, elapsed, violations, t, isAudio, putWithRetry])
 
   const live = phase === 'countdown' || phase === 'recording'
   const banner = props.requireEyesClosed ? t('rec.eyesBanner') : t('rec.reciteBanner')
@@ -255,7 +310,7 @@ export function Recorder(props: {
               <Mic className={'h-16 w-16 ' + (phase === 'recording' ? 'animate-pulse text-red-500' : 'text-muted-foreground')} />
               {phase === 'recording' ? (
                 <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-foreground/80 px-2.5 py-1 text-xs font-semibold text-background">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{elapsed}s
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{elapsed}s / {MAX_MEDIA_DURATION_SEC}s
                 </div>
               ) : null}
               {phase === 'countdown' ? (
@@ -271,7 +326,7 @@ export function Recorder(props: {
               <video ref={videoRef} playsInline className={'aspect-[3/4] w-full object-cover ' + (live ? '-scale-x-100' : '')} />
               {phase === 'recording' ? (
                 <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-xs font-semibold text-white">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{elapsed}s
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{elapsed}s / {MAX_MEDIA_DURATION_SEC}s
                   {/* Anti-cheat 违规仍在后台记录，但不在录制中显示——闪烁的计数会让学生紧张。 */}
                 </div>
               ) : null}
@@ -311,7 +366,7 @@ export function Recorder(props: {
               <Button className="flex-1" size="lg" onClick={submit}>{t('submit')}</Button>
             </div>
           ) : (
-            <Button className="w-full" size="lg" disabled>{t('rec.uploading')}</Button>
+            <Button className="w-full" size="lg" disabled>{t('rec.uploading')}{uploadPct != null ? ` ${uploadPct}%` : ''}</Button>
           )}
         </CardContent>
       </Card>

@@ -111,6 +111,19 @@ export function isPollOnly(r: Requirements): boolean {
 // 这样的行进了评阅队列只会反复 404/空内容直到死信。环节要求的媒体逐个探测:缺失或空
 // → 拦下提交,让学生当场重录/重传。'unknown'(网络抖动/5xx)放行——偶发故障不该
 // 卡住全班提交,真有问题还有评前预检兜底。probe 注入便于测试(生产用 storage.probeObject)。
+// 探针复测:R2 偶发瞬时 404/416(实证见评阅总账「404 是暂时性取件失败」)。首判 missing/empty
+// 不立即定罪——短暂等待后复测一次,两次一致才算坏。'ok'/'unknown' 直接透传(unknown 本就放行)。
+export async function resilientProbe(
+  probe: (key: string) => Promise<'ok' | 'empty' | 'missing' | 'unknown'>,
+  key: string,
+  delayMs = 300,
+): Promise<'ok' | 'empty' | 'missing' | 'unknown'> {
+  const first = await probe(key)
+  if (first === 'ok' || first === 'unknown') return first
+  await new Promise((r) => setTimeout(r, delayMs))
+  return probe(key)
+}
+
 export async function requiredMediaUnhealthy(
   requirements: Pick<Requirements, 'requireVideo' | 'requireAudio'>,
   submission: Pick<Parts, 'videoKey' | 'audioKey'>,

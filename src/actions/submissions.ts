@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { logError } from '@/lib/log'
 import { studentContext } from '@/lib/action-context'
-import { presignUpload, presignDownload, probeObject, storageConfigured, submissionMediaKey, shadowTakeKey } from '@/lib/storage'
+import { presignUpload, presignDownload, probeObject, storageConfigured, submissionMediaKey, shadowTakeKey, createMultipartUpload, presignUploadPart, completeMultipartUpload, abortMultipartUpload } from '@/lib/storage'
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
-import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy, unhealthyShadowTakes } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy, unhealthyShadowTakes, resilientProbe } from '@/lib/domain/submit'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
@@ -41,6 +41,70 @@ export async function getUploadUrl(phaseId: number, kind: MediaKind, contentType
   } catch (err) {
     logError('getUploadUrl', 'presign failed', err)
     return { error: t('err.uploadUrlFail') }
+  }
+}
+
+// ── 长视频分片上传(R2 multipart)────────────────────────────────────────────────
+// 归属校验共用:key 必须是「本人、本环节」的提交媒体键(前缀含 assignmentId/phaseId/userId),
+// 防止拿别人 key 续传/完成。
+
+function ownsMediaKey(key: string, assignmentId: number, phaseId: number, userId: number): boolean {
+  return key.startsWith(`submissions/${assignmentId}/${phaseId}/${userId}/`)
+}
+
+// 开启分片会话:与 getUploadUrl 同栅栏(窗口/次数/归属),同样先落 DRAFT 行占键。
+export async function startMediaMultipart(phaseId: number, kind: MediaKind, contentType: string, ext: string) {
+  const { user, prisma, t } = await studentContext()
+  if (!storageConfigured()) return { error: t('err.storageNot') }
+
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+
+  const key = submissionMediaKey(resolved.assignmentId, phaseId, user.userId, resolved.attempt, kind, ext || 'webm')
+  const submission = await submissionRepo.upsertDraftWithMedia(prisma, resolved.assignmentId, resolved.offeringId, phaseId, user.userId, resolved.attempt, keyFieldFor(kind, key))
+
+  try {
+    const uploadId = await createMultipartUpload(key, contentType)
+    return { key, uploadId, submissionId: submission.id }
+  } catch (err) {
+    logError('startMediaMultipart', 'create failed', err)
+    return { error: t('err.uploadUrlFail') }
+  }
+}
+
+// 逐片预签名:客户端每片调一次(片内失败客户端自重试;URL 有效期 1h 足够单片)。
+export async function getMediaPartUrl(phaseId: number, key: string, uploadId: string, partNumber: number) {
+  const { user, prisma, t } = await studentContext()
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+  if (!ownsMediaKey(key, resolved.assignmentId, phaseId, user.userId)) return { error: t('err.subNotFound') }
+  if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 64) return { error: t('err.uploadUrlFail') }
+  try {
+    const url = await presignUploadPart(key, uploadId, partNumber)
+    return { url }
+  } catch (err) {
+    logError('getMediaPartUrl', 'presign failed', err)
+    return { error: t('err.uploadUrlFail') }
+  }
+}
+
+// 完成分片:服务端 ListParts 收 ETag 再 Complete(不依赖浏览器读响应头);失败尽力 abort,
+// 让客户端整体重来而不是留半截会话。
+export async function finishMediaMultipart(phaseId: number, key: string, uploadId: string) {
+  const { user, prisma, t } = await studentContext()
+  const classIds = await userRepo.studentClassIds(prisma, user.userId)
+  const resolved = await resolveAttempt(prisma, user.userId, classIds, phaseId)
+  if (!resolved.ok) return { error: t(resolved.error) }
+  if (!ownsMediaKey(key, resolved.assignmentId, phaseId, user.userId)) return { error: t('err.subNotFound') }
+  try {
+    await completeMultipartUpload(key, uploadId)
+    return { success: true }
+  } catch (err) {
+    logError('finishMediaMultipart', 'complete failed', err)
+    await abortMultipartUpload(key, uploadId).catch(() => {})
+    return { error: t('err.uploadFail') }
   }
 }
 
@@ -88,7 +152,9 @@ export async function finishSubmission(phaseId: number) {
   // 上传完整性门(期末考核复盘):键在库里 ≠ 对象真的传完了——上传中断/空录像留下的
   // 空挂键进了评阅队列只会反复失败。提交前验证要求的媒体对象在且非空,不完整就当场
   // 让学生重录/重传,而不是事后在评阅里神秘 404。
-  if (storageConfigured() && (await requiredMediaUnhealthy(resolved.requirements, submission, probeObject))) {
+  // 探针复测(学生「提交成功后又显示未提交」复盘):R2 偶发瞬时 404 会把好上传误判
+  // missing 拦下提交——首判坏结果延时复测一次,连续两次坏才拦。
+  if (storageConfigured() && (await requiredMediaUnhealthy(resolved.requirements, submission, (k) => resilientProbe(probeObject, k)))) {
     return { error: t('err.uploadIncomplete') }
   }
 
@@ -210,7 +276,7 @@ export async function finishShadowing(phaseId: number) {
   // 空(0 字节/416)或缺(404)→ 当场退回、指名让学生重录那一句,别让空挂键溜进队列反复到死信。
   if (storageConfigured()) {
     const takes = await submissionRepo.listShadowTakes(prisma, submission.id)
-    const bad = await unhealthyShadowTakes(takes, probeObject)
+    const bad = await unhealthyShadowTakes(takes, (k) => resilientProbe(probeObject, k))
     if (bad.length > 0) return { error: t('err.shadowUploadIncomplete', { n: bad.join('、') }) }
   }
 

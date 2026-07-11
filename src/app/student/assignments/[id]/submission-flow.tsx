@@ -304,6 +304,15 @@ export function SubmissionFlow(props: {
   const t = useT()
   const router = useRouter()
   const completed = props.latestStatus !== null && DONE_STATUSES.includes(props.latestStatus)
+  // 「已录制未提交」续交(复盘):媒体已传齐、只是最后的提交动作没成功——下次进来一键补交,
+  // 不必重录。只对含音/视频的环节展示(文本类补交无成本,不必打扰)。
+  const resumable =
+    props.latestStatus === 'DRAFT' &&
+    (props.requireVideo || props.requireAudio) &&
+    (!props.requireVideo || Boolean(props.hasVideo)) &&
+    (!props.requireAudio || Boolean(props.hasAudio)) &&
+    (!props.requireText || props.initialHasText) &&
+    (!props.requireHandwriting || Boolean(props.hasImage))
   const steps = useMemo(() => {
     const s: Kind[] = []
     if (props.requireText) s.push('text')
@@ -336,9 +345,20 @@ export function SubmissionFlow(props: {
   function finish() {
     setPhase('finishing'); setError(null)
     startFinish(async () => {
-      const res = await finishSubmission(props.phaseId)
-      if (res.error) { setError(res.error); setPhase('error') }
-      else setPhase('done')
+      // 最后一跳韧性(「提交成功后又显示未提交」复盘):上传各步都成了,只差这一个
+      // server action——网络抖动就把提交留在 DRAFT。动作「抛异常」(网络层)自动重试
+      // 2 次;动作返回 {error}(真校验失败)不重试,如实展示。
+      for (let i = 0; i < 3; i++) {
+        try {
+          const res = await finishSubmission(props.phaseId)
+          if (res.error) { setError(res.error); setPhase('error') }
+          else setPhase('done')
+          return
+        } catch {
+          if (i === 2) { setError(t('sub.finishRetryFail')); setPhase('error'); return }
+          await new Promise((r) => setTimeout(r, 1500 * (i + 1)))
+        }
+      }
     })
   }
   function advance() {
@@ -502,6 +522,15 @@ export function SubmissionFlow(props: {
         {props.instructions ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{props.instructions}</p> : null}
       </div>
       {props.isFormalTest ? <FormalTestBanner /> : null}
+      {resumable && phase === 'doing' ? (
+        <Card className="border-primary/40">
+          <CardContent className="space-y-2 p-4">
+            <p className="text-sm font-medium">{t('sub.resumeTitle')}</p>
+            <p className="text-xs text-muted-foreground">{t('sub.resumeDesc')}</p>
+            <Button className="w-full" onClick={finish}>{t('sub.resumeCta')}</Button>
+          </CardContent>
+        </Card>
+      ) : null}
       {props.shadowing}
       {props.practice}
       <Steps steps={steps} idx={idx} />
