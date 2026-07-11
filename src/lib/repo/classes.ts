@@ -90,3 +90,12 @@ export async function deleteWithStudents(prisma: PrismaClient, id: number, schoo
   }
   return true
 }
+
+// 成绩档案树:各班学生人数(分母)。只回 classId → 人数,零学生个体数据。
+export function classSizes(prisma: PrismaClient, classIds: number[]) {
+  return prisma.studentClass.groupBy({
+    by: ['classId'],
+    where: { classId: { in: classIds } },
+    _count: { _all: true },
+  })
+}

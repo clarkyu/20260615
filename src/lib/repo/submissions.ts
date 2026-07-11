@@ -924,3 +924,43 @@ export function upsertRecitedText(prisma: PrismaClient, assignmentId: number, of
     create: { assignmentId, offeringId, phaseId, studentId, attempt, recitedText: text, textSubmittedAt: new Date(), status: 'DRAFT' },
   })
 }
+
+// 成绩档案树:全 scope 内按 (环节, 状态) 聚合提交数与均分——一次 groupBy 供档案页
+// 计算每班每环节「已交/已评/均分」。零学生个体数据。
+export function phaseStatsForStaff(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.submission.groupBy({
+    by: ['phaseId', 'status'],
+    where: { phaseId: { not: null }, assignment: { offering: offeringScopeFor(schoolId, userId, role) } },
+    _count: { _all: true },
+    _avg: { finalScore: true },
+  })
+}
+
+// 学生本人成绩档案:跨全部课头取本人提交(与 listForOfferingGradebook 同行形,复用
+// analytics 的 latestPhaseSubmissions/collapsePhases 同一算术源)。隐私边界:where studentId。
+export function listForStudentArchive(prisma: PrismaClient, studentId: number) {
+  return prisma.submission.findMany({
+    where: { studentId, status: { not: 'DRAFT' } },
+    select: {
+      studentId: true,
+      assignmentId: true,
+      phaseId: true,
+      status: true,
+      finalScore: true,
+      needsReview: true,
+      updatedAt: true,
+      phase: { select: { graded: true, weight: true, order: true, title: true } },
+      assignment: {
+        select: {
+          id: true,
+          title: true,
+          mode: true,
+          dueAt: true,
+          offering: { select: { id: true, year: true, semester: true, course: { select: { name: true } }, class: { select: { name: true } } } },
+        },
+      },
+    },
+    orderBy: [{ assignmentId: 'asc' }, { phaseId: 'asc' }, { attempt: 'desc' }],
+  })
+}
+

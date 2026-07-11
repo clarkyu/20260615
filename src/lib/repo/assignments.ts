@@ -525,6 +525,33 @@ export function listForOfferingBrief(prisma: PrismaClient, offeringId: number) {
   return prisma.assignment.findMany({ where: { offeringId }, select: { id: true, title: true, mode: true }, orderBy: { createdAt: 'asc' } })
 }
 
+// 成绩档案树:老师(管理员=全校)全部作业 + 所属课头学期/班级 + 环节骨架——
+// 供 domain/archive-view 按「学期→类别→任务→环节→班级」分组。只读,无提交内容。
+export function listForStaffArchive(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role) {
+  return prisma.assignment.findMany({
+    where: { offering: offeringScopeFor(schoolId, userId, role) },
+    select: {
+      id: true,
+      batchId: true,
+      title: true,
+      mode: true,
+      dueAt: true,
+      offering: {
+        select: {
+          id: true,
+          year: true,
+          semester: true,
+          classId: true,
+          course: { select: { name: true } },
+          class: { select: { name: true } },
+        },
+      },
+      phases: { select: { id: true, order: true, title: true }, orderBy: { order: 'asc' } },
+    },
+    orderBy: [{ dueAt: 'desc' }, { id: 'desc' }],
+  })
+}
+
 // ── the staff "作业" menu: every assignment in the actor's scope ──────────────────
 const NEEDS_TEACHER: SubmissionStatus[] = ['UPLOADED', 'FLAGGED', 'GRADED', 'FAILED']
 
