@@ -6,8 +6,11 @@ import { requireRole } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import * as reviewRepo from '@/lib/repo/review'
+import * as submissionRepo from '@/lib/repo/submissions'
 import { extractStudentView } from '@/lib/domain/review-publish'
 import { loadStudentRainViews } from '@/lib/domain/class-perf-view'
+import { buildStudentArchive, type StudentPhaseCell } from '@/lib/domain/archive-view'
+import { latestPhaseSubmissions, collapsePhases } from '@/lib/domain/analytics'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LocalDate } from '@/components/local-date'
@@ -26,10 +29,20 @@ export default async function StudentReviewPage() {
   const { t } = await getT()
   if (!user.userId) redirect('/login')
 
-  const [publishes, rains] = await Promise.all([
+  const [publishes, rains, archiveRows] = await Promise.all([
     reviewRepo.listLivePublishesForStudent(prisma, user.userId),
     loadStudentRainViews(prisma, user.userId),
+    submissionRepo.listForStudentArchive(prisma, user.userId),
   ])
+  // 任务总分与成绩单同一算术源(latestPhaseSubmissions → collapsePhases 加权)。
+  const collapsed = collapsePhases(latestPhaseSubmissions(archiveRows))
+  const totalByAssignment = new Map(collapsed.map((c) => [c.assignmentId, c.status === 'DRAFT' ? null : c.finalScore]))
+  const archive = buildStudentArchive(archiveRows, totalByAssignment)
+  const phaseCellText = (p: StudentPhaseCell) => {
+    if (p.score != null) return p.score.toFixed(1)
+    if (p.status === 'MISSING') return t('arch.missing')
+    return t('arch.pending')
+  }
   const views = publishes
     .map((p) => ({
       view: extractStudentView(p.snapshotJson, p.configJson, user.userId),
@@ -50,6 +63,45 @@ export default async function StudentReviewPage() {
         {t('nav.myWork')}
       </Link>
       <h1 className="text-xl font-bold">{t('review.stuTitle')}</h1>
+
+      {/* 我的成绩档案:学期 → 任务(按时间) → 环节分 + 总分(与成绩单同一算术源)。 */}
+      {archive.length > 0 && (
+        <>
+          <h2 className="pt-1 text-lg font-bold">{t('arch.stuTitle')}</h2>
+          {archive.map((sem) => (
+            <Card key={`${sem.year}-${sem.semester}`}>
+              <CardContent className="space-y-2 p-4">
+                <p className="text-sm font-semibold">
+                  {sem.year} {sem.semester === '2' ? t('teach.sem2') : t('teach.sem1')}
+                </p>
+                {sem.tasks.map((task) => (
+                  <details key={task.assignmentId} className="rounded-xl border border-border/60 px-3 py-2">
+                    <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm marker:content-none">
+                      <span className="font-medium">{task.title}</span>
+                      {task.mode && <Badge tone="muted">{t(`mode.${task.mode}`)}</Badge>}
+                      <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                        {task.dueAt && <LocalDate iso={task.dueAt.toISOString()} />}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {task.total == null ? '—' : task.total.toFixed(1)}
+                        </span>
+                      </span>
+                    </summary>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      {task.phases.map((p) => (
+                        <span key={p.order} className="tabular-nums">
+                          {t('arch.phase')}
+                          {p.order}
+                          {p.title ? `·${p.title}` : ''} {phaseCellText(p)}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </>
+      )}
 
       {views.length === 0 && (
         <Card>
