@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import { useT } from '@/components/i18n-provider'
+import { sortByClassName } from '@/lib/class-sort'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 
@@ -13,6 +14,7 @@ export interface OfferingItem {
   courseCode: string
   classId: number
   className: string
+  classSize: number
   year: string
   semester: string
   assignmentCount: number
@@ -28,7 +30,7 @@ export function TeachingList({ offerings }: { offerings: OfferingItem[] }) {
   const classes = useMemo(() => {
     const m = new Map<number, string>()
     for (const o of offerings) m.set(o.classId, o.className)
-    return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    return sortByClassName([...m].map(([id, name]) => ({ id, name })), (c) => c.name)
   }, [offerings])
 
   const terms = useMemo(() => {
@@ -76,7 +78,7 @@ export function TeachingList({ offerings }: { offerings: OfferingItem[] }) {
                     {o.courseName} <span className="text-xs font-normal text-muted-foreground">{o.courseCode}</span>
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {o.className} · {o.year} {sem(o.semester)} · {o.assignmentCount} {t('teach.assignments')}
+                    {o.className}{t('class.size', { n: o.classSize })} · {o.year} {sem(o.semester)} · {o.assignmentCount} {t('teach.assignments')}
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />

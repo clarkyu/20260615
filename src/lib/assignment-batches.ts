@@ -15,6 +15,7 @@ export interface BatchAssignmentRow {
   phaseCount: number
   courseId: number
   courseName: string
+  classId: number
   className: string
 }
 
@@ -27,7 +28,7 @@ export interface BatchGroup {
   courseName: string
   dueAt: Date | null
   phaseCount: number
-  classes: { assignmentId: number; className: string; submitted: number; pending: number }[]
+  classes: { assignmentId: number; classId: number; className: string; submitted: number; pending: number }[]
   totalSubmitted: number
   totalPending: number
 }
@@ -70,7 +71,7 @@ export function groupAssignmentBatches(
     }
     const sub = submitted.get(a.id) ?? 0
     const pend = pending.get(a.id) ?? 0
-    g.classes.push({ assignmentId: a.id, className: a.className, submitted: sub, pending: pend })
+    g.classes.push({ assignmentId: a.id, classId: a.classId, className: a.className, submitted: sub, pending: pend })
     g.totalSubmitted += sub
     g.totalPending += pend
   }

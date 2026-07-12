@@ -31,7 +31,7 @@ export default async function MergeBatchesPage() {
         return groupAssignmentBatches(
           list.map((a) => ({
             id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,
-            phaseCount: a._count.phases, courseId: a.offering.courseId, courseName: a.offering.course.name, className: a.offering.class.name,
+            phaseCount: a._count.phases, courseId: a.offering.courseId, courseName: a.offering.course.name, classId: a.offering.classId, className: a.offering.class.name,
           })),
           new Map(),
           new Map(),

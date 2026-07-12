@@ -12,6 +12,7 @@ import * as userRepo from '@/lib/repo/users'
 import * as dashboardRepo from '@/lib/repo/dashboard'
 import * as schoolRepo from '@/lib/repo/schools'
 import * as submissionRepo from '@/lib/repo/submissions'
+import * as classRepo from '@/lib/repo/classes'
 import { gradingCalibration, gradingCalibrationByTeacher, CALIBRATION_WINDOW_DAYS } from '@/lib/domain/analytics'
 import { groupAssignmentBatches } from '@/lib/assignment-batches'
 import { Card, CardContent } from '@/components/ui/card'
@@ -93,11 +94,16 @@ export default async function DashboardPage() {
   const needBatches = groupAssignmentBatches(
     needRows.map((a) => ({
       id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,
-      phaseCount: 0, courseId: a.offering.courseId, courseName: a.offering.course.name, className: a.offering.class.name,
+      phaseCount: 0, courseId: a.offering.courseId, courseName: a.offering.course.name, classId: a.offering.classId, className: a.offering.class.name,
     })),
     new Map(),
     countById,
   ).sort((x, y) => y.totalPending - x.totalPending)
+
+  // 班级人数(全站口径:班级名后带人数)。
+  const sizeRows = await classRepo.classSizes(prisma, [...new Set(needBatches.flatMap((b) => b.classes.map((c) => c.classId)))])
+  const sizeByClassId = new Map(sizeRows.map((r) => [r.classId, r._count._all]))
+  const classLabel = (classId: number, name: string) => `${name}${sizeByClassId.has(classId) ? t('class.size', { n: sizeByClassId.get(classId) as number }) : ''}`
 
   const stats = [
     { label: t('dash.statStudents'), value: students, href: '/dashboard/students' },
@@ -251,7 +257,7 @@ export default async function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         {badge ? <Badge tone="primary" className="mb-1">{badge}</Badge> : null}
                         <p className="truncate font-semibold leading-snug">{b.title}</p>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.courseName} · {c.className}{teacher ? ` · ${teacher}` : ''}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{b.courseName} · {classLabel(c.classId, c.className)}{teacher ? ` · ${teacher}` : ''}</p>
                       </div>
                       <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
                         {t('dash.pendingN', { n: c.pending })}
@@ -285,7 +291,7 @@ export default async function DashboardPage() {
                     return (
                       <Link key={c.assignmentId} href={`/dashboard/assignments/${c.assignmentId}`} className="tap flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-accent">
                         <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                          {c.className}
+                          {classLabel(c.classId, c.className)}
                           {teacher ? <span className="ml-1.5 text-xs font-normal text-muted-foreground">{teacher}</span> : null}
                         </span>
                         <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">{t('dash.pendingN', { n: c.pending })}</span>

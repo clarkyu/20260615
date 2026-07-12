@@ -43,6 +43,9 @@ export default async function ReviewHubPage() {
   const sizes = await classRepo.classSizes(prisma, classIds)
   const sizeByClassId = new Map(sizes.map((s) => [s.classId, s._count._all]))
 
+  // 班级名后带人数(全站口径)。
+  const classLabel = (classId: number, name: string) => `${name}${sizeByClassId.has(classId) ? t('class.size', { n: sizeByClassId.get(classId) as number }) : ''}`
+
   const semesters = buildTeacherArchive(assignments, combinePhaseStats(statRows), sizeByClassId)
   // 学期 → 该学期课头(雨课堂块与期末总结块的行);无任务的学期也可能有课头,以课头为准补齐。
   // 一律按班级序号升序(全站口径)。
@@ -116,7 +119,7 @@ export default async function ReviewHubPage() {
                                   href={`/dashboard/assignments/${c.assignmentId}`}
                                   className="flex items-baseline justify-between gap-2 text-primary hover:underline"
                                 >
-                                  <span>{c.className}</span>
+                                  <span>{c.className}{c.size != null ? t('class.size', { n: c.size }) : ''}</span>
                                   <span className="tabular-nums text-muted-foreground">{cellStat(c)}</span>
                                 </Link>
                               ))}
@@ -146,7 +149,7 @@ export default async function ReviewHubPage() {
                       className="flex items-center gap-1 text-primary hover:underline"
                     >
                       <TableProperties className="h-3.5 w-3.5" />
-                      {o.class.name}
+                      {classLabel(o.classId, o.class.name)}
                       {imp ? (
                         <span className="text-muted-foreground">
                           <LocalDate iso={imp.toISOString()} />
@@ -176,7 +179,7 @@ export default async function ReviewHubPage() {
                         href={`/dashboard/teaching/${o.id}/review`}
                         className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
                       >
-                        {o.class.name}
+                        {classLabel(o.classId, o.class.name)}
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
                       {imp ? <Badge tone="success">{t('review.hubRain')}</Badge> : <Badge tone="warning">{t('review.hubRainNone')}</Badge>}

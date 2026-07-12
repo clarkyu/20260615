@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db'
 import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as assignmentRepo from '@/lib/repo/assignments'
+import * as classRepo from '@/lib/repo/classes'
 import { groupAssignmentBatches, trimBoundaryBatch } from '@/lib/assignment-batches'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -77,11 +78,16 @@ export default async function StaffAssignmentsPage() {
   const batches = groupAssignmentBatches(
     list.map((a) => ({
       id: a.id, title: a.title, category: a.category, mode: a.mode, dueAt: a.dueAt, batchId: a.batchId,
-      phaseCount: a._count.phases, courseId: a.offering.courseId, courseName: a.offering.course.name, className: a.offering.class.name,
+      phaseCount: a._count.phases, courseId: a.offering.courseId, courseName: a.offering.course.name, classId: a.offering.classId, className: a.offering.class.name,
     })),
     submitted,
     pending,
   )
+
+  // 班级人数(全站口径:班级名后带人数)。
+  const sizeRows = await classRepo.classSizes(prisma, [...new Set(batches.flatMap((b) => b.classes.map((c) => c.classId)))])
+  const sizeByClassId = new Map(sizeRows.map((r) => [r.classId, r._count._all]))
+  const classLabel = (classId: number, name: string) => `${name}${sizeByClassId.has(classId) ? t('class.size', { n: sizeByClassId.get(classId) as number }) : ''}`
 
   // A batch's 内容/评分标准, from its representative (newest) assignment's phases — shown
   // inside the expanded card so the teacher sees 题型 + 标准 without drilling in.
@@ -108,7 +114,7 @@ export default async function StaffAssignmentsPage() {
         const meta = (
           <>
             {b.courseName}
-            {b.classes.length > 1 ? ` · ${t('asgList.classesN', { n: b.classes.length })}` : ` · ${b.classes[0].className}`}
+            {b.classes.length > 1 ? ` · ${t('asgList.classesN', { n: b.classes.length })}` : ` · ${classLabel(b.classes[0].classId, b.classes[0].className)}`}
             {b.phaseCount > 1 ? ` · ${b.phaseCount} ${t('phase.unit')}` : ''}
             {b.dueAt ? <> · {t('asg.due')} <LocalDate iso={b.dueAt.toISOString()} /></> : null}
           </>
@@ -168,7 +174,7 @@ export default async function StaffAssignmentsPage() {
             <div className="space-y-1 border-t border-border/60 p-2">
               {b.classes.map((c) => (
                 <Link key={c.assignmentId} href={`/dashboard/assignments/${c.assignmentId}`} className="tap flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-accent">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.className}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{classLabel(c.classId, c.className)}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">{t('asgList.submittedN', { n: c.submitted })}</span>
                   {c.pending > 0 ? <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">{t('dash.pendingN', { n: c.pending })}</span> : null}
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

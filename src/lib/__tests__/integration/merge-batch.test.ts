@@ -49,7 +49,7 @@ describe('mergeAssignmentBatch (归并批次)', () => {
 
     // 列表分组随即合一:一张卡、按班级三行。
     const groups = groupAssignmentBatches(
-      rows.map((r, i) => ({ id: r.id, title: r.title, category: null, mode: null, dueAt: null, batchId: r.batchId, phaseCount: 1, courseId: d.course.id, courseName: 'E', className: `C${i + 1}` })),
+      rows.map((r, i) => ({ id: r.id, title: r.title, category: null, mode: null, dueAt: null, batchId: r.batchId, phaseCount: 1, courseId: d.course.id, courseName: 'E', classId: i + 1, className: `C${i + 1}` })),
       new Map(),
       new Map(),
     )

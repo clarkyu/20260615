@@ -25,7 +25,7 @@ export function listForStaffWithCounts(prisma: PrismaClient, schoolId: number | 
   return prisma.courseOffering.findMany({
     where: { schoolId: schoolId ?? -1, ...(role === 'TEACHER' ? { teacherId: userId } : {}) },
     orderBy: [{ year: 'desc' }, { semester: 'desc' }, { id: 'desc' }],
-    include: { course: true, class: { select: { name: true } }, _count: { select: { assignments: true } } },
+    include: { course: true, class: { select: { name: true, _count: { select: { studentMemberships: true } } } }, _count: { select: { assignments: true } } },
   })
 }
 
