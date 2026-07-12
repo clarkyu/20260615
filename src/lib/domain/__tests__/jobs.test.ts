@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { claimAndRunDue, enqueueGrading, heartbeatJob, backoffMs, MAX_ATTEMPTS, type JobRunner } from '../jobs'
+import { claimAndRunDue, enqueueGrading, heartbeatJob, maintainGradingJobs, backoffMs, backoffMsFor, classifyGradingError, MAX_ATTEMPTS, AUTO_REQUEUE_MARKER, type JobRunner } from '../jobs'
 
 // ── A tiny in-memory stand-in for the bits of prisma.gradingJob the queue uses ──
 
@@ -14,22 +14,47 @@ interface Job {
   updatedAt: Date
 }
 
-function matches(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
+// The submission fields the maintenance phantom-reconcile filters on.
+interface Sub {
+  status: string
+  aiScore: number | null
+  teacherScore: number | null
+}
+
+function matchCond(fv: unknown, cond: unknown): boolean {
+  if (cond !== null && typeof cond === 'object' && !(cond instanceof Date)) {
+    const c = cond as Record<string, unknown>
+    if ('in' in c) return (c.in as unknown[]).includes(fv)
+    if ('not' in c) return fv !== c.not
+    if ('contains' in c) return typeof fv === 'string' && fv.includes(c.contains as string)
+    if ('lte' in c && !((fv as never) <= (c.lte as never))) return false
+    if ('lt' in c && !((fv as never) < (c.lt as never))) return false
+    if ('gte' in c && !((fv as never) >= (c.gte as never))) return false
+    return true
+  }
+  return fv === cond
+}
+
+function matches(row: Record<string, unknown>, where: Record<string, unknown>, subs?: Record<number, Sub>): boolean {
   for (const [k, v] of Object.entries(where)) {
-    const fv = row[k] as never
-    if (v && typeof v === 'object' && !(v instanceof Date)) {
-      const cond = v as Record<string, unknown>
-      if ('lte' in cond && !(fv <= (cond.lte as never))) return false
-      if ('lt' in cond && !(fv < (cond.lt as never))) return false
-      if ('gte' in cond && !(fv >= (cond.gte as never))) return false
-    } else if (fv !== v) return false
+    if (k === 'OR') {
+      if (!(v as Record<string, unknown>[]).some((w) => matches(row, w, subs))) return false
+      continue
+    }
+    if (k === 'submission') {
+      const sub = subs?.[row.submissionId as number]
+      if (!sub || !matches(sub as never, v as Record<string, unknown>, subs)) return false
+      continue
+    }
+    if (!matchCond(row[k], v)) return false
   }
   return true
 }
 
 // `ledgerMicro` is the platform-wide AiUsageLog spend the breaker sees (default 0 =
 // never trips). The fake ignores the createdAt filter — the breaker just SUMs it.
-function fakePrisma(jobs: Job[], ledgerMicro = 0) {
+// `subs` backs the maintenance phantom-reconcile's relation filter, keyed by submissionId.
+function fakePrisma(jobs: Job[], ledgerMicro = 0, subs: Record<number, Sub> = {}) {
   let nextId = jobs.reduce((m, j) => Math.max(m, j.id), 0) + 1
   const touch = (j: Job) => (j.updatedAt = new Date())
   return {
@@ -41,7 +66,7 @@ function fakePrisma(jobs: Job[], ledgerMicro = 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async updateMany({ where, data }: any) {
         let count = 0
-        for (const j of jobs) if (matches(j as never, where)) {
+        for (const j of jobs) if (matches(j as never, where, subs)) {
           for (const [k, v] of Object.entries(data)) {
             // Model Prisma's atomic increment: { attempts: { increment: 1 } }
             if (v && typeof v === 'object' && !(v instanceof Date) && 'increment' in (v as object)) {
@@ -56,8 +81,9 @@ function fakePrisma(jobs: Job[], ledgerMicro = 0) {
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async findMany({ where, orderBy, take }: any) {
-        let res = jobs.filter((j) => matches(j as never, where))
+        let res = jobs.filter((j) => matches(j as never, where, subs))
         if (orderBy?.nextAttemptAt === 'asc') res = [...res].sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
+        if (orderBy?.updatedAt === 'asc') res = [...res].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
         return take ? res.slice(0, take) : res
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -246,5 +272,175 @@ describe('backoffMs', () => {
     expect(backoffMs(1)).toBe(60_000)
     expect(backoffMs(2)).toBe(120_000)
     expect(backoffMs(3)).toBe(240_000)
+  })
+})
+
+// ── 自愈闭环:错误分类 + 差异化退避 ──────────────────────────────────────────────
+
+describe('classifyGradingError', () => {
+  it('classifies rate-limit signatures (真实签名:上传初始化 429 / generateContent 429 body)', () => {
+    expect(classifyGradingError('Gemini 文件上传初始化失败 429')).toBe('rate')
+    expect(classifyGradingError('Gemini 429: {"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}')).toBe('rate')
+    expect(classifyGradingError('Rate limit reached for requests')).toBe('rate')
+    expect(classifyGradingError('You exceeded your current quota')).toBe('rate')
+  })
+
+  it('classifies permanent (ungradeable content) signatures', () => {
+    expect(classifyGradingError('The video is corrupt or in an unsupported format')).toBe('permanent')
+    expect(classifyGradingError('Gemini 400: {"error":{"status":"INVALID_ARGUMENT"}}')).toBe('permanent')
+    expect(classifyGradingError('视频无法解码')).toBe('permanent')
+  })
+
+  it('rate wins over permanent when both signatures appear (429 body 里的字样不判死)', () => {
+    expect(classifyGradingError('Gemini 429: quota exceeded for unsupported tier')).toBe('rate')
+  })
+
+  it('classifies not-ready (File API still processing)', () => {
+    expect(classifyGradingError('Gemini 文件未就绪（PROCESSING）')).toBe('not-ready')
+    expect(classifyGradingError('file is not ready')).toBe('not-ready')
+  })
+
+  it('defaults everything else to transient (5xx / timeouts / transient 404 / null)', () => {
+    expect(classifyGradingError('Gemini 500: internal')).toBe('transient')
+    expect(classifyGradingError('err.mediaUnavailable')).toBe('transient')
+    expect(classifyGradingError('grading did not complete after retries')).toBe('transient')
+    expect(classifyGradingError(null)).toBe('transient')
+    expect(classifyGradingError('boom')).toBe('transient')
+  })
+})
+
+describe('backoffMsFor', () => {
+  it('rate backs off from a 10-minute base, not-ready from 30s, transient from 1m', () => {
+    expect(backoffMsFor('rate', 1)).toBe(600_000)
+    expect(backoffMsFor('rate', 2)).toBe(1_200_000)
+    expect(backoffMsFor('not-ready', 1)).toBe(30_000)
+    expect(backoffMsFor('not-ready', 2)).toBe(60_000)
+    expect(backoffMsFor('transient', 1)).toBe(60_000)
+  })
+})
+
+describe('claimAndRunDue — error-class handling', () => {
+  it('dead-letters a permanent failure IMMEDIATELY (no attempts burned on re-billing a corrupt video)', async () => {
+    const jobs = [job({ attempts: 0 })]
+    const db = fakePrisma(jobs)
+    const corrupt: JobRunner = async () => ({ done: false, error: 'The video is corrupt or in an unsupported format' })
+    await claimAndRunDue(db, 5, corrupt)
+    expect(jobs[0].status).toBe('FAILED')
+    expect(jobs[0].attempts).toBe(1)
+  })
+
+  it('backs a rate-limited failure off on the LONG schedule (≥10min, not 1min)', async () => {
+    const jobs = [job({ attempts: 0 })]
+    const db = fakePrisma(jobs)
+    const before = Date.now()
+    const rated: JobRunner = async () => ({ done: false, error: 'Gemini 文件上传初始化失败 429' })
+    await claimAndRunDue(db, 5, rated)
+    expect(jobs[0].status).toBe('PENDING')
+    expect(jobs[0].nextAttemptAt.getTime()).toBeGreaterThanOrEqual(before + 600_000)
+  })
+
+  it('backs a not-ready failure off on the SHORT schedule (~30s — resume, not re-upload)', async () => {
+    const jobs = [job({ attempts: 0 })]
+    const db = fakePrisma(jobs)
+    const start = Date.now()
+    const notReady: JobRunner = async () => ({ done: false, error: 'Gemini 文件未就绪（PROCESSING）' })
+    await claimAndRunDue(db, 5, notReady)
+    expect(jobs[0].status).toBe('PENDING')
+    const delta = jobs[0].nextAttemptAt.getTime() - start
+    expect(delta).toBeGreaterThanOrEqual(29_000)
+    expect(delta).toBeLessThan(60_000)
+  })
+
+  it('preserves the auto-requeue marker when a rescued job fails again (runOne path)', async () => {
+    const jobs = [job({ attempts: 0, lastError: `old error ${AUTO_REQUEUE_MARKER}` })]
+    const db = fakePrisma(jobs)
+    await claimAndRunDue(db, 5, fail)
+    expect(jobs[0].status).toBe('PENDING')
+    expect(jobs[0].lastError).toContain('boom')
+    expect(jobs[0].lastError).toContain(AUTO_REQUEUE_MARKER)
+  })
+
+  it('preserves the auto-requeue marker through the exhausted-attempts dead-letter sweep', async () => {
+    // Exhausted via reclaims → dead-lettered by step 2's updateMany, not runOne.
+    const jobs = [job({ attempts: MAX_ATTEMPTS, lastError: `old error ${AUTO_REQUEUE_MARKER}` })]
+    const db = fakePrisma(jobs)
+    await claimAndRunDue(db, 5, ok)
+    expect(jobs[0].status).toBe('FAILED')
+    expect(jobs[0].lastError).toContain(AUTO_REQUEUE_MARKER)
+  })
+})
+
+// ── 自愈闭环:队列维护(幽灵对账 + 可救死信自动复活) ─────────────────────────────
+
+const HOURS_7 = 7 * 60 * 60 * 1000
+
+describe('maintainGradingJobs', () => {
+  it('reconciles a phantom dead letter (submission already graded) to DONE', async () => {
+    const jobs = [job({ status: 'FAILED', submissionId: 100, lastError: 'boom' })]
+    const db = fakePrisma(jobs, 0, { 100: { status: 'GRADED', aiScore: 88, teacherScore: null } })
+    const report = await maintainGradingJobs(db)
+    expect(report.phantomDone).toBe(1)
+    expect(jobs[0].status).toBe('DONE')
+    expect(jobs[0].lastError).toBeNull()
+  })
+
+  it('reconciles a phantom PENDING job too, and honors teacherScore as "has a score"', async () => {
+    const jobs = [job({ status: 'PENDING', submissionId: 100 })]
+    const db = fakePrisma(jobs, 0, { 100: { status: 'FLAGGED', aiScore: null, teacherScore: 60 } })
+    const report = await maintainGradingJobs(db)
+    expect(report.phantomDone).toBe(1)
+    expect(jobs[0].status).toBe('DONE')
+  })
+
+  it('leaves a job alone when its submission has no score or is not settled', async () => {
+    const jobs = [
+      job({ id: 1, submissionId: 100, status: 'FAILED', lastError: 'x', updatedAt: new Date() }),
+      job({ id: 2, submissionId: 200, status: 'PENDING' }),
+    ]
+    const db = fakePrisma(jobs, 0, {
+      100: { status: 'GRADED', aiScore: null, teacherScore: null }, // settled but scoreless — not a phantom
+      200: { status: 'UPLOADED', aiScore: null, teacherScore: null }, // live queue work
+    })
+    const report = await maintainGradingJobs(db)
+    expect(report.phantomDone).toBe(0)
+    expect(jobs[0].status).toBe('FAILED')
+    expect(jobs[1].status).toBe('PENDING')
+  })
+
+  it('auto-requeues an old rescuable dead letter ONCE, marking it', async () => {
+    const jobs = [job({ status: 'FAILED', attempts: 4, lastError: 'Gemini 文件上传初始化失败 429', updatedAt: new Date(Date.now() - HOURS_7) })]
+    const db = fakePrisma(jobs)
+    const report = await maintainGradingJobs(db)
+    expect(report.requeued).toBe(1)
+    expect(jobs[0]).toMatchObject({ status: 'PENDING', attempts: 0 })
+    expect(jobs[0].lastError).toContain(AUTO_REQUEUE_MARKER)
+
+    // A second maintenance pass must NOT resurrect it again (marker fences it out)…
+    jobs[0].status = 'FAILED'
+    jobs[0].updatedAt = new Date(Date.now() - HOURS_7)
+    const again = await maintainGradingJobs(db)
+    expect(again.requeued).toBe(0)
+    expect(jobs[0].status).toBe('FAILED')
+  })
+
+  it('never requeues a permanent dead letter or a fresh one', async () => {
+    const jobs = [
+      job({ id: 1, submissionId: 100, status: 'FAILED', lastError: 'The video is corrupt', updatedAt: new Date(Date.now() - HOURS_7) }),
+      job({ id: 2, submissionId: 200, status: 'FAILED', lastError: 'boom', updatedAt: new Date() }), // younger than the 6h cool-off
+    ]
+    const db = fakePrisma(jobs)
+    const report = await maintainGradingJobs(db)
+    expect(report.requeued).toBe(0)
+    expect(jobs.every((j) => j.status === 'FAILED')).toBe(true)
+  })
+
+  it('caps rescues per run at 20', async () => {
+    const jobs = Array.from({ length: 25 }, (_, i) =>
+      job({ id: i + 1, submissionId: 100 + i, status: 'FAILED', lastError: 'Gemini 500: internal', updatedAt: new Date(Date.now() - HOURS_7) }))
+    const db = fakePrisma(jobs)
+    const report = await maintainGradingJobs(db)
+    expect(report.requeued).toBe(20)
+    expect(jobs.filter((j) => j.status === 'PENDING')).toHaveLength(20)
+    expect(jobs.filter((j) => j.status === 'FAILED')).toHaveLength(5)
   })
 })
