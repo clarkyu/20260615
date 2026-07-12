@@ -5,8 +5,6 @@
 // 不进本函数(它们不是 Assignment)。
 // 统计口径:已交 = 状态 ≠ DRAFT/MISSING;已评 = GRADED;均分 = GRADED 行的 finalScore 均值。
 
-import { compareClassName } from '@/lib/class-sort'
-
 export interface ArchiveAssignmentRow {
   id: number
   batchId: string | null
@@ -142,7 +140,7 @@ export function buildTeacherArchive(
                 stat: phase ? (statsByPhase.get(phase.id) ?? { submitted: 0, graded: 0, avg: null }) : null,
               }
             })
-            .sort((a, b) => compareClassName(a.className, b.className)) // 无该环节的班也保留(stat=null 显示 —)
+            .sort((a, b) => a.className.localeCompare(b.className)) // 无该环节的班也保留(stat=null 显示 —)
           return { order, title, classes }
         })
         return { key, title: group[0].title, dueAt, classCount: group.length, phases }
