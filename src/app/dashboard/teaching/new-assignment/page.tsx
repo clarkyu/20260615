@@ -8,6 +8,7 @@ import * as offeringRepo from '@/lib/repo/offerings'
 import * as templateRepo from '@/lib/repo/templates'
 import * as bankRepo from '@/lib/repo/bank'
 import { parseTemplatePayload } from '@/lib/assignment-template'
+import { sortByClassName } from '@/lib/class-sort'
 import { parseChoices } from '@/lib/choices'
 import { parseFillBlank } from '@/lib/fill-blank'
 import { deleteAssignmentTemplate } from '@/actions/assignments'
@@ -43,7 +44,8 @@ export default async function NewAssignmentDirectPage({ searchParams }: { search
 
   const nameCounts = new Map<string, number>()
   for (const o of offerings) nameCounts.set(o.class.name, (nameCounts.get(o.class.name) ?? 0) + 1)
-  const targets = offerings.map((o) => ({
+  // 班级序号升序(全站口径;listForStaff 是学期序 + id 倒序)。
+  const targets = sortByClassName(offerings, (o) => o.class.name).map((o) => ({
     offeringId: o.id,
     label: (nameCounts.get(o.class.name) ?? 0) > 1 ? `${o.class.name} · ${o.course.name}` : o.class.name,
   }))

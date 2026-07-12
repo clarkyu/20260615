@@ -10,6 +10,7 @@ import { PROVIDER_LABELS, PROVIDER_KEY_ENV } from '@/lib/ai/registry'
 import * as diagnostics from '@/lib/repo/diagnostics'
 import * as aiUsage from '@/lib/repo/ai-usage'
 import { classifyGradingError, AUTO_REQUEUE_MARKER, type GradingErrorClass } from '@/lib/domain/jobs'
+import { sortByClassName } from '@/lib/class-sort'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -100,6 +101,8 @@ export default async function DiagnosticsPage() {
     g.sum.failed += a.failed
     g.sum.processing += a.processing
   }
+  // 批次内班级按班级序号升序(全站口径;到达序是建作业时间倒序,与班号无关)。
+  for (const g of groups) g.rows = sortByClassName(g.rows, (a) => a.className)
 
   const stats = (s: { submitted: number; aiScored: number; toReview: number; failed: number; processing: number }) => (
     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">

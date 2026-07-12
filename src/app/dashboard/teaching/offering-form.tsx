@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { createOffering, updateOffering, deleteOffering } from '@/actions/offerings'
+import { sortByClassName } from '@/lib/class-sort'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -110,7 +111,8 @@ function MultiClassPicker({ classes, t }: { classes: { id: number; name: string 
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return needle ? classes.filter((c) => c.name.toLowerCase().includes(needle)) : classes
+    const hit = needle ? classes.filter((c) => c.name.toLowerCase().includes(needle)) : classes
+    return sortByClassName(hit, (c) => c.name) // 班级序号升序(全站口径;repo 是字符串序,这里升级 numeric)
   }, [classes, q])
 
   function toggle(id: number) {
@@ -145,7 +147,8 @@ function MultiClassPicker({ classes, t }: { classes: { id: number; name: string 
         <input key={id} type="hidden" name="classId" value={id} />
       ))}
 
-      <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
+      {/* 一班一行(全站口径,原 grid-cols-2 两班挤一行)。 */}
+      <div className="grid max-h-60 grid-cols-1 gap-2 overflow-y-auto">
         {filtered.map((c) => {
           const on = selected.has(c.id)
           return (

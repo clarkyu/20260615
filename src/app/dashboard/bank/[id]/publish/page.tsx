@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import { getT } from '@/lib/i18n-server'
 import { serializeChunks } from '@/lib/bank'
+import { sortByClassName } from '@/lib/class-sort'
 import * as bankRepo from '@/lib/repo/bank'
 import * as offeringRepo from '@/lib/repo/offerings'
 import { Button } from '@/components/ui/button'
@@ -49,7 +50,8 @@ export default async function PublishFromSetPage({ params }: { params: Promise<{
 
   const nameCounts = new Map<string, number>()
   for (const o of offerings) nameCounts.set(o.class.name, (nameCounts.get(o.class.name) ?? 0) + 1)
-  const targets = offerings.map((o) => ({
+  // 班级序号升序(全站口径;listForStaff 是学期序 + id 倒序)。
+  const targets = sortByClassName(offerings, (o) => o.class.name).map((o) => ({
     offeringId: o.id,
     label: (nameCounts.get(o.class.name) ?? 0) > 1 ? `${o.class.name} · ${o.course.name}` : o.class.name,
   }))

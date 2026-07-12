@@ -279,7 +279,8 @@ export default async function DashboardPage() {
                   <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                 </summary>
                 <div className="space-y-1 border-t border-border/60 p-2">
-                  {[...b.classes].sort((x, y) => y.pending - x.pending).map((c) => {
+                  {/* 班级序号升序(全站口径,2026-07-12 起替代原「待批数降序」);待批数仍在行内醒目显示。 */}
+                  {b.classes.map((c) => {
                     const teacher = isAdmin ? teacherById.get(c.assignmentId) : null
                     return (
                       <Link key={c.assignmentId} href={`/dashboard/assignments/${c.assignmentId}`} className="tap flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-accent">
