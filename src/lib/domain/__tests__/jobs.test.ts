@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { claimAndRunDue, enqueueGrading, heartbeatJob, maintainGradingJobs, backoffMs, backoffMsFor, classifyGradingError, MAX_ATTEMPTS, AUTO_REQUEUE_MARKER, type JobRunner } from '../jobs'
+import { claimAndRunDue, enqueueGrading, heartbeatJob, maintainGradingJobs, backoffMs, backoffMsFor, classifyGradingError, fairOrder, MAX_ATTEMPTS, AUTO_REQUEUE_MARKER, type JobRunner } from '../jobs'
 
 // ── A tiny in-memory stand-in for the bits of prisma.gradingJob the queue uses ──
 
@@ -442,5 +442,46 @@ describe('maintainGradingJobs', () => {
     expect(report.requeued).toBe(20)
     expect(jobs.filter((j) => j.status === 'PENDING')).toHaveLength(20)
     expect(jobs.filter((j) => j.status === 'FAILED')).toHaveLength(5)
+  })
+})
+
+// ── 削峰公平 + 截止优先(fairOrder) ─────────────────────────────────────────────
+
+describe('fairOrder', () => {
+  const NOW = new Date('2026-07-12T08:00:00Z')
+  const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000)
+  const fj = (kind: string, minAgo: number, dueAt?: Date | null) => ({
+    kind,
+    nextAttemptAt: at(minAgo),
+    ...(dueAt !== undefined ? { submission: { phase: { dueAt } } } : {}),
+  })
+
+  it('轮转交错各泳道,慢泳道积压不再饿死快泳道', () => {
+    // shadow 全比 writing 老:严格 FIFO 会把前 3 个槽全给 shadow。
+    const jobs = [fj('shadow', 60), fj('shadow', 50), fj('shadow', 40), fj('writing', 5)]
+    const picked = fairOrder(jobs, 3, NOW)
+    expect(picked.map((j) => j.kind)).toEqual(['shadow', 'writing', 'shadow'])
+  })
+
+  it('泳道内截止已过/24h 内的优先,其次 nextAttemptAt 老的先走', () => {
+    const pastDue = fj('submission', 10, new Date(NOW.getTime() - 60_000)) // 已过截止
+    const dueSoon = fj('submission', 5, new Date(NOW.getTime() + 60 * 60_000)) // 1h 内截止
+    const dueFar = fj('submission', 60, new Date(NOW.getTime() + 48 * 60 * 60_000)) // 两天后
+    const noDue = fj('submission', 90, null)
+    const picked = fairOrder([noDue, dueFar, dueSoon, pastDue], 4, NOW)
+    // 截止桶 0(pastDue 比 dueSoon 老)→ 桶 1 按等待时长(noDue 90min > dueFar 60min)。
+    expect(picked).toEqual([pastDue, dueSoon, noDue, dueFar])
+  })
+
+  it('尊重 limit,且 dueAt 缺失(测试桩/无截止)不炸、归常规桶', () => {
+    const jobs = [fj('submission', 30), fj('shadow', 20), fj('writing', 10), fj('submission', 5)]
+    const picked = fairOrder(jobs, 2, NOW)
+    expect(picked).toHaveLength(2)
+    expect(picked[0].kind).toBe('submission')
+    expect(picked[1].kind).toBe('shadow')
+  })
+
+  it('空输入 → 空输出', () => {
+    expect(fairOrder([], 5, NOW)).toEqual([])
   })
 })

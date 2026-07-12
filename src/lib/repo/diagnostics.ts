@@ -24,6 +24,19 @@ export async function queueHealth(prisma: PrismaClient, schoolId: number | null 
   }
 }
 
+// 死信画像原料(可观测):本人可见范围内 FAILED 任务的 lastError 文本,最老优先、cap 一批。
+// lastError 是提供方报错的自由文本(无学生个人信息),分类正则在 domain(classifyGradingError),
+// SQL 表达不了——取回后由调用方在 JS 里聚合。500 条足够画像;真超过说明系统已大坏,
+// 画像的意义也只剩「哪类最多」。
+export function listDeadLetterErrors(prisma: PrismaClient, schoolId: number | null | undefined, userId: number, role: Role, cap = 500) {
+  return prisma.gradingJob.findMany({
+    where: { status: 'FAILED', submission: { assignment: { offering: offeringScopeFor(schoolId, userId, role) } } },
+    orderBy: { updatedAt: 'asc' },
+    take: cap,
+    select: { lastError: true },
+  })
+}
+
 export interface AssignmentProgress {
   assignmentId: number
   title: string

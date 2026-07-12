@@ -9,6 +9,7 @@ import { aiProviderPresence, storageConfigured, emailConfigured, config } from '
 import { PROVIDER_LABELS, PROVIDER_KEY_ENV } from '@/lib/ai/registry'
 import * as diagnostics from '@/lib/repo/diagnostics'
 import * as aiUsage from '@/lib/repo/ai-usage'
+import { classifyGradingError, AUTO_REQUEUE_MARKER, type GradingErrorClass } from '@/lib/domain/jobs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -34,12 +35,29 @@ export default async function DiagnosticsPage() {
   const now = new Date()
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  const [queue, progress, spend, platformTodayMicro] = await Promise.all([
+  const [queue, progress, spend, platformTodayMicro, deadLetters] = await Promise.all([
     diagnostics.queueHealth(prisma, user.schoolId, user.userId, user.role),
     diagnostics.gradingProgress(prisma, user.schoolId, user.userId, user.role),
     aiUsage.spendSummary(prisma, user.schoolId, todayStart, monthStart),
     aiUsage.spendSinceMicroUsd(prisma, todayStart),
+    diagnostics.listDeadLetterErrors(prisma, user.schoolId, user.userId, user.role),
   ])
+
+  // 死信画像(可观测):按错误签名分类聚合——一眼分清「限流墙(等自愈)/内容损坏(等归档)/
+  // 其它瞬时(该被自动复活)」,不再逐条翻 lastError。分类与队列自愈同一份 classifyGradingError。
+  const dlByClass = {} as Record<GradingErrorClass, number>
+  let dlRequeued = 0
+  for (const r of deadLetters) {
+    const cls = classifyGradingError(r.lastError)
+    dlByClass[cls] = (dlByClass[cls] ?? 0) + 1
+    if ((r.lastError ?? '').includes(AUTO_REQUEUE_MARKER)) dlRequeued++
+  }
+  const dlLabels: [GradingErrorClass, string][] = [
+    ['rate', t('diag.dlRate')],
+    ['permanent', t('diag.dlPermanent')],
+    ['not-ready', t('diag.dlNotReady')],
+    ['transient', t('diag.dlTransient')],
+  ]
   const capUsd = config.gradingDailyCapUsd()
   const usd = (micro: number) => `$${(micro / 1_000_000).toFixed(2)}`
   const spendPaused = capUsd > 0 && platformTodayMicro >= capUsd * 1_000_000
@@ -59,6 +77,9 @@ export default async function DiagnosticsPage() {
 
   const pending = queue.counts['PENDING'] ?? 0
   const oldestMin = queue.oldestPendingAt ? Math.max(0, Math.round((Date.now() - queue.oldestPendingAt.getTime()) / 60000)) : null
+  // 停摆告警:有待评且最老一份已逾 60 分钟没被认领——cron 班次(GitHub schedule 实际
+  // 45-70 分钟一班)都该轮到它了,大概率 CRON_SECRET/Action 出了问题,提示手动泵。
+  const stalled = pending > 0 && oldestMin != null && oldestMin >= 60
 
   // 按批次归拢(与作业列表同构:batchId 精确,legacy 同课程+同标题):批次卡出汇总数,
   // 班级行折叠在下。rows 按 createdAt desc 到达,组序沿用首见序。
@@ -121,6 +142,20 @@ export default async function DiagnosticsPage() {
           <p className="text-xs text-muted-foreground">
             {oldestMin != null ? t('diag.oldestPending', { n: oldestMin }) : t('diag.queueIdle')}
           </p>
+          {stalled ? <p className="text-xs font-medium text-destructive">{t('diag.queueStalled', { n: oldestMin as number })}</p> : null}
+          {deadLetters.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">{t('diag.dlBreakdown')}</p>
+              <div className="flex flex-wrap gap-2">
+                {dlLabels.map(([cls, label]) =>
+                  (dlByClass[cls] ?? 0) > 0 ? (
+                    <Badge key={cls} tone={cls === 'permanent' ? 'danger' : undefined}>{label}: {dlByClass[cls]}</Badge>
+                  ) : null,
+                )}
+                {dlRequeued > 0 ? <Badge>{t('diag.dlRequeued', { n: dlRequeued })}</Badge> : null}
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
