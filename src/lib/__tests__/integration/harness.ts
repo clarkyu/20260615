@@ -30,6 +30,10 @@ let templatePath: string | null = null
 function migratedTemplate(): string {
   if (templatePath) return templatePath
   const file = join(tmpdir(), `itest-template-${process.pid}.db`)
+  // 文件名带 PID,而 PID 会被系统回收复用:撞上「上一次运行残留的同名模板」时,重放迁移
+  // 会报 "table already exists"(困扰多个会话的偶发失败真凶——重跑换了 PID 就好,像 flaky)。
+  // 模板必须从零建:先删残留。
+  try { unlinkSync(file) } catch { /* 不存在即最常态 */ }
   // FKs off during DDL so the table-rebuild migrations (PRAGMA defer_foreign_keys) replay cleanly.
   const seed = new Database(file)
   seed.pragma('foreign_keys = OFF')

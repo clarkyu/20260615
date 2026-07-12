@@ -76,6 +76,54 @@ export function backoffMsFor(cls: GradingErrorClass, attempts: number): number {
 // 必须保住它(runOne / 死信化两处都处理)。
 export const AUTO_REQUEUE_MARKER = '[auto-requeued]'
 
+// ── 削峰公平 + 截止优先(排空次序) ────────────────────────────────────────────────
+//
+// 严格 nextAttemptAt-FIFO 会把每个槽位都发给最早入队的泳道:一批又慢又老的逐句积压
+// (Gemini,一份几分钟)能让又快又新的写作(DeepSeek,一份几秒)饿死几小时——期末实况,
+// 此前只能靠人工带 kind 单独泵。现在默认排空就公平:
+//   泳道内 —— 截止已过/24h 内的先走(作业刚收齐、师生都在等分),再按 nextAttemptAt;
+//   泳道间 —— submission/shadow/writing 轮转各取一个,直到批量配额满。
+// 带 kind 的单泳道排空维持单道次序(同样吃截止优先)。纯函数,便于单测。
+export const DEADLINE_SOON_MS = 24 * 60 * 60 * 1000
+const LANES: GradingKind[] = ['submission', 'shadow', 'writing']
+
+interface FairJob {
+  kind: string
+  nextAttemptAt: Date
+  submission?: { phase?: { dueAt: Date | null } | null } | null
+}
+
+export function fairOrder<T extends FairJob>(jobs: T[], limit: number, now: Date): T[] {
+  // 截止桶:0 = 已过或 24h 内截止(优先),1 = 其余。取不到 dueAt(测试桩/无截止)归 1。
+  const bucket = (j: T) => {
+    const due = j.submission?.phase?.dueAt
+    return due && due.getTime() <= now.getTime() + DEADLINE_SOON_MS ? 0 : 1
+  }
+  const lanes = new Map<string, T[]>()
+  for (const j of jobs) {
+    const lane = lanes.get(j.kind)
+    if (lane) lane.push(j)
+    else lanes.set(j.kind, [j])
+  }
+  for (const lane of lanes.values()) {
+    lane.sort((a, b) => bucket(a) - bucket(b) || a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
+  }
+  const out: T[] = []
+  while (out.length < limit) {
+    let advanced = false
+    for (const lane of lanes.values()) {
+      if (out.length >= limit) break
+      const j = lane.shift()
+      if (j) {
+        out.push(j)
+        advanced = true
+      }
+    }
+    if (!advanced) break
+  }
+  return out
+}
+
 // The minimal job shape the runner needs (so tests can pass a plain object).
 export interface JobRow {
   id: number
@@ -177,16 +225,20 @@ export async function claimAndRunDue(
     data: { status: 'FAILED', lastError: 'grading did not complete after retries' },
   })
 
-  // 3) Due PENDING jobs, oldest first. `kind` narrows to one queue lane so a slow,
-  //    earlier-enqueued backlog of one kind (e.g. Gemini 逐句) can't starve a fast,
-  //    later-enqueued backlog of another (e.g. DeepSeek writing): the strict
-  //    nextAttemptAt-FIFO otherwise hands every slot to whatever was enqueued first,
-  //    regardless of cost/lane. Omit `kind` for the normal all-lanes drain.
-  const due = await prisma.gradingJob.findMany({
-    where: { status: 'PENDING', nextAttemptAt: { lte: now }, ...(kind ? { kind } : {}) },
-    orderBy: { nextAttemptAt: 'asc' },
-    take: limit,
-  })
+  // 3) Due PENDING jobs——泳道公平 + 截止优先(fairOrder):无 kind 时三条泳道各取一窗
+  //    候选再轮转交错,慢泳道积压不再饿死快泳道;泳道内截止已过/临近的先走。带 kind 仍
+  //    是单泳道(人工/定向泵)。每道窗口取 3×limit:截止优先只在窗口内重排,窗口外的
+  //    急件等下一班(cron 几分钟一班,足够)。dueAt 只为排序取用,不进 runner。
+  const jobInclude = { submission: { select: { phase: { select: { dueAt: true } } } } } as const
+  const laneWindow = (k: GradingKind) =>
+    prisma.gradingJob.findMany({
+      where: { status: 'PENDING', nextAttemptAt: { lte: now }, kind: k },
+      orderBy: { nextAttemptAt: 'asc' },
+      take: limit * 3,
+      include: jobInclude,
+    })
+  const candidates = kind ? await laneWindow(kind) : (await Promise.all(LANES.map(laneWindow))).flat()
+  const due = fairOrder(candidates, limit, now)
 
   // Claim sequentially (cheap row flips), then run the claimed batch CONCURRENTLY:
   // 一批的墙钟 ≈ 最慢一份而不是各份之和(期末考核修复 ⑦——视频评一份 1-3 分钟,串行
