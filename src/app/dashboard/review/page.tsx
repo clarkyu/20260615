@@ -12,6 +12,7 @@ import * as classRepo from '@/lib/repo/classes'
 import * as reviewRepo from '@/lib/repo/review'
 import * as classPerfRepo from '@/lib/repo/class-perf'
 import { buildTeacherArchive, combinePhaseStats, type ClassCell } from '@/lib/domain/archive-view'
+import { sortByClassName } from '@/lib/class-sort'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LocalDate } from '@/components/local-date'
@@ -44,7 +45,8 @@ export default async function ReviewHubPage() {
 
   const semesters = buildTeacherArchive(assignments, combinePhaseStats(statRows), sizeByClassId)
   // 学期 → 该学期课头(雨课堂块与期末总结块的行);无任务的学期也可能有课头,以课头为准补齐。
-  const termOf = (y: string, s: string) => offerings.filter((o) => o.year === y && o.semester === s)
+  // 一律按班级序号升序(全站口径)。
+  const termOf = (y: string, s: string) => sortByClassName(offerings.filter((o) => o.year === y && o.semester === s), (o) => o.class.name)
   const termsFromOfferings = [...new Set(offerings.map((o) => `${o.year}|${o.semester}`))]
   const knownTerms = new Set(semesters.map((g) => `${g.year}|${g.semester}`))
   const extraTerms = termsFromOfferings
@@ -106,15 +108,16 @@ export default async function ReviewHubPage() {
                               {t('arch.phase')} {ph.order}
                               {ph.title ? ` · ${ph.title}` : ''}
                             </p>
-                            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                            {/* 一班一行(全站口径):班名靠左、统计靠右,不与他班挤同一行。 */}
+                            <div className="mt-1 space-y-1 text-xs">
                               {ph.classes.map((c) => (
                                 <Link
                                   key={c.assignmentId}
                                   href={`/dashboard/assignments/${c.assignmentId}`}
-                                  className="text-primary hover:underline"
+                                  className="flex items-baseline justify-between gap-2 text-primary hover:underline"
                                 >
-                                  {c.className}
-                                  <span className="ml-1 text-muted-foreground">{cellStat(c)}</span>
+                                  <span>{c.className}</span>
+                                  <span className="tabular-nums text-muted-foreground">{cellStat(c)}</span>
                                 </Link>
                               ))}
                             </div>
@@ -132,14 +135,15 @@ export default async function ReviewHubPage() {
               <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-semibold marker:content-none">
                 {t('arch.rainBlock')}
               </summary>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {/* 一班一行(全站口径)。 */}
+              <div className="mt-2 space-y-1 text-xs">
                 {termOf(sem.year, sem.semester).map((o) => {
                   const imp = impByOffering.get(o.id)
                   return (
                     <Link
                       key={o.id}
                       href={`/dashboard/teaching/${o.id}/review/classroom`}
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      className="flex items-center gap-1 text-primary hover:underline"
                     >
                       <TableProperties className="h-3.5 w-3.5" />
                       {o.class.name}
