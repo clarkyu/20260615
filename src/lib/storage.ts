@@ -125,6 +125,22 @@ export async function probeObject(key: string): Promise<ObjectHealth> {
   }
 }
 
+// 读对象头部若干字节(签名请求 + Range):供 media-sniff 验容器魔数(坏媒体即时拒收)。
+// null = 取不到(404/5xx/网络抖)——调用方必须当「无法判断」放行,绝不因抖动拒收好上传;
+// 在/空的判定归 probeObject,这里只管内容首字节。
+export async function readObjectHead(key: string, bytes = 16): Promise<Uint8Array | null> {
+  try {
+    const res = await client().fetch(objectUrl(key), { headers: { range: `bytes=0-${bytes - 1}` } })
+    if (!res.ok) {
+      try { await res.body?.cancel() } catch { /* 已消费/已关闭 */ }
+      return null
+    }
+    return new Uint8Array(await res.arrayBuffer())
+  } catch {
+    return null
+  }
+}
+
 // Media keys carry the phaseId so the per-phase submissions of one assignment never
 // collide on the same attempt number. (A single-phase assignment still has exactly
 // one phase, so this is just an extra path segment.)

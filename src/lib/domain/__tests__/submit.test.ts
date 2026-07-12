@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveAttempt, missingRequiredPart, isPollOnly, requiredMediaUnhealthy, unhealthyShadowTakes } from '../submit'
+import { resolveAttempt, missingRequiredPart, isPollOnly, requiredMediaUnhealthy, corruptRequiredMedia, unhealthyShadowTakes } from '../submit'
 
 // ── missingRequiredPart (pure) ───────────────────────────────────────────────
 
@@ -198,5 +198,53 @@ describe('resilientProbe(瞬时 404 复测)', () => {
     expect(await resilientProbe(flaky(['missing', 'ok']), 'k', 1)).toBe('ok')
     expect(await resilientProbe(flaky(['missing', 'missing']), 'k', 1)).toBe('missing')
     expect(await resilientProbe(flaky(['empty', 'empty']), 'k', 1)).toBe('empty')
+  })
+})
+
+describe('corruptRequiredMedia(坏媒体即时拒收)', () => {
+  const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42])
+  const ZEROS = new Uint8Array(16) // 全零:上传坏死的典型签名
+  const heads = (map: Record<string, Uint8Array | null>) => async (key: string) => map[key] ?? null
+
+  it('要求的媒体头部命中已知容器 → 放行', async () => {
+    const ok = await corruptRequiredMedia(
+      { requireVideo: true, requireAudio: false },
+      { videoKey: 'v1', audioKey: null },
+      heads({ v1: WEBM }),
+    )
+    expect(ok).toBe(false)
+  })
+
+  it('要求的媒体头部是全零/垃圾 → 拒收', async () => {
+    const bad = await corruptRequiredMedia(
+      { requireVideo: true, requireAudio: false },
+      { videoKey: 'v1', audioKey: null },
+      heads({ v1: ZEROS }),
+    )
+    expect(bad).toBe(true)
+  })
+
+  it('读不到头(null,网络抖/404)→ 放行,绝不因抖动拒收', async () => {
+    const ok = await corruptRequiredMedia(
+      { requireVideo: true, requireAudio: true },
+      { videoKey: 'v1', audioKey: 'a1' },
+      heads({ v1: null, a1: null }),
+    )
+    expect(ok).toBe(false)
+  })
+
+  it('非要求/无键的媒体不探测;音频坏同样拦', async () => {
+    const bad = await corruptRequiredMedia(
+      { requireVideo: false, requireAudio: true },
+      { videoKey: 'v-ignored', audioKey: 'a1' },
+      heads({ 'v-ignored': ZEROS, a1: ZEROS }),
+    )
+    expect(bad).toBe(true)
+    const ok = await corruptRequiredMedia(
+      { requireVideo: false, requireAudio: false },
+      { videoKey: null, audioKey: null },
+      heads({}),
+    )
+    expect(ok).toBe(false)
   })
 })
