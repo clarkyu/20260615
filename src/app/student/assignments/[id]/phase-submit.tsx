@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { parseChoices } from '@/lib/choices'
 import { parseFillBlank } from '@/lib/fill-blank'
+import { gradingStage } from '@/lib/domain/grading-progress'
 import { SubmissionFlow } from './submission-flow'
 import { PracticePanel } from './practice-panel'
 import { ShadowSubmit } from './shadow-submit'
@@ -12,7 +13,7 @@ type PhaseDetail = Prisma.PhaseGetPayload<{
     sentences: { orderBy: { order: 'asc' } }
     chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } }
     assignment: { select: { id: true; title: true; category: true } }
-    submissions: { include: { shadowTakes: { select: { order: true; aiScore: true; spokenText: true } } } }
+    submissions: { include: { shadowTakes: { select: { order: true; aiScore: true; spokenText: true } }; gradingJob: { select: { status: true } } } }
   }
 }>
 
@@ -36,7 +37,9 @@ function parseGraded(aiResult: string | null | undefined): {
   }
 }
 
-const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
+// FAILED 也算「已提交」:那是自动评阅没跑完(已扣一次提交机会、行在老师队列里),绝不能
+// 给学生渲染成「未提交」逼人白白重录——进度组件会把它显示成「本次由老师评阅」。
+const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED', 'FAILED']
 
 // Renders the submit screen for ONE phase — either per-sentence shadowing (a bank
 // phase with a video) or the eyes-closed/recitation flow. The single-phase landing
@@ -70,6 +73,9 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       }))
     : null
 
+  // 学生可见的评阅进度(排队中/评阅中/老师评):提交状态 × 评阅任务状态,单一口径折算。
+  const stage = gradingStage(latest?.status, latest?.gradingJob?.status)
+
   if (shadowChunks) {
     const done = latest ? DONE_STATUSES.includes(latest.status) : false
     const initialRecorded = latest?.status === 'DRAFT' ? latest.shadowTakes.map((tk) => tk.order) : []
@@ -87,6 +93,8 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
         latestFeedback={latest?.feedback ?? null}
         latestTakes={done ? (latest?.shadowTakes ?? []).map((tk) => ({ order: tk.order, aiScore: tk.aiScore, spokenText: tk.spokenText })) : []}
         initialRecorded={initialRecorded}
+        submissionId={latest?.id ?? null}
+        gradingStage={stage}
         nextHref={nextHref}
         nextLabel={nextLabel}
         isFormalTest={phase.isFormalTest}
@@ -122,6 +130,7 @@ export function PhaseSubmit({ phase, heading, nextHref = null, nextLabel = null 
       initialHasText={Boolean(latest?.recitedText)}
       initialRecitedText={latest?.recitedText ?? ''}
       latestStatus={latest?.status ?? null}
+      gradingStage={stage}
       latestScore={latest?.finalScore ?? null}
       latestFeedback={latest?.feedback ?? null}
       latestPerSentence={graded.perSentence}

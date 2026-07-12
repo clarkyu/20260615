@@ -834,7 +834,8 @@ export function findPhaseDetailForStudent(prisma: PrismaClient, phaseId: number,
       sentences: { orderBy: { order: 'asc' } },
       chunkSet: { include: { chunks: { orderBy: { order: 'asc' } } } },
       assignment: { select: { id: true, title: true, category: true } },
-      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, include: { shadowTakes: { select: { order: true, aiScore: true, spokenText: true } } } },
+      // gradingJob.status 折算学生可见的评阅进度(排队中/评阅中/老师评,lib/domain/grading-progress)。
+      submissions: { where: { studentId }, orderBy: { attempt: 'desc' }, include: { shadowTakes: { select: { order: true, aiScore: true, spokenText: true } }, gradingJob: { select: { status: true } } } },
     },
   })
 }
