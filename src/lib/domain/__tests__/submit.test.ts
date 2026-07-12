@@ -179,3 +179,24 @@ describe('unhealthyShadowTakes — 逐句提交完整性门(shadow 音频在 Sha
     expect(await unhealthyShadowTakes([], probe({}))).toEqual([])
   })
 })
+
+describe('resilientProbe(瞬时 404 复测)', () => {
+  it('首判 ok/unknown 直接透传,不复测', async () => {
+    const { resilientProbe } = await import('../submit')
+    let calls = 0
+    const probe = async () => { calls++; return 'ok' as const }
+    expect(await resilientProbe(probe, 'k', 1)).toBe('ok')
+    expect(calls).toBe(1)
+  })
+
+  it('首判 missing 复测一次:第二次 ok 则放行,第二次仍坏才定罪', async () => {
+    const { resilientProbe } = await import('../submit')
+    const flaky = (results: ('ok' | 'missing' | 'empty' | 'unknown')[]) => {
+      let i = 0
+      return async () => results[i++]
+    }
+    expect(await resilientProbe(flaky(['missing', 'ok']), 'k', 1)).toBe('ok')
+    expect(await resilientProbe(flaky(['missing', 'missing']), 'k', 1)).toBe('missing')
+    expect(await resilientProbe(flaky(['empty', 'empty']), 'k', 1)).toBe('empty')
+  })
+})
