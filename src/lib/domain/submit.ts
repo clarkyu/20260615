@@ -6,6 +6,7 @@ import type { PrismaClient, SubmissionStatus } from '@prisma/client'
 import * as assignments from '@/lib/repo/assignments'
 import * as submissions from '@/lib/repo/submissions'
 import { phaseItemType } from '@/lib/phase-item-type'
+import { sniffMediaContainer } from '@/lib/media-sniff'
 import { isPhaseActiveFor, branchTopicsOf } from '@/lib/domain/selection'
 
 // The submission that represents a phase's state on the student's STATUS screens (home
@@ -137,6 +138,28 @@ export async function requiredMediaUnhealthy(
     if (!required || !key) continue // 键都没有的走 missingRequiredPart 的既有提示
     const health = await probe(key)
     if (health === 'missing' || health === 'empty') return true
+  }
+  return false
+}
+
+// 坏媒体即时拒收:对象在、有字节,但首字节不是任何已知媒体容器的魔数(全零/截断/垃圾
+// 字节)——这样的文件到评阅时才被 Gemini 报 corrupt、死信、归档缺交,学生几天后才知道。
+// 提交定稿时读头部嗅探,当场拒收让学生重录。保守一票否决:读不到头(readHead 返回 null,
+// 网络抖/404)不拦——在/空的判定归健康探针,偶发故障绝不该卡提交;命中任一已知容器放行。
+export async function corruptRequiredMedia(
+  requirements: Pick<Requirements, 'requireVideo' | 'requireAudio'>,
+  submission: Pick<Parts, 'videoKey' | 'audioKey'>,
+  readHead: (key: string) => Promise<Uint8Array | null>,
+): Promise<boolean> {
+  const checks: [boolean | null | undefined, string | null][] = [
+    [requirements.requireVideo, submission.videoKey],
+    [requirements.requireAudio, submission.audioKey],
+  ]
+  for (const [required, key] of checks) {
+    if (!required || !key) continue
+    const head = await readHead(key)
+    if (!head || head.length === 0) continue // 取不到/空:无法判断,放行(健康探针与评前预检兜底)
+    if (sniffMediaContainer(head) === 'unknown') return true
   }
   return false
 }

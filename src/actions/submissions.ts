@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { logError } from '@/lib/log'
 import { studentContext } from '@/lib/action-context'
-import { presignUpload, presignDownload, probeObject, storageConfigured, submissionMediaKey, shadowTakeKey, createMultipartUpload, presignUploadPart, completeMultipartUpload, abortMultipartUpload } from '@/lib/storage'
+import { presignUpload, presignDownload, probeObject, readObjectHead, storageConfigured, submissionMediaKey, shadowTakeKey, createMultipartUpload, presignUploadPart, completeMultipartUpload, abortMultipartUpload } from '@/lib/storage'
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
-import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy, unhealthyShadowTakes, resilientProbe } from '@/lib/domain/submit'
+import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy, corruptRequiredMedia, unhealthyShadowTakes, resilientProbe } from '@/lib/domain/submit'
 import { gradingStage, type GradingStage } from '@/lib/domain/grading-progress'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
@@ -157,6 +157,13 @@ export async function finishSubmission(phaseId: number) {
   // missing 拦下提交——首判坏结果延时复测一次,连续两次坏才拦。
   if (storageConfigured() && (await requiredMediaUnhealthy(resolved.requirements, submission, (k) => resilientProbe(probeObject, k)))) {
     return { error: t('err.uploadIncomplete') }
+  }
+
+  // 坏媒体即时拒收:对象在、有字节,但首字节不是任何已知媒体容器(全零/截断/垃圾)——
+  // 与其等评阅时 Gemini 报 corrupt、死信、归档缺交,不如当场拦下让学生重录。读不到头
+  // (网络抖)不拦,绝不因偶发故障卡好上传。
+  if (storageConfigured() && (await corruptRequiredMedia(resolved.requirements, submission, readObjectHead))) {
+    return { error: t('err.mediaCorrupt') }
   }
 
   // 按环节类型路由（判别式来自 ① 的 phaseItemType）。
