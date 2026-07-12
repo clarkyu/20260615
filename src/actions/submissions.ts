@@ -7,6 +7,7 @@ import { presignUpload, presignDownload, probeObject, storageConfigured, submiss
 import { hasAntiCheatViolation, DEFAULT_MAX_SCORE } from '@/lib/domain/grading'
 import { scheduleGrading } from '@/lib/domain/jobs'
 import { resolveAttempt, missingRequiredPart, requiredMediaUnhealthy, unhealthyShadowTakes, resilientProbe } from '@/lib/domain/submit'
+import { gradingStage, type GradingStage } from '@/lib/domain/grading-progress'
 import { phaseItemType } from '@/lib/phase-item-type'
 import { mediaExceedsLimit } from '@/lib/media-limits'
 import { parseChoices, sameChoiceSet } from '@/lib/choices'
@@ -384,4 +385,12 @@ export async function markScoresSeen() {
   const { user, prisma } = await studentContext()
   await userRepo.markScoresSeen(prisma, user.userId, new Date())
   return { success: true }
+}
+
+// 学生轮询自己这份提交的评阅进度(排队中→评阅中→已评/老师评,GradingProgress 组件
+// 每 10 秒问一次)。只认本人的行;查不到(被删/不是本人)返回 none,轮询端就地停。
+export async function getGradingProgress(submissionId: number): Promise<{ stage: GradingStage }> {
+  const { user, prisma } = await studentContext()
+  const row = await submissionRepo.findOwnGradingProgress(prisma, submissionId, user.userId)
+  return { stage: gradingStage(row?.status, row?.gradingJob?.status) }
 }

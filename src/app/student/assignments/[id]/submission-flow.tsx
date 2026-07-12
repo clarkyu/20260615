@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Recorder } from './recorder'
 import { PhotoStep } from './photo-step'
 import { PracticePanel } from './practice-panel'
+import { GradingProgress } from './grading-progress'
+import type { GradingStage } from '@/lib/domain/grading-progress'
 
 interface Sentence {
   order: number
@@ -23,7 +25,9 @@ interface Sentence {
 }
 type Kind = 'text' | 'video' | 'audio' | 'handwriting' | 'choice' | 'freetext' | 'fill'
 
-const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED']
+// FAILED 也算「已提交」:自动评阅没跑完(已扣提交机会、行在老师队列),不能渲染成「未提交」
+// 逼学生白白重录——评阅进度组件会把它显示成「本次由老师评阅」。
+const DONE_STATUSES = ['UPLOADED', 'PROCESSING', 'GRADED', 'FLAGGED', 'FAILED']
 const KIND_META: Record<Kind, { key: string; icon: typeof PenLine }> = {
   text: { key: 'sub.step1', icon: PenLine },
   video: { key: 'sub.step2', icon: Video },
@@ -289,6 +293,7 @@ export function SubmissionFlow(props: {
   initialHasText: boolean
   initialRecitedText: string
   latestStatus: string | null
+  gradingStage?: GradingStage
   latestScore: number | null
   latestFeedback: string | null
   latestPerSentence: { order: number; accuracy: number; completeness: number; spokenText?: string }[]
@@ -431,6 +436,11 @@ export function SubmissionFlow(props: {
                 ? t('sub.reviewPending')
                 : t('sub.bothDone')}
           </FormMessage>
+          {/* 评阅进度(排队中→评阅中→已评/老师评):还没出分时给学生一个透明的等待状态,
+              出分自动刷新;已出分/非 AI 流(stage done/none)组件自己隐身。 */}
+          {props.submissionId && props.gradingStage && props.latestScore == null ? (
+            <GradingProgress submissionId={props.submissionId} initialStage={props.gradingStage} />
+          ) : null}
           {/* 单选/多选投票 / 自由文本：把学生提交的答案回显出来。 */}
           {props.sentences.length === 0 && props.initialRecitedText ? (
             <div className="rounded-xl bg-secondary p-3">

@@ -15,6 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FormalTestBanner } from './submission-flow'
+import { GradingProgress } from './grading-progress'
+import type { GradingStage } from '@/lib/domain/grading-progress'
 
 export interface ShadowChunk {
   english: string
@@ -125,6 +127,8 @@ export function ShadowSubmit(props: {
   latestFeedback: string | null
   latestTakes: { order: number; aiScore: number | null; spokenText: string | null }[]
   initialRecorded: number[]
+  submissionId?: number | null
+  gradingStage?: GradingStage
   nextHref?: string | null
   nextLabel?: string | null
   isFormalTest?: boolean
@@ -215,6 +219,10 @@ export function ShadowSubmit(props: {
         <CardHeader><CardTitle>{props.title}</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm">
           <FormMessage tone="success">{t('sub.bothDone')}</FormMessage>
+          {/* 评阅进度(排队中→评阅中→已评/老师评):逐句评阅较慢,透明的等待状态尤其要紧。 */}
+          {props.submissionId && props.gradingStage && props.latestScore == null ? (
+            <GradingProgress submissionId={props.submissionId} initialStage={props.gradingStage} />
+          ) : null}
           {props.latestScore != null ? (
             <div className="rounded-xl bg-secondary p-3">
               <span className="text-muted-foreground">{t('sub.score')}: </span>

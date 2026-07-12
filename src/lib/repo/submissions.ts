@@ -877,6 +877,15 @@ export function findOwn(prisma: PrismaClient, id: number, studentId: number) {
   return prisma.submission.findFirst({ where: { id, studentId } })
 }
 
+// 学生轮询自己这份提交的评阅进度(排队中/评阅中/已评)。只认本人的行(studentId 钉死),
+// 只取折算进度需要的三个字段——每 10 秒一次的轮询读,越轻越好。
+export function findOwnGradingProgress(prisma: PrismaClient, id: number, studentId: number) {
+  return prisma.submission.findFirst({
+    where: { id, studentId },
+    select: { status: true, finalScore: true, gradingJob: { select: { status: true } } },
+  })
+}
+
 export function findOwnAttempt(prisma: PrismaClient, phaseId: number, studentId: number, attempt: number) {
   return prisma.submission.findFirst({ where: { phaseId, studentId, attempt } })
 }
