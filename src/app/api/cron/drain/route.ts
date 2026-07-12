@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { config } from '@/lib/config'
 import { timingSafeEqual } from '@/lib/safe-compare'
 import { getDb } from '@/lib/db'
-import { claimAndRunDue, type GradingKind } from '@/lib/domain/jobs'
+import { claimAndRunDue, maintainGradingJobs, type GradingKind, type MaintenanceReport } from '@/lib/domain/jobs'
 import { logError } from '@/lib/log'
 
 // Scheduled/manual drain of the durable grading queue (driven by the grading-drain
@@ -31,8 +31,16 @@ export async function POST(req: NextRequest) {
   }
   try {
     const prisma = await getDb()
+    // 排空前先跑队列自愈维护(幽灵对账 + 可救死信自动复活)——这就是「自愈闭环」的发条:
+    // 以前要人工点 Actions 按钮的对账/捞死信,现在每班 cron 自动做。容错:维护挂了不挡排空。
+    let maintenance: MaintenanceReport | null = null
+    try {
+      maintenance = await maintainGradingJobs(prisma)
+    } catch (err) {
+      logError('cron/drain', 'maintenance failed', err)
+    }
     const { ran } = await claimAndRunDue(prisma, limit, undefined, kind)
-    return NextResponse.json({ ran, limit, ...(kind ? { kind } : {}) })
+    return NextResponse.json({ ran, limit, ...(kind ? { kind } : {}), ...(maintenance ? { maintenance } : {}) })
   } catch (err) {
     logError('cron/drain', 'drain failed', err)
     return NextResponse.json({ ok: false, error: 'drain failed' }, { status: 500 })
