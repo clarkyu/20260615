@@ -3,6 +3,8 @@
 // 并汇总提交/待批数。纯函数、可测。入参 list 需按新→旧排序(listForStaff 已 createdAt desc),
 // 组的先后即沿用之(每组取首见=最新的那份的展示字段)。
 
+import { compareClassName } from '@/lib/class-sort'
+
 export interface BatchAssignmentRow {
   id: number
   title: string
@@ -13,6 +15,7 @@ export interface BatchAssignmentRow {
   phaseCount: number
   courseId: number
   courseName: string
+  classId: number
   className: string
 }
 
@@ -25,7 +28,7 @@ export interface BatchGroup {
   courseName: string
   dueAt: Date | null
   phaseCount: number
-  classes: { assignmentId: number; className: string; submitted: number; pending: number }[]
+  classes: { assignmentId: number; classId: number; className: string; submitted: number; pending: number }[]
   totalSubmitted: number
   totalPending: number
 }
@@ -68,9 +71,12 @@ export function groupAssignmentBatches(
     }
     const sub = submitted.get(a.id) ?? 0
     const pend = pending.get(a.id) ?? 0
-    g.classes.push({ assignmentId: a.id, className: a.className, submitted: sub, pending: pend })
+    g.classes.push({ assignmentId: a.id, classId: a.classId, className: a.className, submitted: sub, pending: pend })
     g.totalSubmitted += sub
     g.totalPending += pend
   }
+  // 批次内班级按班级序号升序(全站口径)——入参是 createdAt desc,组内到达序 = 建作业序,
+  // 与班号无关;作业列表/看板/归并页共用这份分组,在源头排一次。
+  for (const g of groups.values()) g.classes.sort((x, y) => compareClassName(x.className, y.className))
   return order.map((k) => groups.get(k)!)
 }

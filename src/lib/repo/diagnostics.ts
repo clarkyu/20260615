@@ -40,6 +40,7 @@ export function listDeadLetterErrors(prisma: PrismaClient, schoolId: number | nu
 export interface AssignmentProgress {
   assignmentId: number
   title: string
+  classId: number
   className: string
   // 批次分组键的原料(诊断页把同批次的班折叠在一张卡下,与作业列表同构):
   batchId: string | null
@@ -61,13 +62,13 @@ export async function gradingProgress(prisma: PrismaClient, schoolId: number | n
     where: { offering: offeringScopeFor(schoolId, userId, role) },
     orderBy: { createdAt: 'desc' },
     take: limit + 1,
-    select: { id: true, title: true, batchId: true, offering: { select: { courseId: true, class: { select: { name: true } } } } },
+    select: { id: true, title: true, batchId: true, offering: { select: { courseId: true, classId: true, class: { select: { name: true } } } } },
   })
   const { rows: assignments } = trimBoundaryBatch(fetched.map((a) => ({ ...a, courseId: a.offering.courseId })), limit)
   if (assignments.length === 0) return []
 
   const byId = new Map<number, AssignmentProgress>(
-    assignments.map((a) => [a.id, { assignmentId: a.id, title: a.title, className: a.offering.class.name, batchId: a.batchId, courseId: a.offering.courseId, submitted: 0, graded: 0, aiScored: 0, toReview: 0, failed: 0, processing: 0 }]),
+    assignments.map((a) => [a.id, { assignmentId: a.id, title: a.title, classId: a.offering.classId, className: a.offering.class.name, batchId: a.batchId, courseId: a.offering.courseId, submitted: 0, graded: 0, aiScored: 0, toReview: 0, failed: 0, processing: 0 }]),
   )
   const ids = assignments.map((a) => a.id)
   for (let i = 0; i < ids.length; i += 90) {

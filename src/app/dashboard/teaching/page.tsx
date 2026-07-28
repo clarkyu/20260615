@@ -52,6 +52,7 @@ export default async function TeachingPage() {
             courseCode: o.course.code,
             classId: o.classId,
             className: o.class.name,
+            classSize: o.class._count.studentMemberships,
             year: o.year,
             semester: o.semester,
             assignmentCount: o._count.assignments,

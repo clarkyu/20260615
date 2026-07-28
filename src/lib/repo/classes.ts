@@ -34,9 +34,14 @@ export async function classDeletionImpact(prisma: PrismaClient, classId: number,
   return { offerings, assignments, submissions }
 }
 
-// All classes in a school as {id, name}, alphabetical — for offering form selects.
+// All classes in a school as {id, name, 人数}, alphabetical — for offering form selects
+// (班级名后带学生人数是全站口径,选班时也要看得到)。
 export function listForSchool(prisma: PrismaClient, schoolId: number | null | undefined) {
-  return prisma.classGroup.findMany({ where: { schoolId: schoolId ?? -1 }, orderBy: { name: 'asc' }, select: { id: true, name: true } })
+  return prisma.classGroup.findMany({
+    where: { schoolId: schoolId ?? -1 },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true, _count: { select: { studentMemberships: true } } },
+  })
 }
 
 // Classes with member counts + major/department — the roster index list.

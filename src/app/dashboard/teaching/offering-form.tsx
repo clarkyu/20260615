@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { createOffering, updateOffering, deleteOffering } from '@/actions/offerings'
+import { sortByClassName } from '@/lib/class-sort'
 import { useT } from '@/components/i18n-provider'
 import { FormMessage } from '@/components/form-message'
 import { Button } from '@/components/ui/button'
@@ -29,7 +30,7 @@ function currentAcademicYear(): string {
   return now.getMonth() >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`
 }
 
-export function OfferingForm({ classes, initial }: { classes: { id: number; name: string }[]; initial?: OfferingInitial }) {
+export function OfferingForm({ classes, initial }: { classes: { id: number; name: string; _count: { studentMemberships: number } }[]; initial?: OfferingInitial }) {
   const t = useT()
   const confirm = useConfirm()
   const editing = Boolean(initial)
@@ -59,8 +60,8 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
                 <Label htmlFor="cls">{t('teach.class')}</Label>
                 <Select id="cls" name="classId" defaultValue={initial?.classId ?? ''} required>
                   <option value="" disabled>—</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {sortByClassName(classes, (c) => c.name).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{t('class.size', { n: c._count.studentMemberships })}</option>
                   ))}
                 </Select>
               </div>
@@ -104,13 +105,14 @@ export function OfferingForm({ classes, initial }: { classes: { id: number; name
 
 // Multi-select class picker with a search box. Selection is kept in state and
 // mirrored to hidden inputs, so filtering the visible list never drops a pick.
-function MultiClassPicker({ classes, t }: { classes: { id: number; name: string }[]; t: (k: string, v?: Record<string, string | number>) => string }) {
+function MultiClassPicker({ classes, t }: { classes: { id: number; name: string; _count: { studentMemberships: number } }[]; t: (k: string, v?: Record<string, string | number>) => string }) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [q, setQ] = useState('')
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return needle ? classes.filter((c) => c.name.toLowerCase().includes(needle)) : classes
+    const hit = needle ? classes.filter((c) => c.name.toLowerCase().includes(needle)) : classes
+    return sortByClassName(hit, (c) => c.name) // 班级序号升序(全站口径;repo 是字符串序,这里升级 numeric)
   }, [classes, q])
 
   function toggle(id: number) {
@@ -145,7 +147,8 @@ function MultiClassPicker({ classes, t }: { classes: { id: number; name: string 
         <input key={id} type="hidden" name="classId" value={id} />
       ))}
 
-      <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
+      {/* 一班一行(全站口径,原 grid-cols-2 两班挤一行)。 */}
+      <div className="grid max-h-60 grid-cols-1 gap-2 overflow-y-auto">
         {filtered.map((c) => {
           const on = selected.has(c.id)
           return (
@@ -162,7 +165,7 @@ function MultiClassPicker({ classes, t }: { classes: { id: number; name: string 
               <span className={'grid h-4 w-4 shrink-0 place-items-center rounded border ' + (on ? 'border-primary bg-primary text-primary-foreground' : 'border-input')}>
                 {on ? '✓' : ''}
               </span>
-              <span className="truncate">{c.name}</span>
+              <span className="truncate">{c.name}{t('class.size', { n: c._count.studentMemberships })}</span>
             </button>
           )
         })}

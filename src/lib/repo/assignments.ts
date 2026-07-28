@@ -576,7 +576,7 @@ export function listForStaff(prisma: PrismaClient, schoolId: number | null | und
     take: limit,
     select: {
       id: true, title: true, category: true, mode: true, dueAt: true, monthLabel: true, batchId: true,
-      offering: { select: { courseId: true, course: { select: { name: true } }, class: { select: { name: true } } } },
+      offering: { select: { courseId: true, classId: true, course: { select: { name: true } }, class: { select: { name: true } } } },
       _count: { select: { phases: true } },
     },
   })

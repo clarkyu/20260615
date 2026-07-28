@@ -5,6 +5,7 @@ import type { PrismaClient, Role } from '@prisma/client'
 import * as classPerfRepo from '@/lib/repo/class-perf'
 import * as reviewRepo from '@/lib/repo/review'
 import type { RainSession, RainStudentDetail } from '@/lib/rain-classroom'
+import { compareClassName } from '@/lib/class-sort'
 import { computeClassPerfScore, CLASSPERF_DEFAULT_WEIGHTS, type ClassPerfWeights } from './class-perf'
 
 interface Actor {
@@ -197,5 +198,6 @@ export async function loadStudentRainViews(prisma: PrismaClient, userId: number)
       }
     })
     .filter((x): x is StudentRainView => x != null)
-    .sort((a, b) => b.offering.id - a.offering.id)
+    // 班级序号升序(全站口径;学生通常只有一个班,多班时同规矩),同班取新课头在前。
+    .sort((a, b) => compareClassName(a.offering.klass, b.offering.klass) || b.offering.id - a.offering.id)
 }

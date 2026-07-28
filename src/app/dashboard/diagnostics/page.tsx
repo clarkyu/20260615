@@ -9,7 +9,9 @@ import { aiProviderPresence, storageConfigured, emailConfigured, config } from '
 import { PROVIDER_LABELS, PROVIDER_KEY_ENV } from '@/lib/ai/registry'
 import * as diagnostics from '@/lib/repo/diagnostics'
 import * as aiUsage from '@/lib/repo/ai-usage'
+import * as classRepo from '@/lib/repo/classes'
 import { classifyGradingError, AUTO_REQUEUE_MARKER, type GradingErrorClass } from '@/lib/domain/jobs'
+import { sortByClassName } from '@/lib/class-sort'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -100,6 +102,13 @@ export default async function DiagnosticsPage() {
     g.sum.failed += a.failed
     g.sum.processing += a.processing
   }
+  // 班级人数(全站口径:班级名后带人数)。
+  const sizeRows = await classRepo.classSizes(prisma, [...new Set(progress.map((a) => a.classId))])
+  const sizeByClassId = new Map(sizeRows.map((r) => [r.classId, r._count._all]))
+  const classLabel = (classId: number, name: string) => `${name}${sizeByClassId.has(classId) ? t('class.size', { n: sizeByClassId.get(classId) as number }) : ''}`
+
+  // 批次内班级按班级序号升序(全站口径;到达序是建作业时间倒序,与班号无关)。
+  for (const g of groups) g.rows = sortByClassName(g.rows, (a) => a.className)
 
   const stats = (s: { submitted: number; aiScored: number; toReview: number; failed: number; processing: number }) => (
     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
@@ -184,7 +193,7 @@ export default async function DiagnosticsPage() {
                 <Link key={g.key} href={`/dashboard/assignments/${g.rows[0].assignmentId}`} className="tap flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-accent">
                   <span className="min-w-0 flex-1 truncate text-sm">
                     <span className="font-medium">{g.title}</span>
-                    <span className="ml-1 text-xs text-muted-foreground">{g.rows[0].className}</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{classLabel(g.rows[0].classId, g.rows[0].className)}</span>
                   </span>
                   {stats(g.rows[0])}
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -203,7 +212,7 @@ export default async function DiagnosticsPage() {
                   <div className="ml-2 space-y-0.5 border-l border-border/60 pl-2">
                     {g.rows.map((a) => (
                       <Link key={a.assignmentId} href={`/dashboard/assignments/${a.assignmentId}`} className="tap flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent">
-                        <span className="min-w-0 flex-1 truncate text-sm">{a.className}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm">{classLabel(a.classId, a.className)}</span>
                         {stats(a)}
                         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                       </Link>

@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // 成绩档案(老师):按「学期 → 任务类别(四态) → 任务 → 环节 → 班级」逐层展示
 // (clark 2026-07-11 定;此前按班级平铺)。每学期尾部:课堂表现(雨课堂)块 +
-// 期末阶段总结块(各班总评状态收口)。只读聚合,读经 repo/domain,班级叶子链到既有页。
+// 期末总评块(各班总评状态收口)。只读聚合,读经 repo/domain,班级叶子链到既有页。
 export default async function ReviewHubPage() {
   const user = await requireStaff()
   const prisma = await getDb()
@@ -42,6 +42,9 @@ export default async function ReviewHubPage() {
   const classIds = [...new Set(offerings.map((o) => o.classId))]
   const sizes = await classRepo.classSizes(prisma, classIds)
   const sizeByClassId = new Map(sizes.map((s) => [s.classId, s._count._all]))
+
+  // 班级名后带人数(全站口径)。
+  const classLabel = (classId: number, name: string) => `${name}${sizeByClassId.has(classId) ? t('class.size', { n: sizeByClassId.get(classId) as number }) : ''}`
 
   const semesters = buildTeacherArchive(assignments, combinePhaseStats(statRows), sizeByClassId)
   // 学期 → 该学期课头(雨课堂块与期末总结块的行);无任务的学期也可能有课头,以课头为准补齐。
@@ -116,7 +119,7 @@ export default async function ReviewHubPage() {
                                   href={`/dashboard/assignments/${c.assignmentId}`}
                                   className="flex items-baseline justify-between gap-2 text-primary hover:underline"
                                 >
-                                  <span>{c.className}</span>
+                                  <span>{c.className}{c.size != null ? t('class.size', { n: c.size }) : ''}</span>
                                   <span className="tabular-nums text-muted-foreground">{cellStat(c)}</span>
                                 </Link>
                               ))}
@@ -135,32 +138,40 @@ export default async function ReviewHubPage() {
               <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-semibold marker:content-none">
                 {t('arch.rainBlock')}
               </summary>
-              {/* 一班一行(全站口径)。 */}
+              {/* 一班一行(全站口径);「导入雨课堂数据」入口在这块(clark 2026-07-12:导入属于课堂表现,不属于期末总评)。 */}
               <div className="mt-2 space-y-1 text-xs">
                 {termOf(sem.year, sem.semester).map((o) => {
                   const imp = impByOffering.get(o.id)
                   return (
-                    <Link
-                      key={o.id}
-                      href={`/dashboard/teaching/${o.id}/review/classroom`}
-                      className="flex items-center gap-1 text-primary hover:underline"
-                    >
-                      <TableProperties className="h-3.5 w-3.5" />
-                      {o.class.name}
-                      {imp ? (
-                        <span className="text-muted-foreground">
-                          <LocalDate iso={imp.toISOString()} />
-                        </span>
-                      ) : (
-                        <Badge tone="warning">{t('review.hubRainNone')}</Badge>
-                      )}
-                    </Link>
+                    <div key={o.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Link
+                        href={`/dashboard/teaching/${o.id}/review/classroom`}
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        <TableProperties className="h-3.5 w-3.5" />
+                        {classLabel(o.classId, o.class.name)}
+                        {imp ? (
+                          <span className="text-muted-foreground">
+                            <LocalDate iso={imp.toISOString()} />
+                          </span>
+                        ) : (
+                          <Badge tone="warning">{t('review.hubRainNone')}</Badge>
+                        )}
+                      </Link>
+                      <Link
+                        href={`/dashboard/teaching/${o.id}/review/import`}
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        <UploadCloud className="h-3.5 w-3.5" />
+                        {t('review.importLink')}
+                      </Link>
+                    </div>
                   )
                 })}
               </div>
             </details>
 
-            {/* 期末阶段总结:各班学期总评状态收口 */}
+            {/* 期末总评:各班学期总评状态收口;导出登分册入口在此 */}
             <details className="rounded-xl border border-border/60 px-3 py-2" open>
               <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-semibold marker:content-none">
                 <GraduationCap className="h-4 w-4" />
@@ -176,7 +187,7 @@ export default async function ReviewHubPage() {
                         href={`/dashboard/teaching/${o.id}/review`}
                         className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
                       >
-                        {o.class.name}
+                        {classLabel(o.classId, o.class.name)}
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
                       {imp ? <Badge tone="success">{t('review.hubRain')}</Badge> : <Badge tone="warning">{t('review.hubRainNone')}</Badge>}
@@ -187,13 +198,6 @@ export default async function ReviewHubPage() {
                       ) : (
                         <Badge tone="muted">{t('review.hubPubNone')}</Badge>
                       )}
-                      <Link
-                        href={`/dashboard/teaching/${o.id}/review/import`}
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        <UploadCloud className="h-3.5 w-3.5" />
-                        {t('review.importLink')}
-                      </Link>
                       <Link
                         href={`/dashboard/teaching/${o.id}/review/export`}
                         className="inline-flex items-center gap-1 text-primary hover:underline"
