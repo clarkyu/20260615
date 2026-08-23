@@ -50,3 +50,11 @@ describe('2025 湖北专升本真题模板', () => {
     expect(entry.name).toBe(EXAM_HUBEI_2025.title)
   })
 })
+
+describe('summarizeTemplatePayload(题库页试卷摘要)', () => {
+  it('对真题模板:8 环节/满分 100/客观 4/AI 判 4/录制 0', async () => {
+    const { summarizeTemplatePayload } = await import('@/lib/assignment-template')
+    const s = summarizeTemplatePayload(EXAM_HUBEI_2025)
+    expect(s).toEqual({ phases: 8, totalWeight: 100, objectivePhases: 4, aiJudgedPhases: 4, mediaPhases: 0 })
+  })
+})

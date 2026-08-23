@@ -135,3 +135,32 @@ export function buildTemplatePayload(
     })),
   }
 }
+
+// 题库页「笔试试卷」卡片的摘要(纯函数):环节数/满分(=各环节权重和)/题型构成。
+// 权重即分值是全站约定(种子模板按大题分值设权重);老师自存的模板权重未必成体系,
+// 摘要仍如实展示其和。
+export interface TemplateSummary {
+  phases: number
+  totalWeight: number
+  objectivePhases: number // 客观自动判分:填空/选择
+  aiJudgedPhases: number // 主观 AI 判分:自由文本(写作/问答)
+  mediaPhases: number // 录制类:音/视频/逐句背诵
+}
+
+export function summarizeTemplatePayload(p: TemplatePayload): TemplateSummary {
+  let objective = 0
+  let ai = 0
+  let media = 0
+  for (const ph of p.phases) {
+    if (ph.requireAudio || ph.requireVideo || ph.useBankSet) media++
+    else if (ph.fillBlank || ph.requireChoice) objective++
+    else if (ph.requireFreeText || ph.requireText) ai++
+  }
+  return {
+    phases: p.phases.length,
+    totalWeight: p.phases.reduce((s, ph) => s + ph.weight, 0),
+    objectivePhases: objective,
+    aiJudgedPhases: ai,
+    mediaPhases: media,
+  }
+}
