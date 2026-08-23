@@ -23,6 +23,7 @@ on:
           - requeue-writing-grading
           - resolve-missing-media
           - restore-scores
+          - seed-template
           - set-phase-rubric
           - set-selection-mode
           - unify-poll-phase
