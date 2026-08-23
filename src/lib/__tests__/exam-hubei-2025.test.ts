@@ -49,6 +49,30 @@ describe('2025 湖北专升本真题模板', () => {
     expect(entry).toBeDefined()
     expect(entry.name).toBe(EXAM_HUBEI_2025.title)
   })
+
+  it('注册表全量守卫:整卷+6 张题型分卷,全部属「专升本英语」系列且可判分', () => {
+    const keys = Object.keys(SEEDABLE_TEMPLATES)
+    expect(keys).toHaveLength(7)
+    for (const key of keys) {
+      const entry = SEEDABLE_TEMPLATES[key]
+      expect(entry.series).toBe('专升本英语')
+      expect(templatePayloadSchema.safeParse(entry.payload).success).toBe(true)
+      expect(entry.name).toBe(entry.payload.title)
+      for (const ph of entry.payload.phases.filter((x) => x.fillBlank)) {
+        const fb = parseFillBlank(ph.blanksJson)
+        expect(isGradableFillBlank(fb)).toBe(true)
+        expect(blankCount(fb.text)).toBe(fb.accept.length)
+      }
+      // 题型分卷是训练卷:可重做 3 次;整卷维持考试口径 1 次。
+      const expectAttempts = key === 'exam-hubei-2025' ? 1 : 3
+      for (const ph of entry.payload.phases) expect(ph.maxAttempts).toBe(expectAttempts)
+    }
+    // 分卷环节数:短文填空1/连词成句1/阅读填词2/阅读问答2/汉译英1/作文1。
+    expect(
+      ['hubei-2025-cloze', 'hubei-2025-reorder', 'hubei-2025-reading-fill', 'hubei-2025-reading-qa', 'hubei-2025-translate', 'hubei-2025-essay']
+        .map((k) => SEEDABLE_TEMPLATES[k].payload.phases.length),
+    ).toEqual([1, 1, 2, 2, 1, 1])
+  })
 })
 
 describe('summarizeTemplatePayload(题库页试卷摘要)', () => {

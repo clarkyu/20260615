@@ -1,4 +1,4 @@
-import type { TemplatePayload } from '@/lib/assignment-template'
+import type { TemplatePayload, TemplatePhase } from '@/lib/assignment-template'
 
 // 2025 年湖北专升本英语真题 → 作业模板(clark 2026-08 提供试卷 docx,整卷转换)。
 // 八个环节,权重恰为各大题分值(合计 100):客观题(短文填空/阅读填词/汉译英补全)走
@@ -70,14 +70,9 @@ const BASE = {
   freePractice: false,
 }
 
-export const EXAM_HUBEI_2025_NAME = '2025年湖北专升本英语真题（模拟考试）'
+// ── 环节常量(整卷与题型分卷共用同一份题面/答案键,勘误一处生效) ────────────────
 
-export const EXAM_HUBEI_2025: TemplatePayload = {
-  title: '2025年湖北专升本英语真题（模拟考试）',
-  monthLabel: '',
-  chunkSetId: null,
-  phases: [
-    {
+const PH_CLOZE = {
       ...BASE,
       title: '一、短文填空（每空一词，共10空，每空2分）',
       instructions: '阅读短文，在每个空格处只填一个词。括号内给出提示词的，按语境变化词形；未给提示词的，填入合适的介词、冠词或连词。',
@@ -87,8 +82,9 @@ export const EXAM_HUBEI_2025: TemplatePayload = {
         accept: [['biggest'], ['for'], ['started'], ['and'], ['beautiful'], ['designs'], ['finished'], ['walking'], ['a'], ['happiness']],
       }),
       weight: 20,
-    },
-    {
+    }
+
+const PH_REORDER = {
       ...BASE,
       title: '二、连词成句（共6题，每题2分）',
       instructions: `把词块连成正确的句子（注意大小写与标点），按「题号. 完整句子」的格式逐行作答。
@@ -112,8 +108,9 @@ export const EXAM_HUBEI_2025: TemplatePayload = {
         { name: '第14题', points: 2 }, { name: '第15题', points: 2 }, { name: '第16题', points: 2 },
       ],
       weight: 12,
-    },
-    {
+    }
+
+const PH_READ_FILL_1 = {
       ...BASE,
       title: '三、阅读填词 Passage 1（共5空，每空2分）',
       instructions: `根据文章内容完成摘要填空，每空填 1 个词（可用文中原词）。
@@ -129,8 +126,9 @@ ${PASSAGE_1}`,
         accept: [['musical'], ['written'], ['listening'], ['fewer'], ['classes']],
       }),
       weight: 10,
-    },
-    {
+    }
+
+const PH_READ_FILL_2 = {
       ...BASE,
       title: '三、阅读填词 Passage 2（共5空，每空2分）',
       instructions: `根据文章内容完成摘要填空，每空填 1 个词（可用文中原词）。
@@ -146,8 +144,9 @@ ${PASSAGE_2}`,
         accept: [['wrong', 'wrongly'], ['asking'], ['polite'], ['immigration'], ['grow']],
       }),
       weight: 10,
-    },
-    {
+    }
+
+const PH_READ_QA_3 = {
       ...BASE,
       title: '四、阅读问答 Passage 3（共5题，每题2分）',
       instructions: `阅读文章，用完整的英文句子回答 27–30 题；第 31 题把指定句子翻译成中文。按「题号. 答案」逐行作答。
@@ -172,8 +171,9 @@ ${PASSAGE_3}
         { name: '第30题', points: 2 }, { name: '第31题（英译汉）', points: 2 },
       ],
       weight: 10,
-    },
-    {
+    }
+
+const PH_READ_QA_4 = {
       ...BASE,
       title: '四、阅读问答 Passage 4（共5题，每题2分）',
       instructions: `阅读书信，用完整的英文句子回答 32–35 题；第 36 题把指定句子翻译成中文。按「题号. 答案」逐行作答。
@@ -198,8 +198,9 @@ ${PASSAGE_4}
         { name: '第35题', points: 2 }, { name: '第36题（英译汉）', points: 2 },
       ],
       weight: 10,
-    },
-    {
+    }
+
+const PH_TRANSLATE = {
       ...BASE,
       title: '五、汉译英（补全句子，共6题，每题3分，每空不超过两个词）',
       instructions: '根据中文句意补全英文句子，每空不超过两个英文单词（括号内为提示词）。',
@@ -227,8 +228,9 @@ James's Chinese is ____ through daily practice with language apps. (improve)`,
         ],
       }),
       weight: 18,
-    },
-    {
+    }
+
+const PH_ESSAY = {
       ...BASE,
       title: '六、作文（不少于40词，共10分）',
       instructions: `国外某乐队想参加在东湖举办的音乐节。请你以委员会成员李华的名义写一封邮件，要求如下：
@@ -247,11 +249,34 @@ James's Chinese is ____ through daily practice with language apps. (improve)`,
         { name: '格式与字数', points: 1 },
       ],
       weight: 10,
-    },
-  ],
+    }
+
+
+export const EXAM_SERIES = '专升本英语'
+export const EXAM_HUBEI_2025_NAME = '2025年湖北专升本英语真题（模拟考试）'
+
+export const EXAM_HUBEI_2025: TemplatePayload = {
+  title: EXAM_HUBEI_2025_NAME,
+  monthLabel: '',
+  chunkSetId: null,
+  phases: [PH_CLOZE, PH_REORDER, PH_READ_FILL_1, PH_READ_FILL_2, PH_READ_QA_3, PH_READ_QA_4, PH_TRANSLATE, PH_ESSAY],
 }
 
-// 可种子化的模板注册表(seed-template 端点用 key 查找;以后新试卷往这里加)。
-export const SEEDABLE_TEMPLATES: Record<string, { name: string; payload: TemplatePayload }> = {
-  'exam-hubei-2025': { name: EXAM_HUBEI_2025_NAME, payload: EXAM_HUBEI_2025 },
+// 题型分卷(训练用):单题型成卷,可重做 3 次;题面/答案键与整卷同源。
+const drill = (title: string, phases: TemplatePhase[]): TemplatePayload => ({
+  title,
+  monthLabel: '',
+  chunkSetId: null,
+  phases: phases.map((p) => ({ ...p, maxAttempts: 3 })),
+})
+
+// 可种子化的模板注册表(seed-template 端点用 key 查找;key=all 全量;以后新试卷往这里加)。
+export const SEEDABLE_TEMPLATES: Record<string, { name: string; series: string | null; payload: TemplatePayload }> = {
+  'exam-hubei-2025': { name: EXAM_HUBEI_2025_NAME, series: EXAM_SERIES, payload: EXAM_HUBEI_2025 },
+  'hubei-2025-cloze': { name: '专升本英语 · 短文填空（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 短文填空（2025湖北真题）', [PH_CLOZE]) },
+  'hubei-2025-reorder': { name: '专升本英语 · 连词成句（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 连词成句（2025湖北真题）', [PH_REORDER]) },
+  'hubei-2025-reading-fill': { name: '专升本英语 · 阅读填词（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 阅读填词（2025湖北真题）', [PH_READ_FILL_1, PH_READ_FILL_2]) },
+  'hubei-2025-reading-qa': { name: '专升本英语 · 阅读问答（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 阅读问答（2025湖北真题）', [PH_READ_QA_3, PH_READ_QA_4]) },
+  'hubei-2025-translate': { name: '专升本英语 · 汉译英（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 汉译英（2025湖北真题）', [PH_TRANSLATE]) },
+  'hubei-2025-essay': { name: '专升本英语 · 作文（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 作文（2025湖北真题）', [PH_ESSAY]) },
 }
