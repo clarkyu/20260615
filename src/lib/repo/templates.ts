@@ -21,7 +21,7 @@ export function findVisible(prisma: PrismaClient, id: number, schoolId: number |
   return prisma.assignmentTemplate.findFirst({ where: { id, ...visibleWhere(schoolId) } })
 }
 
-export function create(prisma: PrismaClient, data: { schoolId: number | null; name: string; createdById: number; payload: string }) {
+export function create(prisma: PrismaClient, data: { schoolId: number | null; name: string; createdById: number | null; payload: string }) {
   return prisma.assignmentTemplate.create({ data })
 }
 
@@ -32,4 +32,14 @@ export async function deleteForSchool(prisma: PrismaClient, id: number, schoolId
   if (!found) return false
   await prisma.assignmentTemplate.delete({ where: { id } })
   return true
+}
+
+// 种子/维护用:按校 + 模板名精确查一条(种子幂等的判据;同校同名视为同一模板)。
+export function findByNameForSchool(prisma: PrismaClient, schoolId: number, name: string) {
+  return prisma.assignmentTemplate.findFirst({ where: { schoolId, name }, select: { id: true } })
+}
+
+// 种子/维护用:整体替换模板 payload(题库勘误后重跑种子即生效)。
+export function updatePayload(prisma: PrismaClient, id: number, payload: string) {
+  return prisma.assignmentTemplate.update({ where: { id }, data: { payload } })
 }
