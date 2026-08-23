@@ -1,11 +1,15 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import { requireStaff } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import type { Metadata } from 'next'
 import { getT } from '@/lib/i18n-server'
 import * as bankRepo from '@/lib/repo/bank'
+import * as templateRepo from '@/lib/repo/templates'
+import { parseTemplatePayload, summarizeTemplatePayload } from '@/lib/assignment-template'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { BankActions } from './bank-actions'
 import { BankList } from './bank-list'
 
@@ -25,13 +29,22 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   const { cefr, strand, domain, series, video } = await searchParams
   const hasVideo = video === '1'
   const filtered = Boolean(cefr || strand || domain || series || hasVideo)
-  const [sets, allSeries, recent, favorites, favoriteIds] = await Promise.all([
+  const [sets, allSeries, recent, favorites, favoriteIds, templates] = await Promise.all([
     bankRepo.listVisible(prisma, user.schoolId, { cefr, strand, domain, series, hasVideo }),
     bankRepo.seriesList(prisma, user.schoolId),
     bankRepo.listRecentlyUsedByTeacher(prisma, user.schoolId, user.userId),
     bankRepo.listFavorites(prisma, user.schoolId, user.userId),
     bankRepo.favoriteSetIds(prisma, user.userId),
+    templateRepo.listVisibleWithPayload(prisma, user.schoolId),
   ])
+  // 笔试试卷(作业模板)是题库的基础组成之一(clark 2026-08-23 定):与句库并列展示,
+  // 可从这里直达发布。payload 坏的行跳过(不因一份坏模板拖垮整页)。
+  const papers = templates
+    .map((tm) => {
+      const payload = parseTemplatePayload(tm.payload)
+      return payload ? { id: tm.id, name: tm.name, official: tm.schoolId == null, creator: tm.createdBy?.name ?? null, sum: summarizeTemplatePayload(payload) } : null
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null)
 
   return (
     <div className="space-y-4 py-2">
@@ -47,6 +60,44 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
           <BankActions isSuperAdmin={isSuperAdmin} />
         </div>
       </div>
+
+      {/* 笔试试卷(作业模板):题库的基础组成之一,与句库并列。点「发布」进作业表单(整卷预填)。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-4 w-4 text-primary" />
+            {t('bank.papersTitle')}
+            <span className="text-sm font-normal text-muted-foreground">{papers.length}</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 pt-0">
+          {papers.length === 0 ? (
+            <p className="py-2 text-sm text-muted-foreground">{t('bank.papersEmpty')}</p>
+          ) : (
+            papers.map((p) => (
+              <Link key={p.id} href={`/dashboard/teaching/new-assignment?template=${p.id}`} className="tap flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-accent">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {p.name}
+                    {p.official ? <Badge tone="primary" className="ml-1.5">{t('bank.official')}</Badge> : null}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t('bank.paperMeta', { phases: p.sum.phases, total: p.sum.totalWeight })}
+                    {p.sum.objectivePhases > 0 ? ` · ${t('bank.paperObjective', { n: p.sum.objectivePhases })}` : ''}
+                    {p.sum.aiJudgedPhases > 0 ? ` · ${t('bank.paperAiJudged', { n: p.sum.aiJudgedPhases })}` : ''}
+                    {p.sum.mediaPhases > 0 ? ` · ${t('bank.paperMedia', { n: p.sum.mediaPhases })}` : ''}
+                    {p.creator ? ` · ${p.creator}` : ''}
+                  </p>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-0.5 text-sm font-medium text-primary">
+                  {t('bank.paperPublish')}
+                  <ChevronRight className="h-4 w-4" />
+                </span>
+              </Link>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <BankList
         sets={sets}

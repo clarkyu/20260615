@@ -43,3 +43,13 @@ export function findByNameForSchool(prisma: PrismaClient, schoolId: number, name
 export function updatePayload(prisma: PrismaClient, id: number, payload: string) {
   return prisma.assignmentTemplate.update({ where: { id }, data: { payload } })
 }
+
+// 题库页「笔试试卷」区块:可见模板连 payload 一起取(逐份解析出环节/题型摘要)。
+// 模板量小(每校几十份内),payload 随行取可接受;列表页只读。
+export function listVisibleWithPayload(prisma: PrismaClient, schoolId: number | null | undefined) {
+  return prisma.assignmentTemplate.findMany({
+    where: visibleWhere(schoolId),
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, name: true, schoolId: true, payload: true, createdBy: { select: { name: true } } },
+  })
+}
