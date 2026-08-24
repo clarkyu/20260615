@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getDb } from '@/lib/db'
 import { config } from '@/lib/config'
 import { timingSafeEqual } from '@/lib/safe-compare'
-import { seedAssignmentTemplate } from '@/lib/domain/template-seed'
+import { seedAssignmentTemplates } from '@/lib/domain/template-seed'
 
 // 维护端点(CRON_SECRET 鉴权):把代码内置的整卷题库种进 AssignmentTemplate
 // (如 2025 湖北专升本英语真题),老师随后在「新建作业 → 选模板」发布模拟考试。
@@ -10,7 +10,7 @@ import { seedAssignmentTemplate } from '@/lib/domain/template-seed'
 // 幂等(同校同名 → 更新 payload,题目勘误重跑即生效)。
 //   curl -X POST $APP/api/admin/seed-template \
 //     -H "authorization: Bearer $CRON_SECRET" -H "content-type: application/json" \
-//     -d '{"key":"exam-hubei-2025","schoolId":1}'              # dry-run 报告
+//     -d '{"key":"exam-hubei-2025","schoolId":1}'              # dry-run 报告(key="all" 全套)
 //   …同上 + '"apply":true'                                     # 执行
 export async function POST(req: NextRequest) {
   const secret = config.cronSecret()
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
   if (!Number.isInteger(body.schoolId)) return NextResponse.json({ ok: false, error: 'schoolId (integer) is required' }, { status: 400 })
 
   const prisma = await getDb()
-  const report = await seedAssignmentTemplate(prisma, body.key.trim(), body.schoolId as number, body.apply === true)
-  return NextResponse.json(report, { status: report.ok ? 200 : 422 })
+  const reports = await seedAssignmentTemplates(prisma, body.key.trim(), body.schoolId as number, body.apply === true)
+  const allOk = reports.every((r) => r.ok)
+  return NextResponse.json(reports.length === 1 ? reports[0] : { ok: allOk, reports }, { status: allOk ? 200 : 422 })
 }

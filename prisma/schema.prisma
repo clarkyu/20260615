@@ -673,6 +673,7 @@ model AssignmentTemplate {
   id          Int      @id @default(autoincrement())
   schoolId    Int?
   name        String
+  series      String?  // 系列(题库分组,如「专升本英语」);老模板/自存模板可空
   createdById Int?
   payload     String
   createdAt   DateTime @default(now())

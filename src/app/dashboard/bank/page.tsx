@@ -42,9 +42,25 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
   const papers = templates
     .map((tm) => {
       const payload = parseTemplatePayload(tm.payload)
-      return payload ? { id: tm.id, name: tm.name, official: tm.schoolId == null, creator: tm.createdBy?.name ?? null, sum: summarizeTemplatePayload(payload) } : null
+      return payload ? { id: tm.id, name: tm.name, series: tm.series, official: tm.schoolId == null, creator: tm.createdBy?.name ?? null, sum: summarizeTemplatePayload(payload) } : null
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
+  // 按系列分组(clark 定:试卷按系列组织,如「专升本英语」);无系列的归「未分组」殿后。
+  const paperGroups: { series: string | null; rows: typeof papers }[] = []
+  {
+    const byKey = new Map<string, (typeof paperGroups)[number]>()
+    for (const p of papers) {
+      const k = p.series ?? ''
+      let g = byKey.get(k)
+      if (!g) {
+        g = { series: p.series, rows: [] }
+        byKey.set(k, g)
+        paperGroups.push(g)
+      }
+      g.rows.push(p)
+    }
+    paperGroups.sort((a, b) => (a.series === null ? 1 : b.series === null ? -1 : a.series.localeCompare(b.series, 'zh-CN')))
+  }
 
   return (
     <div className="space-y-4 py-2">
@@ -70,11 +86,17 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
             <span className="text-sm font-normal text-muted-foreground">{papers.length}</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 pt-0">
+        <CardContent className="space-y-2 pt-0">
           {papers.length === 0 ? (
             <p className="py-2 text-sm text-muted-foreground">{t('bank.papersEmpty')}</p>
           ) : (
-            papers.map((p) => (
+            paperGroups.map((g) => (
+              <div key={g.series ?? '__none__'} className="space-y-1">
+                <p className="px-2 text-xs font-semibold text-muted-foreground">
+                  {g.series ?? t('bank.paperNoSeries')}
+                  <span className="ml-1 font-normal">{g.rows.length}</span>
+                </p>
+                {g.rows.map((p) => (
               <Link key={p.id} href={`/dashboard/teaching/new-assignment?template=${p.id}`} className="tap flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-accent">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
@@ -94,6 +116,8 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
                   <ChevronRight className="h-4 w-4" />
                 </span>
               </Link>
+                ))}
+              </div>
             ))
           )}
         </CardContent>

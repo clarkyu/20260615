@@ -21,7 +21,7 @@ export function findVisible(prisma: PrismaClient, id: number, schoolId: number |
   return prisma.assignmentTemplate.findFirst({ where: { id, ...visibleWhere(schoolId) } })
 }
 
-export function create(prisma: PrismaClient, data: { schoolId: number | null; name: string; createdById: number | null; payload: string }) {
+export function create(prisma: PrismaClient, data: { schoolId: number | null; name: string; series?: string | null; createdById: number | null; payload: string }) {
   return prisma.assignmentTemplate.create({ data })
 }
 
@@ -39,9 +39,9 @@ export function findByNameForSchool(prisma: PrismaClient, schoolId: number, name
   return prisma.assignmentTemplate.findFirst({ where: { schoolId, name }, select: { id: true } })
 }
 
-// 种子/维护用:整体替换模板 payload(题库勘误后重跑种子即生效)。
-export function updatePayload(prisma: PrismaClient, id: number, payload: string) {
-  return prisma.assignmentTemplate.update({ where: { id }, data: { payload } })
+// 种子/维护用:整体替换模板 payload 与系列(题库勘误后重跑种子即生效)。
+export function updateSeeded(prisma: PrismaClient, id: number, payload: string, series: string | null) {
+  return prisma.assignmentTemplate.update({ where: { id }, data: { payload, series } })
 }
 
 // 题库页「笔试试卷」区块:可见模板连 payload 一起取(逐份解析出环节/题型摘要)。
@@ -50,6 +50,6 @@ export function listVisibleWithPayload(prisma: PrismaClient, schoolId: number | 
   return prisma.assignmentTemplate.findMany({
     where: visibleWhere(schoolId),
     orderBy: { createdAt: 'desc' },
-    select: { id: true, name: true, schoolId: true, payload: true, createdBy: { select: { name: true } } },
+    select: { id: true, name: true, schoolId: true, series: true, payload: true, createdBy: { select: { name: true } } },
   })
 }
