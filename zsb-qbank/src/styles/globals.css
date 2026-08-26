@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+/* 学生端全局:单列、100dvh、安全区(SPEC §7.1)。基准字号 17px、行高 1.6。 */
+html {
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow-x: hidden;
+  @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+}

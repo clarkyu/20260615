@@ -1,0 +1,14 @@
+# M0:仅数据库。app 服务在 M7 上线里程碑加入。
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: zsb
+      POSTGRES_PASSWORD: zsb
+      POSTGRES_DB: zsb_qbank
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
