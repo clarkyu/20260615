@@ -1,0 +1,649 @@
+{
+  "schemaVersion": 1,
+  "id": "hubei-zsb-english-2025",
+  "title": "2025 年湖北省普通专升本《大学英语》真题",
+  "year": 2025,
+  "region": "湖北",
+  "source": "001_2025年湖北专升本真题.docx（教师整理稿；本文件已做标点、空格与编号的最小清理）",
+  "totalScore": 100,
+  "durationMinutes": 120,
+  "status": "draft",
+  "answerKeyNote": "参考答案与解析由 AI 依据原文整理：客观题答案可信度高；简答、翻译、作文的参考答案与评分要点须教师核定后再发布。accepted 数组允许多个正确答案，教师可在校对时增删。",
+  "sections": [
+    {
+      "order": 1,
+      "code": "cloze",
+      "title": "短文填空",
+      "instructions": "只填一词，每题 2 分，共 10 题，共 20 分。括号内为提示词，需变换为适当形式；无提示词处按语法填入一词。",
+      "itemType": "fill",
+      "scorePerItem": 2,
+      "groups": [
+        {
+          "order": 1,
+          "kind": "cloze",
+          "frame": "Chinese architect, Liu Jiakun, won the 2025 Pritzker Architecture Prize on the 4th of March. This is the {{1}} award of all in architecture. He is the second person from China to win it.\n\nLiu lives in Chengdu and has worked {{2}} 40 years. In 1999, he {{3}} his company, Jiakun Architects, and has completed over 30 projects, including small museums, big buildings, {{4}} city plans.\n\nLiu does not follow one style. He uses local materials and simple designs to make {{5}} buildings. After the 2008 Wenchuan earthquake, Liu made \"rebirth bricks\" from broken buildings — a symbol of hope.\n\nLiu also {{6}} for ordinary people. For example, west village in Chengdu, {{7}} in 2015, has a soccer field, a market, and paths for running, {{8}}, and cycling. Grass grows through the bricks, showing the beauty of daily life. Many people enjoy visiting this place.\n\n\"The purpose of architecture is to create {{9}} pleasant and wonderful environment. People's {{10}} is what we work for,\" he said.",
+          "items": [
+            {
+              "number": 1,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 1, "hint": "big", "maxWords": 1 },
+              "answer": { "accepted": ["biggest"] },
+              "explanation": "空前有 the，空后有 of all（在所有……之中），表示三者以上的比较，用形容词最高级 biggest。",
+              "knowledgeTags": ["形容词最高级"],
+              "difficulty": 2,
+              "contextSnippet": "This is the {{1}} award of all in architecture."
+            },
+            {
+              "number": 2,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 2, "maxWords": 1 },
+              "answer": { "accepted": ["for"] },
+              "explanation": "has worked 为现在完成时，与“一段时间”连用用介词 for；for 40 years 意为“四十年来”。",
+              "knowledgeTags": ["现在完成时", "介词 for + 时间段"],
+              "difficulty": 2,
+              "contextSnippet": "Liu lives in Chengdu and has worked {{2}} 40 years."
+            },
+            {
+              "number": 3,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 3, "hint": "start", "maxWords": 1 },
+              "answer": { "accepted": ["started"] },
+              "explanation": "In 1999 是明确的过去时间，谓语用一般过去时 started。",
+              "knowledgeTags": ["一般过去时"],
+              "difficulty": 1,
+              "contextSnippet": "In 1999, he {{3}} his company, Jiakun Architects, and has completed over 30 projects."
+            },
+            {
+              "number": 4,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 4, "maxWords": 1 },
+              "answer": { "accepted": ["and"] },
+              "explanation": "列举 small museums、big buildings、city plans 三项，最后一项前用并列连词 and。",
+              "knowledgeTags": ["并列连词"],
+              "difficulty": 1,
+              "contextSnippet": "including small museums, big buildings, {{4}} city plans."
+            },
+            {
+              "number": 5,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 5, "hint": "beauty", "maxWords": 1 },
+              "answer": { "accepted": ["beautiful"] },
+              "explanation": "make + 形容词 + 名词，修饰名词 buildings 需用形容词；名词 beauty 加后缀 -ful 变为 beautiful。",
+              "knowledgeTags": ["词形转换：名词变形容词", "后缀 -ful"],
+              "difficulty": 2,
+              "contextSnippet": "He uses local materials and simple designs to make {{5}} buildings."
+            },
+            {
+              "number": 6,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 6, "hint": "design", "maxWords": 1 },
+              "answer": { "accepted": ["designs"] },
+              "explanation": "主语 Liu 为第三人称单数，陈述一般事实用一般现在时，动词加 -s。",
+              "knowledgeTags": ["一般现在时", "第三人称单数"],
+              "difficulty": 2,
+              "contextSnippet": "Liu also {{6}} for ordinary people."
+            },
+            {
+              "number": 7,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 7, "hint": "finish", "maxWords": 1 },
+              "answer": { "accepted": ["finished"] },
+              "explanation": "west village 与 finish 是被动关系（村落被建成），过去分词短语 finished in 2015 作后置定语，相当于 which was finished in 2015。",
+              "knowledgeTags": ["非谓语动词", "过去分词作定语"],
+              "difficulty": 3,
+              "contextSnippet": "For example, west village in Chengdu, {{7}} in 2015, has a soccer field, a market, and paths for running, walking, and cycling."
+            },
+            {
+              "number": 8,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 8, "hint": "walk", "maxWords": 1 },
+              "answer": { "accepted": ["walking"] },
+              "explanation": "与 running、cycling 并列，介词 for 后接动名词，用 walking。",
+              "knowledgeTags": ["非谓语动词", "动名词", "并列结构"],
+              "difficulty": 1,
+              "contextSnippet": "paths for running, {{8}}, and cycling."
+            },
+            {
+              "number": 9,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 9, "maxWords": 1 },
+              "answer": { "accepted": ["a"] },
+              "explanation": "environment 为可数名词单数，泛指“一个宜人而美好的环境”，用不定冠词；pleasant 以辅音音素开头，故用 a。",
+              "knowledgeTags": ["冠词"],
+              "difficulty": 2,
+              "contextSnippet": "The purpose of architecture is to create {{9}} pleasant and wonderful environment."
+            },
+            {
+              "number": 10,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 10, "hint": "happy", "maxWords": 1 },
+              "answer": { "accepted": ["happiness"] },
+              "explanation": "People's 为名词所有格，其后需接名词作主语；形容词 happy 变名词 happiness（-y 变 -i 再加 -ness）。",
+              "knowledgeTags": ["词形转换：形容词变名词", "后缀 -ness"],
+              "difficulty": 2,
+              "contextSnippet": "People's {{10}} is what we work for."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "code": "reorder",
+      "title": "连词成句",
+      "instructions": "每题 2 分，共 6 小题，共 12 分。将所给词块连成完整、正确的句子。",
+      "itemType": "reorder",
+      "scorePerItem": 2,
+      "groups": [
+        {
+          "order": 1,
+          "kind": "standalone",
+          "items": [
+            {
+              "number": 11,
+              "type": "reorder",
+              "score": 2,
+              "content": { "chunks": ["her homework", "She", "has completed."] },
+              "answer": { "accepted": ["She has completed her homework."] },
+              "explanation": "主语 She + 现在完成时谓语 has completed + 宾语 her homework。",
+              "knowledgeTags": ["基本语序", "现在完成时"],
+              "difficulty": 1
+            },
+            {
+              "number": 12,
+              "type": "reorder",
+              "score": 2,
+              "content": { "chunks": ["your plan", "tell me", "Can you ?"] },
+              "answer": { "accepted": ["Can you tell me your plan?"] },
+              "explanation": "情态动词 Can 置于句首构成一般疑问句；tell 接双宾语 tell sb sth。",
+              "knowledgeTags": ["一般疑问句", "双宾语"],
+              "difficulty": 1
+            },
+            {
+              "number": 13,
+              "type": "reorder",
+              "score": 2,
+              "content": { "chunks": ["me", "explain", "Let", "how this works."] },
+              "answer": { "accepted": ["Let me explain how this works."] },
+              "explanation": "祈使句 Let me do sth；explain 后接宾语从句 how this works（陈述语序）。",
+              "knowledgeTags": ["祈使句", "宾语从句"],
+              "difficulty": 2
+            },
+            {
+              "number": 14,
+              "type": "reorder",
+              "score": 2,
+              "content": { "chunks": ["went to", "and I", "My friends", "the same lecture."] },
+              "answer": { "accepted": ["My friends and I went to the same lecture."] },
+              "explanation": "并列主语中“我”习惯放在最后，即 My friends and I；谓语 went to，宾语 the same lecture。",
+              "knowledgeTags": ["并列主语", "基本语序"],
+              "difficulty": 2
+            },
+            {
+              "number": 15,
+              "type": "reorder",
+              "score": 2,
+              "content": { "chunks": ["young people", "Deepseek", "was established in 2023", "by a group of."] },
+              "answer": { "accepted": ["Deepseek was established in 2023 by a group of young people."] },
+              "explanation": "被动语态 was established，时间状语 in 2023，by 引出动作执行者 a group of young people。",
+              "knowledgeTags": ["被动语态"],
+              "difficulty": 2
+            },
+            {
+              "number": 16,
+              "type": "reorder",
+              "score": 2,
+              "content": { "chunks": ["to improve", "is a plan", "China's technology and industries", "\"Made in China 2025\"."] },
+              "answer": { "accepted": ["\"Made in China 2025\" is a plan to improve China's technology and industries."] },
+              "explanation": "主系表结构 ... is a plan；不定式短语 to improve China's technology and industries 作后置定语修饰 a plan。",
+              "knowledgeTags": ["主系表结构", "不定式作定语"],
+              "difficulty": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "code": "reading_fill",
+      "title": "阅读填词",
+      "instructions": "共 10 小题，每小题 2 分，满分 20 分。根据文章内容完成填空，每空填 1 个词。",
+      "itemType": "fill",
+      "scorePerItem": 2,
+      "groups": [
+        {
+          "order": 1,
+          "kind": "reading_fill",
+          "stimulus": {
+            "kind": "passage",
+            "title": "Passage 1",
+            "body": "The Dong Grand Choir is a unique musical tradition of the Dong people in China. For centuries, the Dong people, who live in mountain villages of Guizhou, Guangxi and Hunan, have used these songs to share stories, teach moral values, and celebrate nature. Unlike most choirs, there is no conductor or written music — the harmony is created naturally by singers of all ages.\n\nThe songs are divided into two types: Galao and Gaxia. Galao are performed at festivals and tell stories about history or love, while Gaxia are short tunes people sing during daily work. The most amazing part is their singing style, combining different voice parts. Traditionally, children learn these songs by listening to elders while sitting around a big fire at night.\n\nHowever, this tradition faces challenges. With many young people moving to cities for jobs, fewer villages are there to keep the singing tradition alive. To protect the tradition, local schools have started choir classes. The Dong Grand Festival now attracts tourists worldwide every year.\n\nThe Dong people believe that \"a song is more valuable than rice\", showing how deeply music is rooted in their culture."
+          },
+          "frame": "Type of Tradition: The Dong Grand Choir is a unique {{17}} tradition of the Dong people in China.\n\nUnique Feature: Unlike most choirs, the Dong Grand Choir has no conductor or {{18}} music.\n\nPassing-down of Tradition: Children learn the songs by {{19}} to elders around a big fire at night.\n\nChallenges: There are {{20}} villagers to keep the tradition alive.\n\nAction Taken: Local schools have started choir {{21}} to protect the tradition.",
+          "items": [
+            {
+              "number": 17,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 17, "maxWords": 1 },
+              "answer": { "accepted": ["musical"] },
+              "explanation": "对应原文首句 a unique musical tradition。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 1,
+              "contextSnippet": "Type of Tradition: The Dong Grand Choir is a unique {{17}} tradition of the Dong people in China."
+            },
+            {
+              "number": 18,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 18, "maxWords": 1 },
+              "answer": { "accepted": ["written"] },
+              "explanation": "对应原文 there is no conductor or written music。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 1,
+              "contextSnippet": "Unique Feature: Unlike most choirs, the Dong Grand Choir has no conductor or {{18}} music."
+            },
+            {
+              "number": 19,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 19, "maxWords": 1 },
+              "answer": { "accepted": ["listening"] },
+              "explanation": "对应原文 learn these songs by listening to elders；介词 by 后接动名词。",
+              "knowledgeTags": ["细节定位", "动名词"],
+              "difficulty": 1,
+              "contextSnippet": "Passing-down of Tradition: Children learn the songs by {{19}} to elders around a big fire at night."
+            },
+            {
+              "number": 20,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 20, "maxWords": 1 },
+              "answer": { "accepted": ["fewer"] },
+              "explanation": "对应原文 fewer villages are there to keep the singing tradition alive；题干将 villages 改为 villagers，可数名词数量减少用 fewer。",
+              "knowledgeTags": ["细节定位", "比较级 fewer"],
+              "difficulty": 2,
+              "contextSnippet": "Challenges: There are {{20}} villagers to keep the tradition alive."
+            },
+            {
+              "number": 21,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 21, "maxWords": 1 },
+              "answer": { "accepted": ["classes"] },
+              "explanation": "对应原文 local schools have started choir classes。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 1,
+              "contextSnippet": "Action Taken: Local schools have started choir {{21}} to protect the tradition."
+            }
+          ]
+        },
+        {
+          "order": 2,
+          "kind": "reading_fill",
+          "stimulus": {
+            "kind": "passage",
+            "title": "Passage 2",
+            "body": "When people disagree, it can be hard to find common ground. Research on how people handle differences has uncovered useful ways to make communication better.\n\n**What the Studies Found**\n\nA survey of 1,912 people found that we often guess other's feelings wrong. For example, we often think that others want to argue, but the fact is that they just want to learn. This proves that most people are more open than we think.\n\n**Easy Steps to Try**\n\n- Asking questions: \"Can you tell me why you feel that way?\" Asking a question like this makes others feel more willing to share their ideas. In a Stanford test, this simple question helped 40% more people listen to different ideas.\n- Telling stories: Sharing your life stories works very well. In the 2018 US elections, volunteers talked to voters about immigration. Those who shared both personal stories and facts changed 5% more voters' minds in just 11 minutes.\n- Being polite: Being rude makes people stop listening; staying calm and kind helps others understand your ideas. Remember: Being polite costs nothing but wins everything.\n\n**The Final Thought**: As a famous thinker said, different opinions aren't just noise, they're teachers. By asking questions, sharing stories, and being polite, we turn differences into chances to grow."
+          },
+          "frame": "**How to Deal with Disagreements**\n\nFinding: A survey of 1,912 people found that we often guess other's feeling {{22}}.\n\nSolutions: The three easy steps to try include {{23}} questions, telling stories and being {{24}}.\n\nExample: Volunteers who shared both personal stories and facts changed 5% more voters' minds about {{25}}.\n\nFinal thought: Since different opinions are teachers, we can turn differences into chances to {{26}}.",
+          "items": [
+            {
+              "number": 22,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 22, "maxWords": 1 },
+              "answer": { "accepted": ["wrong"] },
+              "explanation": "对应原文 we often guess other's feelings wrong。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 1,
+              "contextSnippet": "Finding: A survey of 1,912 people found that we often guess other's feeling {{22}}."
+            },
+            {
+              "number": 23,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 23, "maxWords": 1 },
+              "answer": { "accepted": ["asking"] },
+              "explanation": "对应原文小标题 Asking questions；且与 telling、being 并列，用动名词形式。",
+              "knowledgeTags": ["细节定位", "并列结构", "动名词"],
+              "difficulty": 1,
+              "contextSnippet": "Solutions: The three easy steps to try include {{23}} questions, telling stories and being polite."
+            },
+            {
+              "number": 24,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 24, "maxWords": 1 },
+              "answer": { "accepted": ["polite"] },
+              "explanation": "对应原文 Being polite。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 1,
+              "contextSnippet": "Solutions: The three easy steps to try include asking questions, telling stories and being {{24}}."
+            },
+            {
+              "number": 25,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 25, "maxWords": 1 },
+              "answer": { "accepted": ["immigration"] },
+              "explanation": "对应原文 volunteers talked to voters about immigration。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 2,
+              "contextSnippet": "Example: Volunteers who shared both personal stories and facts changed 5% more voters' minds about {{25}}."
+            },
+            {
+              "number": 26,
+              "type": "fill",
+              "score": 2,
+              "content": { "blank": 26, "maxWords": 1 },
+              "answer": { "accepted": ["grow"] },
+              "explanation": "对应原文末句 turn differences into chances to grow。",
+              "knowledgeTags": ["细节定位", "原词复现"],
+              "difficulty": 1,
+              "contextSnippet": "Final thought: Since different opinions are teachers, we can turn differences into chances to {{26}}."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "code": "reading_qa",
+      "title": "阅读问答",
+      "instructions": "本大题共 10 小题，每小题 2 分，共 20 分。根据短文内容回答问题；翻译题将画线句子译成汉语。",
+      "itemType": "short_answer",
+      "scorePerItem": 2,
+      "groups": [
+        {
+          "order": 1,
+          "kind": "reading_qa",
+          "stimulus": {
+            "kind": "passage",
+            "title": "Passage 3",
+            "body": "Anna and her friends decided to take a journey along the river's path. They rented a small boat and packed food, drinks, and blankets for the day. The sun was shining brightly, making the river glitter like a sea of stars. The gentle breeze carried the scent of blooming flowers from the riverbanks nearby. As they paddled, birds flew overhead, chirping songs that echoed in the air. They enjoyed watching the ducks swim and play in the clear, sparkling water. Anna loved the calming sound of the river as it flowed past them. It felt like a perfect escape from the busy world they knew so well. Soon, they reached a secluded spot where they decided to stop for lunch. They spread out the blankets and sat down, enjoying sandwiches and fresh fruit. Laughter filled the air as they shared stories and recalled past adventures together. The river flowed gently by, listening quietly to their cheerful conversations. Afterwards, they continued their journey, discovering new sights. They saw a family of turtles basking on rocks under the warm afternoon sun. Anna felt grateful for this peaceful day spent with nature and good friends. As evening approached, they knew it was time to head back home. They rowed slowly, watching the sunset paint the sky with shades of red and gold. The river shimmered one last time before the stars began to twinkle above. Anna and her friends promised to return to the river for another journey soon. Their hearts were full of joy and gratitude for this unforgettable day together."
+          },
+          "items": [
+            {
+              "number": 27,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "What did Anna and her girl friends pack for their boat journey?" },
+              "answer": {
+                "reference": "They packed food, drinks, and blankets (for the day).",
+                "keyPoints": ["food", "drinks", "blankets"],
+                "rubric": "三项要点全部答出得 2 分；答出两项得 1 分；一项及以下不得分。语法小错不扣分。"
+              },
+              "explanation": "定位原文第二句 packed food, drinks, and blankets for the day。",
+              "knowledgeTags": ["细节理解", "what 问句"],
+              "difficulty": 1
+            },
+            {
+              "number": 28,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "How did Anna feel about the calming sound of the river?" },
+              "answer": {
+                "reference": "She loved it. / Anna loved the calming sound of the river.",
+                "keyPoints": ["loved / liked / enjoyed"],
+                "rubric": "答出 loved（或 liked、enjoyed 等同义表达）得 2 分；仅笼统答 good、happy 等得 1 分。"
+              },
+              "explanation": "定位原文 Anna loved the calming sound of the river as it flowed past them。",
+              "knowledgeTags": ["细节理解", "how 问句"],
+              "difficulty": 1
+            },
+            {
+              "number": 29,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "Where did Anna and her friends stop for lunch?" },
+              "answer": {
+                "reference": "At a secluded spot (along the river).",
+                "keyPoints": ["a secluded spot"],
+                "rubric": "答出 a secluded spot 得 2 分；仅答 by the river 或 on the bank 得 1 分。"
+              },
+              "explanation": "定位原文 they reached a secluded spot where they decided to stop for lunch。",
+              "knowledgeTags": ["细节理解", "where 问句"],
+              "difficulty": 2
+            },
+            {
+              "number": 30,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "What promise did Anna and her friends make at the end of their journey?" },
+              "answer": {
+                "reference": "They promised to return to the river for another journey soon.",
+                "keyPoints": ["return to the river", "another journey / again"],
+                "rubric": "答出“再回到河边/再来一次旅行”得 2 分；只答 return 或 come back 而无对象得 1 分。"
+              },
+              "explanation": "定位原文倒数第二句 promised to return to the river for another journey soon。",
+              "knowledgeTags": ["细节理解", "what 问句"],
+              "difficulty": 1
+            },
+            {
+              "number": 31,
+              "type": "translate_e2c",
+              "score": 2,
+              "content": { "source": "Afterwards, they continued their journey, discovering new sights." },
+              "answer": {
+                "reference": "之后，他们继续旅程，一路发现新的景色。",
+                "keyPoints": ["之后 / 随后", "继续旅程", "发现新景色"],
+                "rubric": "三个意群完整、表达通顺得 2 分；漏译或误译一处得 1 分；两处及以上不得分。"
+              },
+              "explanation": "afterwards 意为“之后”；discovering new sights 为现在分词短语作伴随状语，可译为“一路发现新景色”。",
+              "knowledgeTags": ["英译汉", "分词作伴随状语"],
+              "difficulty": 2
+            }
+          ]
+        },
+        {
+          "order": 2,
+          "kind": "reading_qa",
+          "stimulus": {
+            "kind": "letter",
+            "title": "Passage 4",
+            "body": "Dear Jane,\n\nSorry for the late reply. I've been quite busy in the past months, and finally today I'm actually doing something about it. Since we last saw each other, I've unpacked my bags in three different cities, thanks to my job.\n\nI went from London to Prague to set up a new regional office there. Winter was really hard, with -15°C in the mornings and dark really early in the evenings.\n\nFrom there I was on another three-month mission to ensure the set-up of the office in New York. I did every visit you can think of when I wasn't working and spent most of my salary on eating out.\n\nThen I was posted to Los Angeles in California. I could definitely get used to that kind of outdoor, beach lifestyle... But, as you know, I had to fly back to London to see my boyfriend Michael every other weekend.\n\nMichael and I are getting married, which is also why I wanted to write. I can't get married without my oldest friend there! The marriage ceremony is going to be at home in London in September. I hope you can come!\n\nAnyway, tell me all your news, and I'll write back soon!\n\nLots of love,\nKath"
+          },
+          "items": [
+            {
+              "number": 32,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "For what did Kath feel sorry?" },
+              "answer": {
+                "reference": "For the late reply. / She felt sorry for replying so late.",
+                "keyPoints": ["late reply"],
+                "rubric": "答出“回信晚了”得 2 分；答“太忙”而未点明回信得 1 分。"
+              },
+              "explanation": "定位信首 Sorry for the late reply。",
+              "knowledgeTags": ["细节理解", "书信体阅读"],
+              "difficulty": 1
+            },
+            {
+              "number": 33,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "Why did Kath go to Prague?" },
+              "answer": {
+                "reference": "To set up a new regional office there.",
+                "keyPoints": ["set up", "a new regional office"],
+                "rubric": "答出 set up a (new regional) office 得 2 分；只答 for work / for her job 得 1 分。"
+              },
+              "explanation": "定位原文 I went from London to Prague to set up a new regional office there。",
+              "knowledgeTags": ["细节理解", "why 问句"],
+              "difficulty": 1
+            },
+            {
+              "number": 34,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "On what did Kath spend most of her salary in New York?" },
+              "answer": {
+                "reference": "On eating out.",
+                "keyPoints": ["eating out"],
+                "rubric": "答出 eating out 得 2 分；答 food / meals 得 1 分。"
+              },
+              "explanation": "定位原文 spent most of my salary on eating out。",
+              "knowledgeTags": ["细节理解"],
+              "difficulty": 1
+            },
+            {
+              "number": 35,
+              "type": "short_answer",
+              "score": 2,
+              "content": { "question": "Why did Kath have to fly back to London every other week?" },
+              "answer": {
+                "reference": "To see her boyfriend Michael.",
+                "keyPoints": ["see her boyfriend", "Michael"],
+                "rubric": "答出去看男友（Michael）得 2 分；只答 to see someone / to go home 得 1 分。"
+              },
+              "explanation": "定位原文 I had to fly back to London to see my boyfriend Michael every other weekend。",
+              "knowledgeTags": ["细节理解", "why 问句"],
+              "difficulty": 1
+            },
+            {
+              "number": 36,
+              "type": "translate_e2c",
+              "score": 2,
+              "content": { "source": "The marriage ceremony is going to be at home in London in September." },
+              "answer": {
+                "reference": "婚礼将于九月在伦敦的家里举行。",
+                "keyPoints": ["婚礼", "九月", "伦敦的家里"],
+                "rubric": "三个信息点完整、表达通顺得 2 分；漏译或误译一处得 1 分；两处及以上不得分。"
+              },
+              "explanation": "be going to 表将来；at home in London 指“在伦敦的家里”。",
+              "knowledgeTags": ["英译汉", "be going to"],
+              "difficulty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "code": "translate_c2e",
+      "title": "汉译英",
+      "instructions": "每题 3 分，共 6 小题，共 18 分。根据汉语意思，用括号内提示词的适当形式补全英文句子，每空不超过两个词。",
+      "itemType": "translate_c2e_fill",
+      "scorePerItem": 3,
+      "groups": [
+        {
+          "order": 1,
+          "kind": "standalone",
+          "items": [
+            {
+              "number": 37,
+              "type": "translate_c2e_fill",
+              "score": 3,
+              "content": { "zh": "如果下雪，他们会取消活动。", "frame": "They will cancel the event if {{blank}}.", "hint": "snow", "maxWords": 2 },
+              "answer": { "accepted": ["it snows"] },
+              "explanation": "if 引导的条件状语从句用一般现在时表将来（主将从现）；天气用 it 作主语，snow 作动词加 -s。",
+              "knowledgeTags": ["条件状语从句", "主将从现"],
+              "difficulty": 2
+            },
+            {
+              "number": 38,
+              "type": "translate_c2e_fill",
+              "score": 3,
+              "content": { "zh": "这完美的日出将天空染成了粉橙交织的画卷。", "frame": "This {{blank}} painted the sky in pink and orange hues.", "hint": "sunrise", "maxWords": 2 },
+              "answer": { "accepted": ["perfect sunrise"] },
+              "explanation": "“完美的日出”译为形容词 + 名词 perfect sunrise，与指示词 This 共同作主语。",
+              "knowledgeTags": ["形容词修饰名词", "名词短语作主语"],
+              "difficulty": 1
+            },
+            {
+              "number": 39,
+              "type": "translate_c2e_fill",
+              "score": 3,
+              "content": { "zh": "午饭后，我该喝养生茶，不喝咖啡了。", "frame": "I started drinking herbal tea instead of coffee {{blank}}.", "hint": "lunch", "maxWords": 2 },
+              "answer": { "accepted": ["after lunch"] },
+              "explanation": "“午饭后”用介词短语 after lunch 作时间状语，置于句末。",
+              "knowledgeTags": ["介词短语作时间状语"],
+              "difficulty": 1
+            },
+            {
+              "number": 40,
+              "type": "translate_c2e_fill",
+              "score": 3,
+              "content": { "zh": "小明教会了我如何使用英文词典。", "frame": "Xiaoming taught me how {{blank}} an English dictionary.", "hint": "use", "maxWords": 2 },
+              "answer": { "accepted": ["to use"] },
+              "explanation": "“如何使用”用疑问词 + 不定式结构 how to use，作 taught 的直接宾语。",
+              "knowledgeTags": ["疑问词 + 不定式"],
+              "difficulty": 1
+            },
+            {
+              "number": 41,
+              "type": "translate_c2e_fill",
+              "score": 3,
+              "content": { "zh": "你能保持安静吗？我需要集中精力。", "frame": "Can you {{blank}}? I need to concentrate.", "hint": "quiet", "maxWords": 2 },
+              "answer": { "accepted": ["keep quiet", "be quiet", "stay quiet"] },
+              "explanation": "“保持安静”译为 keep / stay / be + quiet，情态动词 Can 后接动词原形。",
+              "knowledgeTags": ["系动词 + 形容词", "情态动词"],
+              "difficulty": 1
+            },
+            {
+              "number": 42,
+              "type": "translate_c2e_fill",
+              "score": 3,
+              "content": { "zh": "依靠每天用语言应用软件打卡，詹姆斯的汉语水平稳步提升。", "frame": "Jame's Chinese is {{blank}} through daily practice with language apps.", "hint": "improve", "maxWords": 2 },
+              "answer": { "accepted": ["steadily improving", "improving steadily"] },
+              "explanation": "is 后接现在分词构成现在进行时，表示正在持续的变化；“稳步”用副词 steadily 修饰。",
+              "knowledgeTags": ["现在进行时", "副词修饰动词"],
+              "difficulty": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "code": "writing",
+      "title": "作文",
+      "instructions": "共 1 题，10 分。",
+      "itemType": "writing",
+      "scorePerItem": 10,
+      "groups": [
+        {
+          "order": 1,
+          "kind": "standalone",
+          "items": [
+            {
+              "number": 43,
+              "type": "writing",
+              "score": 10,
+              "content": {
+                "genre": "email",
+                "persona": "李华",
+                "prompt": "国外某乐队想参加在东湖举办的音乐节，请你以委员会成员李华的名义写一封邮件。邮件格式不限，不少于 40 词。",
+                "requirements": ["表示欢迎", "说明音乐会将在 7 月 18—20 日举行", "请艺术团准备 2—3 个节目参加表演"],
+                "minWords": 40
+              },
+              "answer": {
+                "sample": "Dear Sir or Madam,\n\nI am Li Hua, a member of the festival committee. We are delighted to learn that your band would like to join the East Lake Music Festival, and we warmly welcome you.\n\nThe festival will be held from July 18 to July 20. We would be grateful if your band could prepare two or three programs for the performance. Please let us know if you need any help, so that we can arrange everything in advance.\n\nWe look forward to seeing you at East Lake.\n\nBest regards,\nLi Hua",
+                "rubric": [
+                  { "name": "内容要点", "maxScore": 3, "desc": "三项要求各 1 分：表示欢迎；说明 7 月 18—20 日举行；请对方准备 2—3 个节目。" },
+                  { "name": "语言准确", "maxScore": 4, "desc": "语法、拼写、用词基本正确得 3—4 分；错误较多但不影响理解得 2 分；错误严重影响理解得 0—1 分。" },
+                  { "name": "结构与格式", "maxScore": 2, "desc": "有称呼、正文、结尾署名，段落清晰、衔接自然得 2 分；格式残缺得 1 分。" },
+                  { "name": "字数与整体", "maxScore": 1, "desc": "不少于 40 词且行文连贯得 1 分；少于 40 词不得此分。" }
+                ]
+              },
+              "explanation": "应用文邮件写作：先自我介绍与欢迎，再交代时间，最后提出节目要求并礼貌收尾。注意人称为委员会成员李华，语气正式友好。",
+              "knowledgeTags": ["应用文写作", "邮件格式", "邀请与安排"],
+              "difficulty": 3
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+name: zsb-qbank CI
+
+# 子项目 zsb-qbank(移动题库)的独立门禁:lint + 单测 + 真库迁移/种子断言 + 构建。
+# 只在子目录变更时触发;与宿主 ci.yml 互不影响。
+on:
+  push:
+    branches: [main]
+    paths: ['zsb-qbank/**', '.github/workflows/zsb-ci.yml']
+  pull_request:
+    paths: ['zsb-qbank/**', '.github/workflows/zsb-ci.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zsb-qbank
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zsb
+          POSTGRES_PASSWORD: zsb
+          POSTGRES_DB: zsb_qbank
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zsb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://zsb:zsb@localhost:5432/zsb_qbank
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef
+      AUTH_DEV_LOGIN: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: zsb-qbank/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm db:migrate
+      # 种子跑两遍:第二遍证幂等(计数断言内建于脚本,失败即非零退出)。
+      - run: pnpm seed
+      - run: pnpm seed
+      - run: pnpm build
