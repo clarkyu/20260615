@@ -2,9 +2,9 @@ import { asc } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { papers } from '@/lib/db/schema'
 import { getSession } from '@/lib/auth/session'
-import { StartPracticeButton, DevLoginButton } from '@/components/home/StartPractice'
+import { StartAttemptButton, DevLoginButton } from '@/components/home/StartPractice'
 
-// 学生端首页(M2):试卷列表 + 「开始练习」入口。任务(assignment)列表在 M3/M6 接入。
+// 学生端首页(M3):试卷列表 + 「开始练习 / 模拟考试」入口。任务(assignment)列表在 M5/M6 接入。
 // M2 先列全部试卷(发布流转在 M5 落地后改为学生仅见 published,见 docs/DECISIONS.md D7)。
 export const dynamic = 'force-dynamic'
 
@@ -56,14 +56,13 @@ export default async function HomePage() {
           ) : (
             rows.map((p) => (
               <div key={p.id} className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{p.title}</p>
-                    <p className="mt-1 text-sm text-neutral-500">
-                      满分 {p.totalScore} 分 · 建议 {p.durationMinutes} 分钟
-                    </p>
-                  </div>
-                  <StartPracticeButton paperId={p.id} />
+                <p className="truncate font-medium">{p.title}</p>
+                <p className="mt-1 text-sm text-neutral-500">
+                  满分 {p.totalScore} 分 · 考试限时 {p.durationMinutes} 分钟
+                </p>
+                <div className="mt-3 flex justify-end gap-2">
+                  <StartAttemptButton paperId={p.id} mode="exam" label="模拟考试" variant="outline" />
+                  <StartAttemptButton paperId={p.id} mode="practice" label="开始练习" />
                 </div>
               </div>
             ))
