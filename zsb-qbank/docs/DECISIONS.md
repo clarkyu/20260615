@@ -40,3 +40,20 @@ published、教师可见全部。`POST /api/attempts` 同步收紧。
 正式 Playwright e2e 入 CI 仍待 M3(需要可复位的测试数据库);M2 以本地 dev server +
 390×844 视口真浏览器手工冒烟覆盖:登录→开卷→填空→对答案→反馈卡→答题卡跳转→
 刷新恢复,并在 PROGRESS 写明真机(微信)验收步骤。
+
+## D9 自由模考可重复,任务考试的不可重做延后到任务链路(2026-08-27)
+SPEC §6「考试默认不可重做」针对教师发布的任务考试;学生自发的模考(paperId + mode
+=exam,无 assignmentId)不受限——已交的不挡新开,未交的续答同一 attempt(倒计时
+不重置,即断线续答)。assignment 考试的不可重做与教师授权二次作答在 M5/M6 任务链路强制。
+
+## D10 逾期自动交卷 = instrumentation 定时清扫 + 请求惰性兜底(2026-08-27)
+§9.5 的「工作线程」在 Next.js standalone 部署下用 src/instrumentation.ts 实现:
+服务启动后每 60 秒 sweepOverdueExams(截止 + 60 秒宽限已过的 in_progress 考试逐个
+submitAttempt(auto));GET attempt / result 命中逾期时也惰性交卷,双保险。M4 引入
+ai_jobs 工作线程后可并入同一循环。
+
+## D11 e2e 入 CI:chromium 引擎跑双移动视口,串行执行(2026-08-27)
+CI 只安装 chromium:iPhone 13 描述符默认 WebKit,两个 project 显式覆盖
+browserName='chromium'(视口/UA/触摸仿真保留,引擎差异靠微信真机验收覆盖)。
+workers=1 串行:模考流程同一开发账号会续答同一 attempt,并行会互抢考试。
+e2e 步骤对 next start 的真服务执行,库就是同 job 已种子的 postgres:16 容器。

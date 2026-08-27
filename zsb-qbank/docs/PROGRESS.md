@@ -91,3 +91,51 @@ M2:判分引擎(§5.1–5.2 + ≥60 表驱动用例)、作答骨架(AnswerBar/En
 ### 下一步
 M3:考试模式(服务端 deadline_at 计时、交卷锁定、成绩页)+ assignment 任务发布/
 作答入口 + CI e2e。
+
+## M3 考试模式(2026-08-27)
+
+### M3 验收自检
+- [通过] attempt 生命周期:开考(POST /api/attempts mode=exam,服务端设
+  deadlineAt = now + 试卷 durationMinutes 并返回)→ 作答(同 M2 离线同步链路)→
+  交卷(POST …/submit,幂等)→ 成绩(GET …/result)。自由模考断线续答:未交的
+  同卷考试续用同一 attempt、倒计时不重置(curl 实测 resumed:true 返回同 id;
+  已交的不挡新开——docs/DECISIONS.md D9)。
+- [通过] 服务端权威倒计时(硬约束 6):GET attempt 返回 deadlineAt + serverNow,
+  客户端用时钟偏移校正后只做显示;顶栏 mono 倒计时,剩 5 分钟变红并一次性弹提醒,
+  到 0 自动 冲队列 → 交卷 → 进成绩页。
+- [通过] 截止 + 60 秒宽限(§9.5):宽限内仍收保存(弱网最后一批同步);过宽限
+  PUT responses 返回 409 deadline_passed(curl 实测);表驱动边界用例 3 条。
+- [通过] 逾期未交自动提交:instrumentation 每 60 秒清扫 + GET attempt/result 惰性
+  兜底(D10)。curl 实测:回拨 deadline 后 GET 即变 submitted,result 标
+  autoSubmitted、43 题按 empty 0 分出分;定时线程另实测——插入逾期 attempt 后
+  60 秒内被清扫为 submitted,服务日志见「[sweep] 自动交卷 1 份逾期考试」。
+- [通过] 交卷确认(§7.4):二次确认框列出未作答题数;失败保留本地数据、可重试
+  (「答案已存在手机上,不会丢」)。考试模式无「对答案」按钮,check 接口 403。
+- [通过] 成绩页(/result/[attemptId]):总分 + 分大题小计(得分/满分/待评数)+
+  逐题色块(对/错/待评/未答),点开看 我的答案/得分;主观题已答标「等 AI 评分」
+  (M4 接入)。**未发布的考试不下发参考答案与解析**(revealAnswers 纯函数 +
+  e2e 断言 + curl 全文检查无 accepted 字段);练习模式 result 全量可见。
+- [通过] 判分复用 src/lib/grading 纯函数(硬约束 2),交卷不开容错;新增
+  deadline/aggregate 纯函数 17 用例,共 114 测试全绿。
+- [通过] e2e 入 CI(D11):模考闭环(登录→开卷→倒计时可见→无「对答案」→作答→
+  确认框列 42 题未答→交卷→成绩页 2/20 分→未发布无参考答案)+ 首页无横向滚动,
+  iPhone 13 / Pixel 5 双视口对 next start 真服务本地全过;zsb-ci 增 e2e 步骤。
+- [通过] 门禁:pnpm lint、tsc --noEmit、pnpm test(114)、pnpm build 全绿;
+  /play 首屏 146 kB、/result 108 kB(< 200 KB,硬约束 5)。
+- [需真机] 120 分钟倒计时与服务端一致 —— 步骤:手机开一场模考,对照电脑上
+  另一登录端(或 result 接口 deadlineAt),改手机系统时间 ±10 分钟,确认页面
+  倒计时不受本机时间影响(刷新后仍按服务端算)。
+- [需真机] 断网 5 分钟后恢复不丢答案 —— 步骤:模考中作答数题→开飞行模式 5 分钟
+  →继续作答(顶栏变「离线,已存本机」)→关飞行模式→顶栏回「已保存」→交卷,
+  成绩页里断网期间的作答都在。
+- [需真机] 到时自动交卷 —— 步骤:(可让老师把某场 deadline 改近)等倒计时到 0,
+  页面自动进成绩页;或关页面等 2 分钟后重进,直接落在成绩页且标「到时自动交卷」。
+
+### 未决问题
+- 成绩页主观题在 M4 前始终「等 AI 评分」;总分只含客观题(页面已注明会更新)。
+- 教师发布成绩(released 流转)、任务考试(assignment)与不可重做授权在 M5/M6。
+- sweep 线程与 M4 的 ai_jobs 消费循环合并为一个后台 worker(D10 预留)。
+
+### 下一步
+M4:AI 评分与解析(ai_jobs 工作线程、三类主观题评分提示词、translate_c2e_fill
+兜底、needs_review 分流、成本日志)。
