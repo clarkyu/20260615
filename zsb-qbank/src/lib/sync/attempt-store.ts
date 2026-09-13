@@ -30,6 +30,10 @@ export interface GradedFeedback {
   fullScore: number
   accepted: string[]
   explanation: string | null
+  /** AI 判分的中文评语(主观题) */
+  feedback?: string | null
+  /** 常见错答(§5.4,客观题答错时) */
+  commonMistakes?: string[]
 }
 
 interface AttemptState {

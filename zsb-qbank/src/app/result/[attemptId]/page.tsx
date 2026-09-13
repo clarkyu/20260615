@@ -31,6 +31,7 @@ const CHIP: Record<string, string> = {
   wrong: 'border-red-400 bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300',
   too_many_words: 'border-red-400 bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300',
   pending: 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  needs_review: 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
   graded: 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   empty: 'border-neutral-300 text-neutral-400 dark:border-neutral-700',
 }
@@ -39,7 +40,8 @@ const VERDICT_LABEL: Record<string, string> = {
   wrong: '答错了',
   too_many_words: '超出词数',
   pending: '等 AI 评分',
-  graded: '已评分',
+  needs_review: '待老师评分',
+  graded: 'AI 已评分',
   empty: '没作答',
   error: '题目数据异常',
 }
@@ -112,7 +114,7 @@ export default function ResultPage() {
           <span className="text-base font-normal text-neutral-500"> / {data.total.fullScore} 分</span>
         </p>
         <p className="mt-1 text-sm text-neutral-500">
-          {data.total.pending > 0 ? `还有 ${data.total.pending} 题等 AI 评分,总分会更新。` : '所有已判题目都算进来了。'}
+          {data.total.pending > 0 ? `还有 ${data.total.pending} 题在等 AI 或老师评分，评完后刷新本页总分会更新。` : '所有已判题目都算进来了。'}
           {data.total.empty > 0 ? ` 有 ${data.total.empty} 题没作答。` : ''}
         </p>
       </div>
@@ -142,19 +144,19 @@ export default function ResultPage() {
             .map((it) => (
               <div key={it.itemId} className="mt-2 rounded-xl bg-neutral-50 p-3 text-sm dark:bg-neutral-900">
                 <p className="font-semibold">
-                  第 {it.number} 题:{VERDICT_LABEL[it.verdict] ?? it.verdict}
+                  第 {it.number} 题：{VERDICT_LABEL[it.verdict] ?? it.verdict}
                   <span className="ml-1 font-normal text-neutral-500">
                     {it.score === null ? '待评' : `${it.score} 分`} / {it.fullScore} 分
                   </span>
                 </p>
-                {answerText(it.answer) ? <p className="mt-1">我的答案:{answerText(it.answer)}</p> : null}
+                {answerText(it.answer) ? <p className="mt-1">我的答案：{answerText(it.answer)}</p> : null}
                 {it.accepted && it.accepted.length > 0 ? (
                   <p className="mt-1">
-                    参考答案:<span className="font-medium">{it.accepted.join(' / ')}</span>
+                    参考答案：<span className="font-medium">{it.accepted.join(' / ')}</span>
                   </p>
                 ) : null}
-                {it.explanation ? <p className="mt-1 text-neutral-600 dark:text-neutral-300">解析:{it.explanation}</p> : null}
-                {it.feedback ? <p className="mt-1 text-neutral-600 dark:text-neutral-300">评语:{it.feedback}</p> : null}
+                {it.explanation ? <p className="mt-1 text-neutral-600 dark:text-neutral-300">解析：{it.explanation}</p> : null}
+                {it.feedback ? <p className="mt-1 text-neutral-600 dark:text-neutral-300">评语：{it.feedback}</p> : null}
                 {!it.accepted && data.attempt.mode === 'exam' ? (
                   <p className="mt-1 text-neutral-400">参考答案和解析等老师发布成绩后可见。</p>
                 ) : null}

@@ -45,11 +45,12 @@ jobs:
           cache-dependency-path: zsb-qbank/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
-      - run: pnpm test
       - run: pnpm db:migrate
       # 种子跑两遍:第二遍证幂等(计数断言内建于脚本,失败即非零退出)。
       - run: pnpm seed
       - run: pnpm seed
+      # 单测在迁移 + 种子之后跑:M4 起含对真库的 ai_jobs 集成用例(假 AI 调用器,不打真接口)。
+      - run: pnpm test
       - run: pnpm build
       # 移动视口 e2e(M3 接入,docs/DECISIONS.md D11):对 next start 起的真服务跑
       # 模考闭环冒烟。开发登录仅本 job 打开;数据库就是上面已种子的服务容器。

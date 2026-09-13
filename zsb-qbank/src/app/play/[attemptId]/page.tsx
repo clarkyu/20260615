@@ -31,6 +31,24 @@ function isAnswered(a: StudentAnswer | undefined): boolean {
   return a.keys.length > 0
 }
 
+// check / feedback 接口返回 → 反馈卡数据(缺字段回退安全默认值)。
+function toFeedbackRow(r: Record<string, unknown>, scoreById: Map<string, number>): GradedFeedback & { itemId: string } {
+  const itemId = String(r.itemId ?? '')
+  const verdict = String(r.verdict ?? 'wrong')
+  const strList = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  return {
+    itemId,
+    verdict,
+    score: typeof r.score === 'number' ? r.score : 0,
+    fullScore: typeof r.fullScore === 'number' ? r.fullScore : (scoreById.get(itemId) ?? 0),
+    accepted: strList(r.accepted),
+    // 等待中的行不把接口 message 当解析显示;error 行的 message 才是给学生看的说明。
+    explanation: typeof r.explanation === 'string' ? r.explanation : verdict === 'error' && typeof r.message === 'string' ? r.message : null,
+    feedback: typeof r.feedback === 'string' ? r.feedback : null,
+    commonMistakes: strList(r.commonMistakes),
+  }
+}
+
 const SYNC_LABEL = { synced: '已保存', pending: '保存中', offline: '离线,已存本机' } as const
 const SYNC_DOT = { synced: 'bg-emerald-500', pending: 'bg-amber-500', offline: 'bg-red-500' } as const
 
@@ -190,6 +208,55 @@ export default function PlayPage() {
   )
   const totalCount = useMemo(() => flat.reduce((n, { group }) => n + group.items.length, 0), [flat])
 
+  // 轮询 AI 评分结果(§7.5:每 3 秒、最长 90 秒)。每次「对答案」各起一轮、互不打断
+  // (换组再对答案不会让上一组永远停在「AI 评分中」);页面卸载时统一停止;写回 store 前
+  // 核对 attemptId 未变(模块级 store 在同试卷新开一次练习时不会被旧轮询污染)。
+  const pollTokens = useRef(new Set<{ stop: boolean }>())
+  useEffect(() => {
+    const tokens = pollTokens.current
+    return () => {
+      for (const t of tokens) t.stop = true
+      tokens.clear()
+    }
+  }, [])
+  const pollFeedback = useCallback(
+    async (ids: string[], scoreById: Map<string, number>) => {
+      const token = { stop: false }
+      pollTokens.current.add(token)
+      const sameAttempt = () => useAttemptStore.getState().attemptId === attemptId
+      let remaining = [...ids]
+      const deadline = Date.now() + 90_000
+      try {
+        while (remaining.length > 0 && Date.now() < deadline && !token.stop) {
+          await new Promise((r) => setTimeout(r, 3000))
+          if (token.stop || !sameAttempt()) return
+          try {
+            const res = await fetch(`/api/attempts/${attemptId}/feedback?itemIds=${remaining.join(',')}`)
+            if (res.status === 401 || res.status === 403 || res.status === 404) return
+            if (!res.ok) continue
+            const json = (await res.json()) as { results?: Array<Record<string, unknown>> }
+            const done = (json.results ?? []).filter((r) => r.done === true)
+            if (done.length > 0 && sameAttempt()) {
+              applyGraded(done.map((r) => toFeedbackRow(r, scoreById)))
+              const doneIds = new Set(done.map((r) => String(r.itemId)))
+              remaining = remaining.filter((id) => !doneIds.has(id))
+            }
+          } catch {
+            // 网络抖动:下一轮再试
+          }
+        }
+        if (remaining.length > 0 && !token.stop && sameAttempt()) {
+          applyGraded(
+            remaining.map((itemId) => ({ itemId, verdict: 'pending_timeout', score: 0, fullScore: scoreById.get(itemId) ?? 0, accepted: [], explanation: null })),
+          )
+        }
+      } finally {
+        pollTokens.current.delete(token)
+      }
+    },
+    [attemptId, applyGraded],
+  )
+
   const checkGroup = useCallback(async () => {
     if (!current || checking) return
     setChecking(true)
@@ -203,22 +270,17 @@ export default function PlayPage() {
       })
       if (!res.ok) return
       const json = (await res.json()) as { results?: Array<Record<string, unknown>> }
-      const rows: (GradedFeedback & { itemId: string })[] = (json.results ?? []).map((r) => ({
-        itemId: String(r.itemId ?? ''),
-        verdict: String(r.verdict ?? 'wrong'),
-        score: typeof r.score === 'number' ? r.score : 0,
-        fullScore: typeof r.fullScore === 'number' ? r.fullScore : (scoreById.get(String(r.itemId ?? '')) ?? 0),
-        accepted: Array.isArray(r.accepted) ? r.accepted.filter((x): x is string => typeof x === 'string') : [],
-        explanation:
-          typeof r.explanation === 'string' ? r.explanation : typeof r.message === 'string' ? r.message : null,
-      }))
+      const rows = (json.results ?? []).map((r) => toFeedbackRow(r, scoreById))
       applyGraded(rows)
+      // 主观题 / 汉译英兜底在 AI 评分中:每 3 秒轮询,最长 90 秒(§7.5)。
+      const pendingIds = rows.filter((r) => r.verdict === 'pending').map((r) => r.itemId)
+      if (pendingIds.length > 0) void pollFeedback(pendingIds, scoreById)
     } catch {
       // 网络失败不打断作答;下次点「对答案」重试。
     } finally {
       setChecking(false)
     }
-  }, [attemptId, current, checking, applyGraded])
+  }, [attemptId, current, checking, applyGraded, pollFeedback])
 
   const numberById = useMemo(
     () => new Map(flat.flatMap(({ group }) => group.items.map((it) => [it.id, it.number] as const))),

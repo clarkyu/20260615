@@ -40,13 +40,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     serverNow: new Date().toISOString(),
     // 硬约束 1:唯一出口 stripAssembledAnswers,绝不直接吐装配树。
     paper: stripAssembledAnswers(paper),
+    // 作答页只需要答案与时间戳做本地合并;分数/评语走 check、feedback、result 三个有门控的接口
+    // (考试未发布前绝不从这里带出 AI 分与评语)。
     responses: saved.map((r) => ({
       itemId: r.itemId,
       answer: r.answer,
       clientUpdatedAt: r.clientUpdatedAt,
-      score: r.score,
-      gradeSource: r.gradeSource,
-      feedback: r.feedback,
     })),
   })
 }

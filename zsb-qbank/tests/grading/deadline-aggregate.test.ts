@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { remainingMs, isExpired, isSaveRejected, isOverdueForAutoSubmit, SUBMIT_GRACE_MS } from '@/lib/grading/deadline'
-import { itemResult, summarize, revealAnswers, type ItemMeta, type SavedGrade } from '@/lib/grading/aggregate'
+import { itemResult, summarize, revealAnswers, maskUnreleased, type ItemMeta, type SavedGrade } from '@/lib/grading/aggregate'
 
 // M3 表驱动用例:截止/宽限边界 与 成绩汇总(分大题、待评、未答)。
 
@@ -75,5 +75,33 @@ describe('aggregate · revealAnswers(§6 反馈时机)', () => {
     ['考试发布后可见', 'exam', 'released', true],
   ] as const)('%s', (_n, mode, status, want) => {
     expect(revealAnswers(mode, status)).toBe(want)
+  })
+})
+
+describe('aggregate · maskUnreleased(考试未发布:主观题只显示待评、不计总分)', () => {
+  const sections = [
+    { id: 's1', title: '短文填空', items: [meta('i1', 1, 'fill', 2)] },
+    { id: 's2', title: '阅读问答', items: [meta('i3', 27, 'short_answer', 2), meta('i4', 28, 'short_answer', 2)] },
+  ]
+  const saved = new Map<string, SavedGrade>([
+    ['i1', { score: 2, verdict: 'correct' }],
+    ['i3', { score: 2, verdict: 'graded' }], // AI 已判
+    ['i4', { score: null, verdict: 'needs_review' }],
+  ])
+  it('exam+submitted:客观题照常,主观题一律 pending/null,总分只含客观', () => {
+    const r = maskUnreleased(summarize(sections, saved), 'exam', 'submitted')
+    expect(r.sections[0]?.items[0]).toMatchObject({ verdict: 'correct', score: 2 })
+    expect(r.sections[1]?.items.map((i) => [i.verdict, i.score])).toEqual([['pending', null], ['pending', null]])
+    expect(r.total).toEqual({ score: 2, fullScore: 6, pending: 2, empty: 0 })
+  })
+  it('released 或练习:原样返回', () => {
+    const s = summarize(sections, saved)
+    expect(maskUnreleased(s, 'exam', 'released')).toBe(s)
+    expect(maskUnreleased(s, 'practice', 'in_progress')).toBe(s)
+    expect(s.total.score).toBe(4)
+  })
+  it('itemResult:未出分按 needs_review / pending 区分,客观题待兜底也显示 pending', () => {
+    expect(itemResult(meta('a', 41, 'translate_c2e_fill', 3), { score: null, verdict: 'pending' })).toMatchObject({ verdict: 'pending', score: null })
+    expect(itemResult(meta('a', 41, 'translate_c2e_fill', 3), { score: null, verdict: 'needs_review' })).toMatchObject({ verdict: 'needs_review', score: null })
   })
 })
