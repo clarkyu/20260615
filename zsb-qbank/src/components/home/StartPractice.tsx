@@ -3,8 +3,19 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-// 首页练习入口:POST /api/attempts 建 practice 作答,成功即进作答页。
-export function StartPracticeButton({ paperId }: { paperId: string }) {
+// 首页作答入口:POST /api/attempts 建 attempt,成功即进作答页。
+// mode='exam' 时服务端设 deadlineAt;未交的模考会续答同一次(接口返回 resumed)。
+export function StartAttemptButton({
+  paperId,
+  mode,
+  label,
+  variant = 'primary',
+}: {
+  paperId: string
+  mode: 'practice' | 'exam'
+  label: string
+  variant?: 'primary' | 'outline'
+}) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -22,7 +33,7 @@ export function StartPracticeButton({ paperId }: { paperId: string }) {
               const res = await fetch('/api/attempts', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ paperId, mode: 'practice' }),
+                body: JSON.stringify({ paperId, mode }),
               })
               if (res.status === 401) {
                 setErr('请先登录')
@@ -41,9 +52,13 @@ export function StartPracticeButton({ paperId }: { paperId: string }) {
             }
           })()
         }}
-        className="min-h-11 rounded-xl bg-blue-600 px-5 font-medium text-white disabled:opacity-60"
+        className={`min-h-11 rounded-xl px-4 font-medium disabled:opacity-60 ${
+          variant === 'primary'
+            ? 'bg-blue-600 text-white'
+            : 'border border-blue-600 text-blue-700 dark:text-blue-300'
+        }`}
       >
-        {busy ? '准备中…' : '开始练习'}
+        {busy ? '准备中…' : label}
       </button>
       {err ? <p className="text-sm text-red-600">{err}</p> : null}
     </div>
