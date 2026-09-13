@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db/client'
 import { attempts, responses, users } from '@/lib/db/schema'
 import { assemblePaper } from '@/lib/db/queries'
 import { submitAttempt } from '@/lib/db/submit'
-import { summarize, revealAnswers, type SavedGrade } from '@/lib/grading/aggregate'
+import { summarize, revealAnswers, maskUnreleased, type SavedGrade } from '@/lib/grading/aggregate'
 import { isOverdueForAutoSubmit } from '@/lib/grading/deadline'
 import { getSession } from '@/lib/auth/session'
 
@@ -37,16 +37,20 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const answerByItem = new Map(savedRows.map((r) => [r.itemId, r.answer]))
   const feedbackByItem = new Map(savedRows.map((r) => [r.itemId, r.feedback]))
 
-  const summary = summarize(
-    paper.sections.map((s) => ({
-      id: s.id,
-      title: s.title,
-      items: s.groups.flatMap((g) => g.items.map((it) => ({ id: it.id, number: it.number, type: it.type, score: it.score }))),
-    })),
-    savedByItem,
-  )
-
+  // 考试未发布(§9.4):主观题只显示待评、不计总分,AI 评语一律不下发(评语会点出漏答要点)。
   const reveal = revealAnswers(attempt.mode, attempt.status)
+  const summary = maskUnreleased(
+    summarize(
+      paper.sections.map((s) => ({
+        id: s.id,
+        title: s.title,
+        items: s.groups.flatMap((g) => g.items.map((it) => ({ id: it.id, number: it.number, type: it.type, score: it.score }))),
+      })),
+      savedByItem,
+    ),
+    attempt.mode,
+    attempt.status,
+  )
   const detailByItem = new Map<string, { accepted: string[]; explanation: string | null }>()
   if (reveal) {
     for (const s of paper.sections) {
@@ -79,7 +83,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       items: s.items.map((r) => ({
         ...r,
         answer: answerByItem.get(r.itemId) ?? null,
-        feedback: feedbackByItem.get(r.itemId) ?? null,
+        feedback: reveal ? (feedbackByItem.get(r.itemId) ?? null) : null,
         ...(reveal ? (detailByItem.get(r.itemId) ?? { accepted: [], explanation: null }) : {}),
       })),
     })),

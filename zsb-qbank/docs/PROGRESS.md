@@ -139,3 +139,66 @@ M3:考试模式(服务端 deadline_at 计时、交卷锁定、成绩页)+ assign
 ### 下一步
 M4:AI 评分与解析(ai_jobs 工作线程、三类主观题评分提示词、translate_c2e_fill
 兜底、needs_review 分流、成本日志)。
+
+## M4 AI 评分与解析(2026-09-13)
+
+### M4 验收自检
+- [通过] ai_jobs 工作线程:instrumentation 每 2 秒消费(每轮领取 ≤AI_BATCH 条、AI_CONCURRENCY
+  并发执行,防重入,FOR UPDATE SKIP LOCKED 多实例安全),失败按 attempts×5 秒退避、最多 3 次;
+  running 超过 5 分钟视为进程崩溃遗留自动回收;未预期异常放回队列不留悬挂;与逾期清扫同进程(D14)。
+- [通过] 三类主观题评分提示词(short_answer / translate_e2c / writing)+ 汉译英兜底 +
+  解析生成,共 5 份 prompts/*.md(D15);用户消息按 §5.3 固定字段拼装:题型、题目、参考
+  答案、要点、评分细则、满分、学生答案、材料原文(仅阅读问答),表驱动测试守卫字段齐全。
+- [通过] 服务端硬性约束(§5.3):score 夹在 0..满分并按 0.5 步进;作文低于 minWords 按
+  rubric 扣「字数」维度并记 issue;confidence < 0.6 或调用失败/结构不合法 → needs_review;
+  AI 与教师评分分别存于 grade_detail(ai / 后续 teacher);37 个表驱动用例。
+- [通过] 交卷后 60 秒内主观题有 AI 分数与中文评语:交卷即入队,线程 2 秒节拍领取,单次调用
+  30 秒超时;集成用例(真库 + 假 AI)一轮即出分、评语落 responses.feedback、attempt 总分
+  重算。真接口时延取决于所配模型(需真机/真环境验收,见下)。
+- [通过] AI 不可用时系统不崩溃且题目标记待评:AI_BASE_URL/AI_API_KEY/AI_MODEL_GRADING
+  任一缺失即视为未配置,任务直接 failed(ai_not_configured)、题目 needs_review、成绩页显示
+  「待老师评分」;汉译英兜底记 0 + needs_review(§5.2);集成用例覆盖。
+- [通过] 同一答案不重复计费:ai_grade_cache(item_id + 规范化答案 + 提示词版本的 SHA-256)
+  入队命中即直接写回、不入队;执行前再查一次缓存(先后入队的相同答案只计费一次);同 response
+  同快照已有未完成任务时复用。送评答案在入队时快照进 payload,缓存键与快照一致;写回前核对
+  学生答案未变且不是教师终评,否则作废(superseded)——练习中改答不会污染缓存(D17)。
+- [通过] translate_c2e_fill 兜底:词表未命中且非空/非超词 → 入队 c2e_fallback,AI 只判「可接受
+  与否」——可接受满分记 correct,否则 0 分记 wrong 并此时才计入常见错答(§5.2 二值);练习与交卷
+  两条路径都接。AI 判可接受的答案连同题号留在 ai_jobs.result,供 M5 教师端采纳为候选 accepted
+  (自动写回 items.answer 不做——参考答案是内容模型的事实来源,须教师确认)。
+- [通过] 解析生成:POST /api/teacher/items/:id/explain 入队 explain 任务,GET /api/teacher/
+  jobs/:id 取 {explanation, knowledgeTags, difficulty, commonMistakes} 草稿,不改小题
+  (教师在 M5 导入向导确认后写回)。
+- [通过] 成本日志:ai_jobs.result.usage(tokens/latency/model)+ 控制台一行,不含学生内容(D13)。
+- [通过] 学生端:练习「对答案」后主观题显示「AI 评分中」,每 3 秒轮询 feedback 接口、最长
+  90 秒(各组各起一轮互不打断,卸载统一停止,写回前核对 attemptId),评完显示分数 + 评语 +
+  参考答案 + 解析 + 常见错答(客观题答错时,§5.4);超时提示「回头再点一次对答案」;成绩页新增
+  「待老师评分 / AI 已评分」状态,待评题数计入总分说明(D16)。
+- [通过] 考试未发布(§9.4):result 对主观题只显示待评、不计总分,评语一律不下发;GET attempt
+  不再带分数/评语;练习或 released 后才全量可见(maskUnreleased 纯函数有测试)。
+- [通过] 防注入与限速(§9.5):学生答案用 <student_answer> 标签包裹并在提示词声明标签内指令无效;
+  服务端启发式命中即强制教师复核且不入缓存;check / explain 按用户限速(60、30 次/分钟)。
+- [通过] 门禁:lint、tsc、单测(含 15 条真库集成用例,CI 已改为 migrate/seed 后跑 test)、
+  build 全绿;新增迁移 drizzle/0001(ai_grade_cache)。dev 模式下 instrumentation 的 edge 编译
+  不再因 pg/fs 失败(next.config 边缘别名,D15)。
+- [评审] 合并前跑了 6 视角评审 + 逐条 3 票反驳核实(150 个代理):确认 32 条(0 blocker),全部
+  修复——队列悬挂回收、快照/缓存一致、执行前查缓存、教师终评保护、有界并发、交卷原子化、考试
+  未发布屏蔽、提示词去锚定/防注入/二值兜底/非英文作答、作文字数封顶去双扣、轮询生命周期、常见
+  错答、限速与 uuid 校验、测试隔离与覆盖。
+- [需真环境] 交卷后 60 秒内出分 —— 步骤:.env 配 AI_BASE_URL/AI_API_KEY/AI_MODEL_GRADING,
+  `pnpm dev`;学生开一场模考,主观题作答后交卷;成绩页 1 分钟内刷新应见 27–36、43 题
+  有分数与评语;服务日志有「[ai] grade job=… tokens=…」。
+- [需真环境] 待评分流 —— 步骤:故意把 AI_API_KEY 改错,重复上一步;成绩页应显示「待老师评分」
+  而非一直转圈;日志「failed after 1 attempts」(401 非瞬时错误不重试,立即分流)。
+- [需真环境] 班级规模吞吐 —— 步骤:40 人同一 deadline 到时自动交卷,观察日志「队列一轮」节奏;
+  默认 AI_BATCH=8、AI_CONCURRENCY=4,单次调用 3–5 秒时约 11 题×40 人 ≈ 440 条需 6–10 分钟,
+  「60 秒内出分」对单人交卷成立、对整班需调大并发(受模型限流约束)——PROGRESS 记实测值。
+
+### 未决问题
+- 教师复核队列(GET /api/teacher/grading/queue、PUT responses/:id/grade)与成绩发布
+  (release)在 M5;此前 needs_review 的题在成绩页显示「待老师评分」。
+- 提示词质量需真模型上对照教师评分抽样校准(M5 学情页可加「AI 分 vs 教师分」对比)。
+- 常见错答(§5.4)前五展示在 M5 教师端;数据已在 wrong_answers 表累积。
+
+### 下一步
+M5:教师端(班级与加入码、任务发布、批改队列、学情分析与导出、docx 导入向导)。

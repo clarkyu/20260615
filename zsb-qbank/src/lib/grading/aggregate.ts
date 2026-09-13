@@ -33,8 +33,9 @@ export function itemResult(meta: ItemMeta, saved: SavedGrade | undefined): ItemR
   const objective = isObjectiveType(meta.type as Item['type'])
   const base = { itemId: meta.id, number: meta.number, fullScore: meta.score, objective }
   if (!saved) return { ...base, verdict: 'empty', score: 0 }
-  if (objective) return { ...base, verdict: saved.verdict ?? 'wrong', score: saved.score ?? 0 }
-  if (saved.score === null) return { ...base, verdict: 'pending', score: null }
+  // 未出分:AI 评分中(pending)或分流给老师(needs_review);汉译英兜底期间同样按此显示。
+  if (saved.score === null) return { ...base, verdict: saved.verdict === 'needs_review' ? 'needs_review' : 'pending', score: null }
+  if (objective) return { ...base, verdict: saved.verdict ?? 'wrong', score: saved.score }
   return { ...base, verdict: saved.verdict ?? 'graded', score: saved.score }
 }
 
@@ -67,7 +68,7 @@ export function summarize(
     const rows = s.items.map((m) => itemResult(m, savedByItem.get(m.id)))
     const sScore = rows.reduce((n, r) => n + (r.score ?? 0), 0)
     const sFull = rows.reduce((n, r) => n + r.fullScore, 0)
-    const sPending = rows.filter((r) => r.verdict === 'pending').length
+    const sPending = rows.filter((r) => r.score === null).length
     score += sScore
     fullScore += sFull
     pending += sPending
@@ -80,4 +81,27 @@ export function summarize(
 /** 参考答案与解析何时可见(SPEC §6):练习即时;考试在教师发布(released)后。 */
 export function revealAnswers(mode: string, status: string): boolean {
   return mode === 'practice' || status === 'released'
+}
+
+/**
+ * 考试成绩未发布时(SPEC §9.4「成绩未发布时主观题只显示待评」):主观题一律显示 pending、
+ * 不计入总分——AI 分只是临时分,教师终评后才发布;客观题(含汉译英兜底判定)照常显示。
+ */
+export function maskUnreleased(summary: ResultSummary, mode: string, status: string): ResultSummary {
+  if (revealAnswers(mode, status)) return summary
+  let score = 0
+  let fullScore = 0
+  let pending = 0
+  let empty = 0
+  const sections = summary.sections.map((s) => {
+    const items = s.items.map((r) => (r.objective ? r : { ...r, verdict: 'pending', score: null }))
+    const sScore = items.reduce((n, r) => n + (r.score ?? 0), 0)
+    const sPending = items.filter((r) => r.score === null).length
+    score += sScore
+    fullScore += s.fullScore
+    pending += sPending
+    empty += items.filter((r) => r.verdict === 'empty').length
+    return { ...s, items, score: sScore, pending: sPending }
+  })
+  return { sections, total: { score, fullScore, pending, empty } }
 }

@@ -57,3 +57,48 @@ CI 只安装 chromium:iPhone 13 描述符默认 WebKit,两个 project 显式覆�
 browserName='chromium'(视口/UA/触摸仿真保留,引擎差异靠微信真机验收覆盖)。
 workers=1 串行:模考流程同一开发账号会续答同一 attempt,并行会互抢考试。
 e2e 步骤对 next start 的真服务执行,库就是同 job 已种子的 postgres:16 容器。
+
+## D12 AI 调用不引 SDK,fetch 直连 OpenAI 兼容接口(2026-09-13)
+M4 的评分/解析只需 chat/completions 一个端点:温度 0、response_format=json_object、30 秒超时、
+用 AbortController 中止。直接 fetch 比引 openai 包少一层依赖与版本耦合,也便于在测试里注入
+假调用器(AiCaller)对真库跑集成用例而不打真接口。错误按 kind 分类(timeout/network/http/
+bad_response/not_configured):超时、网络、429/5xx 视为瞬时可重试;其余不重试直接分流待评。
+
+## D13 成本日志记在 ai_jobs.result.usage + 控制台一行(2026-09-13)
+不另建 ai_usage 表:每条任务的 promptTokens/completionTokens/latencyMs/model 存进
+ai_jobs.result,同时 console.log 一行「[ai] grade job=… item=题号 tokens=p+c ms=…」——只记题号
+与用量,不记学生内容(§9.5 个人信息最小化)。单价随模型而异,汇总换算在 M5 教师端做。
+
+## D14 ai_jobs 工作线程并入 instrumentation,与逾期清扫同进程(2026-09-13)
+SPEC §9.1「应用内轮询工作线程(间隔 2 秒,单进程)」:register() 里每 2 秒 processAiJobs
+(每轮最多 5 条,同进程 busy 标志防重入),领取用 FOR UPDATE SKIP LOCKED,多实例也安全;
+失败后按 attempts×5 秒退避重试,最多 3 次。AI 未配置时线程照常跑,把任务立即分流为
+「待老师评」,学生端不会无限等待。逾期清扫(D10)保留 60 秒节拍。
+
+## D15 提示词以 prompts/*.md 存放,standalone 产物显式带上(2026-09-13)
+按 §5.3「提示词以文件形式存放,教师可改不动代码」:系统提示词 5 份在 prompts/,运行时
+fs 读取并缓存;PROMPT_VERSION 参与缓存哈希,改提示词后旧缓存自然失效(需手动升版本)。
+next.config 用 outputFileTracingIncludes 把 prompts/** 带进 standalone 产物;M7 的 Dockerfile
+不必再单独 COPY。
+
+## D16 练习模式 AI 反馈用轮询而非推送(2026-09-13)
+§7.5 规定每 3 秒、最长 90 秒轮询:新增 GET /api/attempts/:id/feedback?itemIds= 只回已落库的
+判分结果(考试模式 403);超时后反馈卡显示「稍后在成绩页查看」。不引 WebSocket/SSE,
+微信内置浏览器与弱网下更稳。
+
+## D17 送评答案快照进任务,写回前核对,悬挂任务超时回收(2026-09-13,评审后)
+练习模式作答可随时改,入队与执行之间有窗口:任务 payload 保存入队时的答案快照与哈希,
+工作线程只评快照,缓存按快照哈希写;写回 responses 前核对当前答案仍等于快照且非教师终评,
+否则作废(job.result.applied=false,记 superseded),由下一次「对答案」重新入队。running
+超过 5 分钟(> AI 超时)按进程崩溃遗留回收重跑;未预期异常把任务放回 queued 而非留在 running。
+
+## D18 限速与防注入放在应用层,不引入网关(2026-09-13,评审后)
+§9.5 的按用户限速用进程内滑动窗口(check 60 次/分钟、explain 30 次/分钟),单进程部署足够,
+多实例各自计数即可。提示词注入防线两道:学生答案用 <student_answer> 标签包裹并在系统提示词
+声明标签内指令无效;服务端启发式(对阅卷者的指令、分数/置信度赋值、JSON 片段)命中即强制
+教师复核且结果不入缓存——宁可多送复核,不让注入拿满分。
+
+## D19 汉译英兜底二值化;作文字数用封顶而非减法(2026-09-13,评审后)
+§5.2 规定兜底只判「是否可接受」:提示词只允许满分或 0,服务端再 foldBinary 折成二值,去掉
+partial。作文 minWords 不足:提示词让模型把字数维度记 0,服务端用「总分 ≤ 满分 − 字数维度」
+封顶——模型已扣的不再扣、没扣的强制扣,不会双重扣分。

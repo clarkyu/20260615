@@ -170,3 +170,12 @@ export const aiJobs = pgTable('ai_jobs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('ai_jobs_status_idx').on(t.status, t.createdAt)])
+
+// AI 评分结果缓存(SPEC §5.3):同一小题 + 同一规范化答案(+ 提示词版本)只计费一次。
+export const aiGradeCache = pgTable('ai_grade_cache', {
+  itemId: uuid('item_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
+  answerHash: text('answer_hash').notNull(),
+  result: jsonb('result').notNull(),
+  model: text('model').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.itemId, t.answerHash] })])
