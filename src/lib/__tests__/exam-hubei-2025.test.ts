@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EXAM_HUBEI_2025, SEEDABLE_TEMPLATES } from '@/lib/data/exam-hubei-2025'
+import { EXAM_HUBEI_2025, SEEDABLE_TEMPLATES_2025 as SEEDABLE_TEMPLATES } from '@/lib/data/exam-hubei-2025'
 import { templatePayloadSchema } from '@/lib/assignment-template'
 import { parseFillBlank, isGradableFillBlank, blankCount, gradeFillBlank } from '@/lib/fill-blank'
 

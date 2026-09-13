@@ -1,12 +1,12 @@
-// 模板种子(维护):把代码内置的整卷题库(SEEDABLE_TEMPLATES,如 2025 湖北专升本真题
-// 整卷 + 各题型分卷)写进 AssignmentTemplate,老师在「题库 → 笔试试卷」或「新建作业 →
+// 模板种子(维护):把代码内置的整卷题库(SEEDABLE_TEMPLATES,如 2025/2026 湖北专升本
+// 真题整卷 + 各题型分卷)写进 AssignmentTemplate,老师在「题库 → 笔试试卷」或「新建作业 →
 // 选模板」里选用发布。与其它维护端点同款约定:默认 dry-run 报告,apply 才写;幂等:
 // 同校同名已存在 → 更新 payload/series(题目勘误后重跑即生效),不存在 → 新建。
 // key='all' 一次种全套(逐 key 报告)。
 
 import type { PrismaClient } from '@prisma/client'
 import * as templateRepo from '@/lib/repo/templates'
-import { SEEDABLE_TEMPLATES } from '@/lib/data/exam-hubei-2025'
+import { SEEDABLE_TEMPLATES } from '@/lib/data/exam-templates'
 import { templatePayloadSchema } from '@/lib/assignment-template'
 import { parseFillBlank, isGradableFillBlank, blankCount } from '@/lib/fill-blank'
 
