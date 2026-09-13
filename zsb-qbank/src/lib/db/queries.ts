@@ -50,9 +50,14 @@ export interface AssembledPaper {
   sections: AssembledSection[]
 }
 
-export async function assemblePaper(db: Db, paperId: string): Promise<AssembledPaper | null> {
+/**
+ * 装配试卷树。opts.itemIds 给定时只保留这些小题(教师从题库勾选组卷,SPEC §8),
+ * 空掉的题组/大题一并去掉;不给则整卷。
+ */
+export async function assemblePaper(db: Db, paperId: string, opts: { itemIds?: string[] | null } = {}): Promise<AssembledPaper | null> {
   const paper = await db.query.papers.findFirst({ where: eq(papers.id, paperId) })
   if (!paper) return null
+  const keep = opts.itemIds && opts.itemIds.length > 0 ? new Set(opts.itemIds) : null
   const sectionRows = await db.select().from(sections).where(eq(sections.paperId, paperId)).orderBy(asc(sections.order))
   const groupRows = await db
     .select({ g: groups })
@@ -64,6 +69,7 @@ export async function assemblePaper(db: Db, paperId: string): Promise<AssembledP
 
   const itemsByGroup = new Map<string, DbItemRow[]>()
   for (const it of itemRows) {
+    if (keep && !keep.has(it.id)) continue
     const list = itemsByGroup.get(it.groupId) ?? []
     list.push({
       id: it.id,
@@ -81,8 +87,10 @@ export async function assemblePaper(db: Db, paperId: string): Promise<AssembledP
   }
   const groupsBySection = new Map<string, AssembledGroup[]>()
   for (const { g } of groupRows) {
+    const its = itemsByGroup.get(g.id) ?? []
+    if (keep && its.length === 0) continue
     const list = groupsBySection.get(g.sectionId) ?? []
-    list.push({ id: g.id, order: g.order, kind: g.kind, stimulus: g.stimulus, frame: g.frame, items: itemsByGroup.get(g.id) ?? [] })
+    list.push({ id: g.id, order: g.order, kind: g.kind, stimulus: g.stimulus, frame: g.frame, items: its })
     groupsBySection.set(g.sectionId, list)
   }
   return {
@@ -93,16 +101,18 @@ export async function assemblePaper(db: Db, paperId: string): Promise<AssembledP
     totalScore: paper.totalScore,
     durationMinutes: paper.durationMinutes,
     status: paper.status,
-    sections: sectionRows.map((s) => ({
-      id: s.id,
-      order: s.order,
-      code: s.code,
-      title: s.title,
-      instructions: s.instructions,
-      itemType: s.itemType,
-      scorePerItem: s.scorePerItem,
-      groups: groupsBySection.get(s.id) ?? [],
-    })),
+    sections: sectionRows
+      .map((s) => ({
+        id: s.id,
+        order: s.order,
+        code: s.code,
+        title: s.title,
+        instructions: s.instructions,
+        itemType: s.itemType,
+        scorePerItem: s.scorePerItem,
+        groups: groupsBySection.get(s.id) ?? [],
+      }))
+      .filter((s) => !keep || s.groups.length > 0),
   }
 }
 
