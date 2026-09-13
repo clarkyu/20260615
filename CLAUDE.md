@@ -91,5 +91,10 @@ scoping)→ prisma。依赖只能向下。
   班级展示口径(clark 定):**凡涉班一律 一班一行 + 序号升序 + 班名带人数**(`lib/class-sort.ts`
   比较器 + i18n `class.size`;#458 + #459)。全记录:**`docs/SESSION-2026-07-12-RECOVERY.md`**
   (最新恢复入口)。
+- **专升本英语真题电子试卷**(2026-08/09):2025 与 2026 湖北真题各转成 8 环节整卷 + 6 张题型
+  分卷(`src/lib/data/exam-hubei-2025.ts` / `exam-hubei-2026.ts`,共用 `exam-template-base.ts`,
+  全站注册表 `exam-templates.ts`),系列「专升本英语」;合并后用 `admin-call.yml` 的 `seed-template`
+  (key=all)种库,老师在题库/新建作业选模板发布。2026 卷校订说明与原始/校订 Word 在
+  `zsb-qbank/seed/raw/002_*`(阅读填词 Passage 1 正文两份来源均缺,按摘要补写 5 句已标注)。
 - 其它文档:`docs/OPERATIONS.md`(运维)、`docs/VISION.md`、`docs/BACKLOG.md`、
   审计台账 `docs/CODE-AUDIT-2026-07*.md`。

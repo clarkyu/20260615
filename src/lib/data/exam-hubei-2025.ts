@@ -1,4 +1,5 @@
-import type { TemplatePayload, TemplatePhase } from '@/lib/assignment-template'
+import type { TemplatePayload } from '@/lib/assignment-template'
+import { EXAM_SERIES, PHASE_BASE, drill, type SeedableTemplateEntry } from './exam-template-base'
 
 // 2025 年湖北专升本英语真题 → 作业模板(clark 2026-08 提供试卷 docx,整卷转换)。
 // 八个环节,权重恰为各大题分值(合计 100):客观题(短文填空/阅读填词/汉译英补全)走
@@ -39,36 +40,7 @@ Anyway, tell me all your news, and I'll write back soon!
 Lots of love,
 Kath`
 
-// 主观环节的公共默认值(fillBlank 环节在此基础上覆写)。
-const BASE = {
-  category: '',
-  useBankSet: false,
-  sentences: '',
-  requireEyesClosed: false,
-  requireText: false,
-  requireAudio: false,
-  requireVideo: false,
-  requireHandwriting: false,
-  requireChoice: false,
-  choicesJson: null,
-  correctChoice: null,
-  multiChoice: false,
-  correctChoices: null,
-  selectionMode: null,
-  branchTopicsJson: null,
-  fillBlank: false,
-  blanksJson: null,
-  requireFreeText: false,
-  rubric: null,
-  rubricPoints: [] as { name: string; points: number }[],
-  perceptionModel: null,
-  judgeModel: null,
-  graded: true,
-  maxAttempts: 1,
-  weight: 1,
-  isFormalTest: false,
-  freePractice: false,
-}
+const BASE = PHASE_BASE
 
 // ── 环节常量(整卷与题型分卷共用同一份题面/答案键,勘误一处生效) ────────────────
 
@@ -252,7 +224,7 @@ const PH_ESSAY = {
     }
 
 
-export const EXAM_SERIES = '专升本英语'
+export { EXAM_SERIES }
 export const EXAM_HUBEI_2025_NAME = '2025年湖北专升本英语真题（模拟考试）'
 
 export const EXAM_HUBEI_2025: TemplatePayload = {
@@ -262,16 +234,8 @@ export const EXAM_HUBEI_2025: TemplatePayload = {
   phases: [PH_CLOZE, PH_REORDER, PH_READ_FILL_1, PH_READ_FILL_2, PH_READ_QA_3, PH_READ_QA_4, PH_TRANSLATE, PH_ESSAY],
 }
 
-// 题型分卷(训练用):单题型成卷,可重做 3 次;题面/答案键与整卷同源。
-const drill = (title: string, phases: TemplatePhase[]): TemplatePayload => ({
-  title,
-  monthLabel: '',
-  chunkSetId: null,
-  phases: phases.map((p) => ({ ...p, maxAttempts: 3 })),
-})
-
-// 可种子化的模板注册表(seed-template 端点用 key 查找;key=all 全量;以后新试卷往这里加)。
-export const SEEDABLE_TEMPLATES: Record<string, { name: string; series: string | null; payload: TemplatePayload }> = {
+// 本卷的可种子化条目(整卷 + 6 张题型分卷);全站注册表在 exam-templates.ts 汇总各年份。
+export const SEEDABLE_TEMPLATES_2025: Record<string, SeedableTemplateEntry> = {
   'exam-hubei-2025': { name: EXAM_HUBEI_2025_NAME, series: EXAM_SERIES, payload: EXAM_HUBEI_2025 },
   'hubei-2025-cloze': { name: '专升本英语 · 短文填空（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 短文填空（2025湖北真题）', [PH_CLOZE]) },
   'hubei-2025-reorder': { name: '专升本英语 · 连词成句（2025湖北真题）', series: EXAM_SERIES, payload: drill('专升本英语 · 连词成句（2025湖北真题）', [PH_REORDER]) },
