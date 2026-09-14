@@ -322,3 +322,60 @@ M6:训练模式(按题型 / 标签抽题、脚手架、错题与复习卡、作�
 ### 下一步
 M7:上线(Dockerfile 与 compose、HTTPS、备份脚本、性能预算核查、真机验收矩阵、RUNBOOK;顺带收紧 D7
 学生仅见 published 试卷、全站 Origin 校验)。
+
+## M7 上线(2026-09-14)
+
+### M7 验收自检
+- [通过] Dockerfile 与 compose(§9.6):多阶段构建(deps → builder → runner)产出 standalone 镜像,
+  非 root 运行、tini 收尸、`HEALTHCHECK` 打 `/api/health`;`docker-compose.yml` 定义 `db`(数据卷持久化、
+  healthcheck)、`app`(只监听 `127.0.0.1:3000`,依赖 db healthy)、`tools`(带 devDependencies 的构建层
+  镜像,`docker compose run --rm tools pnpm db:migrate / pnpm seed`——运行镜像精简后没有 tsx)。
+  `docker compose config` 校验通过。
+  · 本仓库外层还有一份 lockfile,Next 会把工作区根推断到宿主仓库、standalone 产物多嵌一层目录;
+  已在 `next.config.ts` 钉住 `outputFileTracingRoot`,产物布局在本地与镜像里一致(D32)。
+- [通过] 运行产物验证(等价于镜像内运行):把 `.next/standalone` + `.next/static` + `public` + prompts
+  按 Dockerfile 的布局拼好后 `node server.js` 起服务——健康检查、首页 / 训练页 / 教师页(未登录 307)、
+  `/api/time`、manifest、跨站 POST 403、HTML `cache-control: no-cache`、AI 线程启动日志全部正常。
+- [未跑 · 说明] `docker build` 实机构建未执行:沙箱内有 docker 客户端但无 daemon(D4)。首次
+  `docker compose up -d --build` 即为该项验收,RUNBOOK 已写明命令与自测点。
+- [通过] HTTPS:RUNBOOK 给出 Caddy 与 nginx 两份反代配置(含 `X-Forwarded-Host` / `X-Forwarded-Proto`
+  ——写接口的 Origin 校验依赖它、`client_max_body_size 12m`、`proxy_read_timeout 65s`);app 不直接对外。
+- [通过] 备份脚本:`scripts/backup.sh` 用 `pg_dump -Fc` 落到 `BACKUP_DIR`(默认 ./backups)并清理
+  `KEEP_DAYS`(默认 14)天以前的文件,含 cron 示例;`scripts/restore.sh` 用 `pg_restore --clean --if-exists`
+  恢复到指定库并打印 papers / items / attempts / responses 行数。两者 `bash -n` 通过。
+- [通过] 「备份脚本可恢复到空库」本地实测:对 55432 的开发库备份 → `createdb zsb_restore_test` →
+  恢复 → 行数与源库一致(见下「本地恢复演练」)。
+- [通过] 性能预算:新增 `scripts/check-budget.ts`(`pnpm budget`),从 `app-build-manifest.json` 取各路由
+  首屏 JS 并逐个 gzip 求和,学生端四个路由(/、/play/[attemptId]、/result/[attemptId]、/train)对 200 KB
+  预算核查;实测 106.5 / 143.1 / 105.4 / 108.0 KB,全部在预算内。已接进 CI(build 之后)。
+- [通过] §7.7 适配收口:HTML `Cache-Control: no-cache`(M4 起);考试页 `overscroll-behavior: none`
+  禁下拉刷新;新增 `GET /api/time`,作答页在 `visibilitychange` / `pageshow` 时用服务端时间重新校准
+  倒计时(iOS 微信切后台会冻结定时器;计时仍以服务端 deadline_at 为准)。
+- [通过] §9.5 写接口 Origin 校验:新增 `src/middleware.ts` + 纯函数 `lib/http/origin.ts`,对 /api 下所有
+  非 GET/HEAD/OPTIONS 请求校验 Origin(同源或 `APP_ORIGIN` 白名单),跨站一律 403;没有 Origin 的
+  非浏览器请求放行(不构成 CSRF)。14 条表驱动用例 + 生产构建实测(跨站 POST 403、同源 200、GET 不拦)。
+- [通过] D7 收紧:学生端「自由练习」只列 `status=published` 的试卷,`POST /api/attempts { paperId }`
+  对学生也只放行已发布卷(任务作答走 assignmentId 分支,不受影响);教师试卷页新增发布 / 撤回 / 归档
+  开关。种子卷状态改为 published(答案已被判分用例覆盖),新导入卷仍默认草稿。实测:置为草稿后学生
+  首页 0 张卡片、开卷 404;发布后恢复正常。
+- [通过] 门禁:lint、tsc、单测 331 例、build、`pnpm budget`、移动视口 e2e 4/4 全绿。
+- [需真机] §7.7 四台真机验收矩阵(iOS 微信 / iOS Safari / Android 微信 / Android Chrome):
+  逐项步骤与记录表见 `docs/RUNBOOK.md` 三、五节。其中「切后台 2 分钟再回来倒计时跳到正确值」与
+  「考试页下拉不刷新」是本里程碑新增的检查点。
+
+### 本地恢复演练(2026-09-14,已实跑)
+```
+BACKUP_DIR=… ./scripts/backup.sh          # → zsb-20260914-102839.dump(68K)
+createdb -p 55432 zsb_restore_test        # 空库
+./scripts/restore.sh <dump> postgres://zsb@127.0.0.1:55432/zsb_restore_test
+# 恢复后:papers=2 items=86 attempts=15 responses=12,与源库逐项一致
+```
+
+### 未决问题
+- Casdoor OIDC 仍未接入(D2):生产先关 `AUTH_DEV_LOGIN`,由 clark 用开发登录建教师账号,学生用加入码进班。
+- Serwist / Service Worker 仍未接入(D3):断网续答靠 IndexedDB + 同步队列,首次打开仍需网络。
+- 「每题中位用时」仍无埋点;多副本部署时 AI 队列线程会重复起(领取安全但无意义),横向扩容前先拆进程。
+
+### 下一步
+SPEC §10 的七个里程碑到此全部完成。后续按 clark 的实际使用反馈迭代:优先补 Casdoor 登录与
+Service Worker,再看题库管理筛选 UI 与 accepted 候选采纳。

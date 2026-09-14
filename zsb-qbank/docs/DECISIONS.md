@@ -171,3 +171,28 @@ items 有 (paper_id, number) 唯一索引,变式题号接在 max(1000, 当前最
 不进学情、不被训练抽到,教师在试卷页「待审核变式」通过或删除(只能删 origin=ai 的草稿)。一级脚手架的
 干扰项按 §6 由 AI 生成、教师采纳后写入 content.distractors(schema 可选字段);发往学生端时剥掉,
 只以「选项」形式出现在一级脚手架里。
+
+## D32 standalone 产物钉住 outputFileTracingRoot(2026-09-14)
+本仓库是「宿主仓库 + zsb-qbank 子目录」,外层还有一份 lockfile,Next 会把工作区根推断到外层,
+`.next/standalone` 里就多嵌一层 `zsb-qbank/`(本地构建如此),而 Docker 构建上下文只有子目录时又不嵌——
+同一份 Dockerfile 的 COPY 路径在两处行为不同。`next.config.ts` 显式 `outputFileTracingRoot: __dirname`
+把布局钉死:`server.js` 永远在 `.next/standalone/server.js`。
+
+## D33 迁移与种子跑在 tools 容器(2026-09-14)
+运行镜像是精简的 standalone 产物(只含被 trace 到的运行时依赖),没有 tsx,跑不了 `scripts/*.ts`。
+compose 增加 `tools` 服务(profile=tools,不随 up 启动),用构建层镜像跑
+`docker compose run --rm tools pnpm db:migrate / pnpm seed`。不在应用启动时自动迁移:
+自动迁移在多副本或回滚场景下难以预期,显式一条命令更好复盘。
+
+## D34 Origin 校验放在 middleware,缺 Origin 放行(2026-09-14)
+§9.5 要求写接口校验 Origin。放在 `src/middleware.ts` 一处覆盖 /api 全部写接口,免得每个路由各写一遍
+(edge 运行时只读请求头,不碰数据库)。判定用纯函数 `lib/http/origin.ts`:同源(按 `X-Forwarded-Host` /
+`X-Forwarded-Proto` 还原真实站点)或 `APP_ORIGIN` 白名单放行;**没有 Origin 头的请求放行**——浏览器发
+跨站非简单请求必带 Origin,没有就不是浏览器(curl、健康检查、服务端到服务端),不构成 CSRF,
+拦了反而挡住运维脚本与 e2e。
+
+## D35 学生只见已发布试卷;种子卷随 M7 发布(2026-09-14)
+D7 的收紧在 M7 落地:学生端自由练习只列 `published`,自由开卷也只放行 `published`(任务作答由教师
+发布任务把关,不受此限);教师试卷页给发布 / 撤回 / 归档开关。种子卷(2025 真题)状态改为 published
+——它的客观题答案有「参考答案得满分」用例覆盖、主观题参考答案与要点在 M4–M6 一路用于 AI 评分与
+教师复核,再留在草稿里只会让部署后的练习入口是空的;新导入的卷仍默认草稿,必须教师确认后发布。

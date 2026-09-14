@@ -1,14 +1,71 @@
-# M0:仅数据库。app 服务在 M7 上线里程碑加入。
+# zsb-qbank 部署编排(SPEC §9.6)。
+#   db     数据卷持久化,只监听本机
+#   app    Next.js standalone,只监听 127.0.0.1:3000;TLS 由现有反向代理终止(HTTPS 是硬性要求)
+#   tools  一次性运维容器(带完整 devDependencies):跑迁移、种子;默认不随 up 启动
+# 开发只起数据库:docker compose up db -d
+# 生产:cp .env.example .env && 填好 → docker compose up -d --build → docker compose run --rm tools pnpm db:migrate
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: zsb
-      POSTGRES_PASSWORD: zsb
-      POSTGRES_DB: zsb_qbank
+      POSTGRES_USER: ${POSTGRES_USER:-zsb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zsb}
+      POSTGRES_DB: ${POSTGRES_DB:-zsb_qbank}
+      TZ: Asia/Shanghai
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-zsb} -d ${POSTGRES_DB:-zsb_qbank}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    image: zsb-qbank:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # 容器内连 db 服务名;宿主机跑备份 / 恢复时用 .env 里的 127.0.0.1 串
+      DATABASE_URL: postgres://${POSTGRES_USER:-zsb}:${POSTGRES_PASSWORD:-zsb}@db:5432/${POSTGRES_DB:-zsb_qbank}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET 必须设置(≥32 字符)}
+      APP_ORIGIN: ${APP_ORIGIN:-}
+      AUTH_DEV_LOGIN: ${AUTH_DEV_LOGIN:-false}
+      CASDOOR_ISSUER: ${CASDOOR_ISSUER:-}
+      CASDOOR_CLIENT_ID: ${CASDOOR_CLIENT_ID:-}
+      CASDOOR_CLIENT_SECRET: ${CASDOOR_CLIENT_SECRET:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL_GRADING: ${AI_MODEL_GRADING:-}
+      AI_MODEL_AUTHORING: ${AI_MODEL_AUTHORING:-}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-}
+      AI_BATCH: ${AI_BATCH:-}
+      AI_CONCURRENCY: ${AI_CONCURRENCY:-}
+      TZ: Asia/Shanghai
+    ports:
+      - '127.0.0.1:3000:3000'
+
+  # 迁移 / 种子跑在带 devDependencies(tsx)的构建层镜像里:运行镜像是精简的 standalone,没有 tsx。
+  #   docker compose run --rm tools pnpm db:migrate
+  #   docker compose run --rm tools pnpm seed
+  tools:
+    build:
+      context: .
+      target: builder
+    profiles: ['tools']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-zsb}:${POSTGRES_PASSWORD:-zsb}@db:5432/${POSTGRES_DB:-zsb_qbank}
+      SESSION_SECRET: ${SESSION_SECRET:-tools-only-secret-0123456789abcdef}
+      TZ: Asia/Shanghai
+    command: ['pnpm', 'db:migrate']
+
 volumes:
   pgdata:

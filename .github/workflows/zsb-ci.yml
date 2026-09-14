@@ -52,6 +52,8 @@ jobs:
       # 单测在迁移 + 种子之后跑:M4 起含对真库的 ai_jobs 集成用例(假 AI 调用器,不打真接口)。
       - run: pnpm test
       - run: pnpm build
+      # 性能预算(SPEC §7.7 / M7):学生端路由首屏 JS ≤ 200 KB(gzip)
+      - run: pnpm budget
       # 移动视口 e2e(M3 接入,docs/DECISIONS.md D11):对 next start 起的真服务跑
       # 模考闭环冒烟。开发登录仅本 job 打开;数据库就是上面已种子的服务容器。
       - run: pnpm exec playwright install --with-deps chromium
