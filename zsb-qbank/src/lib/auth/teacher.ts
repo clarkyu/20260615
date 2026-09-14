@@ -31,7 +31,8 @@ export async function requireTeacherApi(req?: NextRequest): Promise<{ ok: true; 
 export async function requireTeacherPage(): Promise<TeacherCtx> {
   const session = await getSession()
   if (!session.user) redirect('/teacher/login')
-  if (session.user.role !== 'teacher' && session.user.role !== 'admin') redirect('/')
+  // 已登录但不是教师:回登录页,那里会说明「当前账号没有教师权限」,而不是默默弹回首页
+  if (session.user.role !== 'teacher' && session.user.role !== 'admin') redirect('/teacher/login')
   const userId = await ensureUser(getDb(), session.user)
   return { user: session.user, userId }
 }

@@ -1,15 +1,24 @@
 import { getIronSession, type SessionOptions } from 'iron-session'
 import { cookies } from 'next/headers'
 
-// 会话(iron-session + HttpOnly Cookie)。M0 只有开发登录;Casdoor OIDC 接入后
-// 同一会话结构不变(docs/DECISIONS.md)。
+// 会话(iron-session + HttpOnly Cookie)。开发登录与 Casdoor OIDC 共用同一结构:
+// user 只存 sub、姓名、角色(§9.5 个人信息最小化);登录流程的一次性状态放 oidc,回调后清掉。
 export interface SessionUser {
   sub: string
   name: string
   role: 'student' | 'teacher' | 'admin'
 }
+/** 登录流程中的一次性状态(Casdoor 授权码 + PKCE);回调用完即清。 */
+export interface OidcPending {
+  state: string
+  nonce: string
+  verifier: string
+  returnTo?: string
+  startedAt: number
+}
 export interface SessionData {
   user?: SessionUser
+  oidc?: OidcPending
 }
 
 function options(): SessionOptions {

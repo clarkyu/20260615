@@ -23,6 +23,7 @@ cp .env.example .env
 | `SESSION_SECRET` | `openssl rand -base64 32`,≥32 字符;换掉它 = 所有人被登出 |
 | `APP_ORIGIN` | 对外地址,如 `https://zsb.example.com`。写接口按它校验 Origin(§9.5) |
 | `AUTH_DEV_LOGIN` | 生产必须 `false`(为 `true` 时任何人都能一键登录成教师) |
+| `CASDOOR_ISSUER` / `CASDOOR_CLIENT_ID` / `CASDOOR_CLIENT_SECRET` | 统一身份登录;三项齐全即启用,见下「统一身份登录」 |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL_GRADING` | AI 评分;三项任一缺失即视为未配置,主观题会分流为「待老师评」,系统不崩溃 |
 | `AI_MODEL_AUTHORING` | 解析、导入结构化、变式题用的模型;留空则用 `AI_MODEL_GRADING` |
 
@@ -91,9 +92,32 @@ server {
 
 上线后自测:`curl -I https://zsb.example.com/` 应有 `cache-control: no-cache`(微信缓存激进,HTML 不缓存)。
 
-### 5. 建账号与开课
+### 5. 统一身份登录(Casdoor)
 
-1. 教师端 `https://zsb.example.com/teacher` 登录(Casdoor 接入前先用开发登录,见「已知限制」)。
+在 Casdoor 里建一个应用,然后把三项配置填进 `.env`:
+
+1. Casdoor → 应用 → 添加:
+   - **Redirect URLs** 填 `https://zsb.example.com/api/auth/callback`(与 `CASDOOR_REDIRECT_URI` 或
+     `APP_ORIGIN` 推出的地址必须完全一致)
+   - **Grant types** 勾 `authorization_code`;**Token format** 选 JWT;scope 至少含 `openid profile`
+2. `.env` 填 `CASDOOR_ISSUER`(Casdoor 根地址)、`CASDOOR_CLIENT_ID`、`CASDOOR_CLIENT_SECRET`,
+   并确认 `APP_ORIGIN` 是对外地址。
+3. 角色:默认把组 / 角色名里含 `teacher`、`教师` 的判为教师,`admin`、`管理员` 判为管理员,其余是学生;
+   用 `CASDOOR_TEACHER_GROUPS` / `CASDOOR_ADMIN_GROUPS` 可改(逗号分隔,大小写不敏感)。
+   给老师在 Casdoor 里加上对应的组即可,系统这边不需要再建账号。
+4. `docker compose up -d` 重启后,首页与 `/teacher/login` 会出现「统一身份登录」按钮;
+   三项里缺任何一项,按钮不出现,回落到开发登录。
+
+登录流程是授权码 + PKCE:`/api/auth/login` 生成 state / nonce / code_verifier 存进加密会话并跳转,
+`/api/auth/callback` 核对 state、用授权码换 token、校验 `id_token` 的 iss / aud / exp / nonce,
+再按组映射角色建会话。系统只存 sub、姓名、角色(§9.5 个人信息最小化),不存手机号与邮箱。
+
+排查:登录失败会回到 `/teacher/login` 并在页面上显示中文原因(如「audience 不匹配」= client id 填错、
+「nonce 不匹配」= 会话过期重新点一次);服务端日志只记 `[auth] casdoor 登录成功 role=…`,不记姓名与 sub。
+
+### 6. 建账号与开课
+
+1. 教师端 `https://zsb.example.com/teacher` 登录(统一身份登录;没配 Casdoor 时用开发登录)。
 2. 「班级」建班 → 拿六位加入码 → 发到微信群。
 3. 「试卷」确认目标卷是「已发布」;或「导入」上传 Word 真题 → 校对 → 保存 → 发布。
 4. 「任务」选试卷(整卷或勾选小题)、班级、模式、开放与截止时间 → 发布。
@@ -186,8 +210,10 @@ AI 队列是进程内轮询线程(每 2 秒一轮),重启 app 即可重新消费
 
 ## 四、已知限制
 
-- **登录**:Casdoor OIDC 尚未接入,目前靠 `AUTH_DEV_LOGIN` 开发登录(D2)。生产必须关掉它,
-  等 Casdoor 接好再开放注册;在那之前可由 clark 用开发登录建好教师账号、学生用加入码进班。
+- **登录**:Casdoor OIDC 已接入(授权码 + PKCE,见上「统一身份登录」)。没配 Casdoor 时才回落到
+  `AUTH_DEV_LOGIN` 开发登录——生产上两者必须二选一,别让开发登录留在打开状态。
+  id_token 不验签:它是服务端用 client_secret 直接从 token 端点(TLS)换来的,不经浏览器
+  (OIDC Core 3.1.3.7 允许);声明仍逐条校验。
 - **Service Worker / 离线壳**:Serwist 尚未接入(D3),断网续答靠 IndexedDB + 同步队列,
   但首次打开仍需要网络。
 - **每题中位用时**:未采集(无逐题计时埋点),学情页对应位置明示。
