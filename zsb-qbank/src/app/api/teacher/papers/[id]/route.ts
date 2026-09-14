@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
-import { attempts, items, papers, responses } from '@/lib/db/schema'
+import { assignments, attempts, items, papers, responses } from '@/lib/db/schema'
 import { assemblePaper } from '@/lib/db/queries'
 import { upsertPaper } from '@/lib/db/import-paper'
 import { recomputeTotal, validateDraft } from '@/lib/import/draft'
@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 // 请求体 = §4 试卷 JSON(zod 唯一事实来源),校验失败按路径返回问题;已有作答记录的试卷不允许整卷
 // 重建(小题会换 id,作答与任务会失联),提示改用小题编辑。
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const auth = await requireTeacherApi()
+  const auth = await requireTeacherApi(req)
   if (!auth.ok) return auth.res
   const { id } = await ctx.params
   let raw: unknown
@@ -48,6 +48,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     if ((used?.n ?? 0) > 0 || (tries?.n ?? 0) > 0) {
       return NextResponse.json({ error: { code: 'conflict', message: '该试卷已有学生作答记录，不能整卷重建；请换一个试卷 id 另存，或用小题编辑修改' } }, { status: 409 })
     }
+    // 勾选小题的任务按小题 id 引用试卷,整卷重建会让这些 id 失效(学生开卷变成空卷):同样拒绝。
+    const [subsetTasks] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(assignments)
+      .where(and(eq(assignments.paperId, id), sql`${assignments.itemIds} is not null`))
+    if ((subsetTasks?.n ?? 0) > 0) {
+      return NextResponse.json({ error: { code: 'conflict', message: '该试卷已被「勾选小题」的任务引用，不能整卷重建；请换一个试卷 id 另存，或用小题编辑修改' } }, { status: 409 })
+    }
   }
   const paper = recomputeTotal(v.paper)
   const got = await upsertPaper(db, paper, { createdBy: auth.ctx.userId })
@@ -56,7 +64,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
 // PATCH /api/teacher/papers/:id { status }:草稿 / 发布 / 归档流转(不动题目)。
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const auth = await requireTeacherApi()
+  const auth = await requireTeacherApi(req)
   if (!auth.ok) return auth.res
   const { id } = await ctx.params
   let body: { status?: unknown }

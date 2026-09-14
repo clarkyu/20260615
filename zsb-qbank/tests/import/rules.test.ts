@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { docxToMarkdown } from '@/lib/import/docx'
-import { extractBlanks, parseHeadingMeta, parseMarkdown, unescapeMd, type RuleDraft } from '@/lib/import/rules'
+import { extractBlanks, parseHeadingMeta, parseMarkdown, sentenceAround, unescapeMd, type RuleDraft } from '@/lib/import/rules'
 import { ruleDraftToPaper, validateDraft } from '@/lib/import/draft'
 
 // 导入向导规则切分(SPEC §8 / 附录 B):对仓库附带的 2025 真题 docx 做集成断言,
@@ -51,6 +51,37 @@ describe('extractBlanks', () => {
   })
 })
 
+describe('规则引擎边界', () => {
+  it('sentenceAround:换行后的句子不吞首字母;句号后取下一句', () => {
+    expect(sentenceAround('Para one ends.\n\nThe {{7}} thing is here. Next.', 7)).toBe('The {{7}} thing is here.')
+    expect(sentenceAround('First. Liu {{2}} works here. Third.', 2)).toBe('Liu {{2}} works here.')
+    expect(sentenceAround('No blank', 9)).toBeUndefined()
+  })
+  it('题号不回退:重复出现的题号不当作新题,由校验报重复', () => {
+    const d = parseMarkdown('一、连词成句（每题2分，共3题）\n1. a / b\n2. c / d\n2. e / f\n3. g / h')
+    expect(d.sections[0]!.groups[0]!.items.map((i) => i.number)).toEqual([1, 2, 3])
+  })
+  it('三位数题号与空位', () => {
+    const lines = Array.from({ length: 102 }, (_, i) => `${i + 1}. a / b`).join('\n')
+    const d = parseMarkdown(`一、连词成句（每题2分，共102题）\n${lines}`)
+    expect(d.sections[0]!.groups[0]!.items).toHaveLength(102)
+    expect(extractBlanks('He   100   (win) it.', 100).text).toBe('He {{100}} it.')
+  })
+  it('题型识别不出的大题仍切出占位小题并标红', () => {
+    const d = parseMarkdown('一、英译汉（每题3分，共2题）\n1. Translate this.\n2. Translate that.')
+    const g = d.sections[0]!.groups[0]!
+    expect(g.items.map((i) => i.number)).toEqual([1, 2])
+    expect(g.items[0]!.flags.map((f) => f.code)).toContain('type_unknown')
+  })
+  it('翻译题没带句子:source 留空并标红', () => {
+    const d = parseMarkdown('一、阅读问答（每题2分，共2题）\nSome passage here.\n1. What is it?\n2. Translate the underlined sentence into Chinese.')
+    const it = d.sections[0]!.groups[0]!.items[1]!
+    expect(it.type).toBe('translate_e2c')
+    expect(it.content).toEqual({ source: '' })
+    expect(it.flags.map((f) => f.code)).toContain('source_missing')
+  })
+})
+
 describe('2025 真题 docx(附录 B 陷阱)', () => {
   let draft: RuleDraft
   let markdown: string
@@ -88,6 +119,8 @@ describe('2025 真题 docx(附录 B 陷阱)', () => {
     expect(byNumber(2).content).toEqual({ blank: 2, maxWords: 1 })
     expect([3, 5, 6, 7, 8, 10].map((n) => byNumber(n).content.hint)).toEqual(['start', 'beauty', 'design', 'finish', 'walk', 'happy'])
     expect(byNumber(7).contextSnippet).toContain('{{7}}')
+    expect(byNumber(2).contextSnippet).toMatch(/^Liu lives in Chengdu/)
+    expect(byNumber(6).contextSnippet).toMatch(/^Liu also/)
   })
   it('连词成句:16.to improve 无空格也识别;词块带标点、以 / 分隔', () => {
     expect(byNumber(11).content).toEqual({ chunks: ['her homework', 'She', 'has completed.'] })

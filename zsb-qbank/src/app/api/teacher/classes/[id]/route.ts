@@ -3,12 +3,14 @@ import { and, asc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { classMembers, classes, users } from '@/lib/db/schema'
 import { requireTeacherApi } from '@/lib/auth/teacher'
+import { isUuid } from '@/lib/uuid'
 
 // GET /api/teacher/classes/:id:班级详情 + 成员列表(仅本教师的班级)。
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireTeacherApi()
   if (!auth.ok) return auth.res
   const { id } = await ctx.params
+  if (!isUuid(id)) return NextResponse.json({ error: { code: 'not_found', message: '班级不存在' } }, { status: 404 })
   const db = getDb()
   const cls = await db.query.classes.findFirst({ where: and(eq(classes.id, id), eq(classes.teacherId, auth.ctx.userId)) })
   if (!cls) return NextResponse.json({ error: { code: 'not_found', message: '班级不存在' } }, { status: 404 })

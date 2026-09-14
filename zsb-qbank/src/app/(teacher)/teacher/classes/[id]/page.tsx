@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { requireTeacherPage } from '@/lib/auth/teacher'
+import { isUuid } from '@/lib/uuid'
 import { getDb } from '@/lib/db/client'
 import { assignments, classMembers, classes, users } from '@/lib/db/schema'
 import { fmtTime, MODE_LABEL } from '@/lib/teacher/item-preview'
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic'
 export default async function TeacherClassDetail({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await requireTeacherPage()
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const db = getDb()
   const cls = await db.query.classes.findFirst({ where: and(eq(classes.id, id), eq(classes.teacherId, userId)) })
   if (!cls) notFound()

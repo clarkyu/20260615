@@ -13,13 +13,11 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
+// 根布局只放 html/body:学生端的单列骨架在 (student)/layout.tsx,教师端的宽容器在 (teacher)/teacher/layout.tsx。
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body>
-        {/* 学生端全局骨架:单列、100dvh、无横向滚动(SPEC §7.1)。 */}
-        <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col">{children}</div>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

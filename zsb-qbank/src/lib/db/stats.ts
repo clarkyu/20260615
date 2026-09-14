@@ -71,7 +71,8 @@ export async function loadStudentOverview(db: Db, teacherId: string, studentId: 
     .innerJoin(classMembers, and(eq(classMembers.classId, classes.id), eq(classMembers.userId, studentId)))
     .leftJoin(attempts, and(eq(attempts.assignmentId, assignments.id), eq(attempts.userId, studentId)))
     .where(eq(classes.teacherId, teacherId))
-    .orderBy(desc(assignments.createdAt), desc(attempts.startedAt))
+    .orderBy(desc(assignments.createdAt), sql`(${attempts.status} = 'in_progress')`, desc(attempts.startedAt))
+  // 每个任务取代表性 attempt:优先最近一次已交的,一次都没交才取作答中的(与 assignmentRoster 同口径)。
   const latest = new Map<string, (typeof tasks)[number]>()
   for (const r of tasks) if (!latest.has(r.a.id)) latest.set(r.a.id, r)
   // 满分:整卷取试卷满分,子集取所选小题分值和
@@ -89,18 +90,30 @@ export async function loadStudentOverview(db: Db, teacherId: string, studentId: 
         .innerJoin(attempts, eq(responses.attemptId, attempts.id))
         .where(and(inArray(responses.attemptId, doneAttemptIds), sql`${attempts.status} <> 'in_progress'`))
     : []
-  const itemById = new Map(itemRows.map((it) => [it.id, it]))
+  // 按每份已交作答的「任务范围内全部小题」聚合:没作答的按 0 分计(与任务学情口径一致),待评的不计。
+  const respByAttempt = new Map<string, Map<string, number | null>>()
+  for (const r of resp) {
+    const m = respByAttempt.get(r.attemptId) ?? new Map<string, number | null>()
+    m.set(r.itemId, r.score)
+    respByAttempt.set(r.attemptId, m)
+  }
   const typeAgg = new Map<string, { items: number; score: number; fullScore: number }>()
   let wrongCount = 0
-  for (const r of resp) {
-    const it = itemById.get(r.itemId)
-    if (!it || r.score === null) continue
-    const cur = typeAgg.get(it.type) ?? { items: 0, score: 0, fullScore: 0 }
-    cur.items++
-    cur.score += r.score
-    cur.fullScore += it.score
-    typeAgg.set(it.type, cur)
-    if (isObjectiveType(it.type as Item['type']) ? r.score < it.score : r.score < it.score / 2) wrongCount++
+  for (const r of latest.values()) {
+    const t = r.t
+    if (!t || t.status === 'in_progress' || !r.a.paperId) continue
+    const scoped = itemRows.filter((it) => it.paperId === r.a.paperId && (!r.a.itemIds?.length || r.a.itemIds.includes(it.id)))
+    const answers = respByAttempt.get(t.id) ?? new Map<string, number | null>()
+    for (const it of scoped) {
+      const score = answers.has(it.id) ? answers.get(it.id)! : 0
+      if (score === null) continue // 待评
+      const cur = typeAgg.get(it.type) ?? { items: 0, score: 0, fullScore: 0 }
+      cur.items++
+      cur.score += score
+      cur.fullScore += it.score
+      typeAgg.set(it.type, cur)
+      if (isObjectiveType(it.type as Item['type']) ? score < it.score : score < it.score / 2) wrongCount++
+    }
   }
   const [due] = await db
     .select({ n: sql<number>`count(*)::int` })

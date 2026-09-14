@@ -44,7 +44,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireTeacherApi()
+  const auth = await requireTeacherApi(req)
   if (!auth.ok) return auth.res
   let raw: unknown
   try {

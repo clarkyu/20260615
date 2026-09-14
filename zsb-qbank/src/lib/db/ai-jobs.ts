@@ -1,6 +1,6 @@
 import { and, eq, inArray, ne, or, isNull, sql } from 'drizzle-orm'
 import type { Db } from './client'
-import { aiGradeCache, aiJobs, attempts, groups, items, responses, wrongAnswers } from './schema'
+import { aiGradeCache, aiJobs, attempts, groups, items, papers, responses, wrongAnswers } from './schema'
 import { itemSchema, studentAnswerSchema, type Item } from '@/lib/schema/paper'
 import { AiError, type AiCaller, extractJson } from '@/lib/ai/client'
 import { PROMPT_VERSION, buildExplainUser, buildGradeUser, gradePromptFor, loadPrompt, studentAnswerText } from '@/lib/ai/prompts'
@@ -150,13 +150,13 @@ export async function applyGradeToResponse(
 
 /** attempt 总分 = 已判小题得分之和(客观 + AI/教师);待评的不计。 */
 export async function recomputeAttemptScore(db: Db, attemptId: string): Promise<number> {
-  const [row] = await db
-    .select({ total: sql<number>`coalesce(sum(${responses.score}), 0)` })
-    .from(responses)
-    .where(eq(responses.attemptId, attemptId))
-  const total = Number(row?.total ?? 0)
-  await db.update(attempts).set({ totalScore: total }).where(eq(attempts.id, attemptId))
-  return total
+  // 单条语句(子查询求和):并发的 AI 任务 / 教师改分不会以「先读后写」把旧总分写回去。
+  const rows = await db
+    .update(attempts)
+    .set({ totalScore: sql`(select coalesce(sum(${responses.score}), 0) from ${responses} where ${responses.attemptId} = ${attempts.id})` })
+    .where(eq(attempts.id, attemptId))
+    .returning({ total: attempts.totalScore })
+  return Number(rows[0]?.total ?? 0)
 }
 
 /**
@@ -425,8 +425,14 @@ async function runParseJob(db: Db, job: AiJobRow, payload: ParseJobPayload, ai: 
   const rule = parseMarkdown(payload.markdown)
   const year = payload.meta?.year ?? suggestYear(rule.title)
   const title = payload.meta?.title ?? rule.title ?? payload.filename.replace(/\.docx$/i, '')
+  // 建议 id 若已被占用(如种子卷),自动加后缀:导入向导保存时不会悄悄覆盖现有试卷。
+  let suggested = payload.meta?.id ?? suggestPaperId(title, year)
+  if (!payload.meta?.id) {
+    const base = suggested
+    for (let n = 2; await db.query.papers.findFirst({ where: eq(papers.id, suggested), columns: { id: true } }); n++) suggested = `${base}-import${n > 2 ? `-${n}` : ''}`
+  }
   const meta: PaperMeta = {
-    id: payload.meta?.id ?? suggestPaperId(title, year),
+    id: suggested,
     title,
     year,
     region: payload.meta?.region ?? (/湖北/.test(title) ? '湖北' : ''),
@@ -449,12 +455,12 @@ async function runParseJob(db: Db, job: AiJobRow, payload: ParseJobPayload, ai: 
           aiIssues.push(...mergeAiItems(paper, si, gi, items))
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
-          aiIssues.push({ path: `sections.${si}.groups.${gi}`, message: `AI 结构化失败:${msg},请手动填写答案`, source: 'ai' })
+          aiIssues.push({ path: `sections.${si}.groups.${gi}`, message: `AI 结构化失败：${msg}，请手动填写答案`, source: 'ai' })
         }
       }
     }
   } else {
-    aiIssues.push({ path: '', message: 'AI 未配置:答案与解析需手动填写', source: 'ai' })
+    aiIssues.push({ path: '', message: 'AI 未配置：答案与解析需手动填写', source: 'ai' })
   }
   const validated = validateDraft(paper, [...issues, ...aiIssues])
   await finishJob(db, job, 'done', {

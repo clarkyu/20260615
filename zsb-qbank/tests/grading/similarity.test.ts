@@ -22,6 +22,18 @@ describe('similarity', () => {
     expect(far).toBeLessThan(0.4)
     expect(near).toBeGreaterThan(far)
   })
+  it('单字符 / 空答案不会被判成完全相同', () => {
+    expect(similarity('是', '否')).toBe(0)
+    expect(similarity('', 'a')).toBe(0)
+    expect(similarity('a', 'a')).toBe(1)
+  })
+  it('500 条作文级答案排序在 2 秒内', () => {
+    const rows = Array.from({ length: 500 }, (_, i) => `Dear Sir, I am Li Hua and I would like to join the festival number ${i % 7}. ${'We will prepare songs. '.repeat(1 + (i % 5))}`)
+    const t0 = Date.now()
+    const out = orderBySimilarity(rows, (s) => s)
+    expect(out).toHaveLength(500)
+    expect(Date.now() - t0).toBeLessThan(2000)
+  })
   it('对称', () => {
     expect(similarity('stay quiet', 'keep quiet')).toBeCloseTo(similarity('keep quiet', 'stay quiet'), 6)
   })

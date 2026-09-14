@@ -89,6 +89,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const saved = savedByItem.get(row.id)
     const answer: StudentAnswer | null = saved ? (studentAnswerSchema.safeParse(saved.answer).data ?? null) : null
     const reference = 'reference' in item.answer ? [item.answer.reference] : []
+    const acceptedAll = 'accepted' in item.answer ? item.answer.accepted : 'correct' in item.answer ? item.answer.correct : reference
+
+    // 教师终评(§5.3)不被再次「对答案」覆盖:直接回显终评结果。
+    if (saved?.gradeSource === 'teacher') {
+      const detail = (saved.gradeDetail as { verdict?: string } | null) ?? null
+      results.push({ itemId: row.id, verdict: detail?.verdict ?? 'graded', score: saved.score ?? 0, fullScore: item.score, feedback: saved.feedback ?? null, accepted: acceptedAll, explanation: item.explanation ?? null, teacherFinal: true })
+      continue
+    }
 
     if (!isObjectiveType(item.type)) {
       if (!saved) {

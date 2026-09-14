@@ -38,75 +38,123 @@ interface Field {
 }
 const COMMON: Field[] = [
   { path: 'explanation', label: '解析', kind: 'textarea' },
-  { path: 'knowledgeTags', label: '知识点(每行一个)', kind: 'list' },
+  { path: 'knowledgeTags', label: '知识点（每行一个）', kind: 'list' },
   { path: 'difficulty', label: '难度 1–3', kind: 'number' },
 ]
 const FIELDS: Record<string, Field[]> = {
   fill: [
     { path: 'content.hint', label: '提示词', kind: 'text' },
     { path: 'content.maxWords', label: '最多词数', kind: 'number' },
-    { path: 'answer.accepted', label: '参考答案(每行一个可接受写法)', kind: 'list' },
-    { path: 'contextSnippet', label: '所在句(训练模式用)', kind: 'textarea' },
+    { path: 'answer.accepted', label: '参考答案（每行一个可接受写法）', kind: 'list' },
+    { path: 'contextSnippet', label: '所在句（训练模式用）', kind: 'textarea' },
   ],
   reorder: [
-    { path: 'content.chunks', label: '词块(每行一个)', kind: 'list' },
-    { path: 'answer.accepted', label: '参考答案句(每行一个)', kind: 'list' },
+    { path: 'content.chunks', label: '词块（每行一个）', kind: 'list' },
+    { path: 'answer.accepted', label: '参考答案句（每行一个）', kind: 'list' },
   ],
   short_answer: [
     { path: 'content.question', label: '问题', kind: 'textarea' },
     { path: 'answer.reference', label: '参考答案', kind: 'textarea' },
-    { path: 'answer.keyPoints', label: '要点(每行一个)', kind: 'list' },
+    { path: 'answer.keyPoints', label: '要点（每行一个）', kind: 'list' },
     { path: 'answer.rubric', label: '评分细则', kind: 'textarea' },
   ],
   translate_e2c: [
     { path: 'content.source', label: '英文原句', kind: 'textarea' },
     { path: 'answer.reference', label: '参考译文', kind: 'textarea' },
-    { path: 'answer.keyPoints', label: '意群要点(每行一个)', kind: 'list' },
+    { path: 'answer.keyPoints', label: '意群要点（每行一个）', kind: 'list' },
     { path: 'answer.rubric', label: '评分细则', kind: 'textarea' },
   ],
   translate_c2e_fill: [
     { path: 'content.zh', label: '中文', kind: 'textarea' },
-    { path: 'content.frame', label: '英文框架({{blank}} 为空位)', kind: 'textarea' },
+    { path: 'content.frame', label: '英文框架（{{blank}} 为空位）', kind: 'textarea' },
     { path: 'content.hint', label: '提示词', kind: 'text' },
     { path: 'content.maxWords', label: '最多词数', kind: 'number' },
-    { path: 'answer.accepted', label: '参考答案(每行一个可接受写法)', kind: 'list' },
+    { path: 'answer.accepted', label: '参考答案（每行一个可接受写法）', kind: 'list' },
   ],
   writing: [
-    { path: 'content.genre', label: '体裁(email / letter / essay…)', kind: 'text' },
+    { path: 'content.genre', label: '体裁（email / letter / essay…）', kind: 'text' },
     { path: 'content.persona', label: '身份', kind: 'text' },
     { path: 'content.prompt', label: '题目', kind: 'textarea' },
-    { path: 'content.requirements', label: '要点(每行一个)', kind: 'list' },
+    { path: 'content.requirements', label: '要点（每行一个）', kind: 'list' },
     { path: 'content.minWords', label: '最少词数', kind: 'number' },
     { path: 'answer.sample', label: '范文', kind: 'textarea' },
-    { path: 'answer.rubric', label: '评分维度 JSON [{name,maxScore,desc}]', kind: 'json' },
+    { path: 'answer.rubric', label: '评分维度 JSON（[{name,maxScore,desc}]）', kind: 'json' },
   ],
 }
 const TYPES = ['fill', 'reorder', 'short_answer', 'translate_e2c', 'translate_c2e_fill', 'writing'] as const
 
-function FieldInput({ value, kind, onChange, bad }: { value: unknown; kind: Kind; onChange: (v: unknown) => void; bad: boolean }) {
-  const cls = `mt-0.5 w-full rounded-lg border px-2 py-1 text-sm dark:bg-neutral-900 ${bad ? 'border-red-500 bg-red-50 dark:bg-red-950/30' : 'border-neutral-300 dark:border-neutral-700'}`
-  if (kind === 'number') return <input type="number" className={cls} value={typeof value === 'number' ? value : ''} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))} />
-  if (kind === 'text') return <input className={cls} value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value || undefined)} />
-  if (kind === 'list') {
-    const text = Array.isArray(value) ? value.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n') : ''
-    return <textarea className={cls} rows={Math.min(6, Math.max(2, text.split('\n').length))} value={text} onChange={(e) => onChange(e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))} />
-  }
-  if (kind === 'json') {
-    return (
+// 「每行一个」列表:编辑期间保留原始文本(否则回车 / 首尾空格会被即时吞掉),失焦时才整理成数组。
+function ListInput({ value, onChange, cls }: { value: unknown; onChange: (v: unknown) => void; cls: string }) {
+  const joined = Array.isArray(value) ? value.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n') : ''
+  const [text, setText] = useState(joined)
+  const [editing, setEditing] = useState(false)
+  const shown = editing ? text : joined
+  return (
+    <textarea
+      className={cls}
+      rows={Math.min(8, Math.max(2, shown.split('\n').length + (editing ? 1 : 0)))}
+      value={shown}
+      onFocus={() => {
+        setText(joined)
+        setEditing(true)
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setEditing(false)
+        onChange(text.split('\n').map((s) => s.trim()).filter(Boolean))
+      }}
+    />
+  )
+}
+// JSON 字段:解析失败不吞掉,标红提示直到改对。
+function JsonInput({ value, onChange, cls }: { value: unknown; onChange: (v: unknown) => void; cls: string }) {
+  const [text, setText] = useState(JSON.stringify(value ?? [], null, 0))
+  const [bad, setBad] = useState(false)
+  return (
+    <>
       <textarea
-        className={cls}
+        className={`${cls} ${bad ? 'border-red-500' : ''}`}
         rows={3}
-        defaultValue={JSON.stringify(value ?? [], null, 0)}
-        onBlur={(e) => {
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
           try {
-            onChange(JSON.parse(e.target.value))
+            onChange(JSON.parse(text))
+            setBad(false)
           } catch {
-            /* 保持原值,由 zod 报错标红 */
+            setBad(true)
           }
         }}
       />
-    )
-  }
+      {bad ? <span className="text-xs text-red-600">JSON 格式不对（键名要加引号），未保存这处修改</span> : null}
+    </>
+  )
+}
+// 数字输入:清空时存 undefined(而不是 0),由 zod 在保存时报缺失。
+function NumberInput({ value, onChange, cls }: { value: unknown; onChange: (v: unknown) => void; cls: string }) {
+  const [text, setText] = useState(typeof value === 'number' ? String(value) : '')
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className={cls}
+      value={text}
+      onChange={(e) => {
+        const t = e.target.value
+        setText(t)
+        if (t.trim() === '') onChange(undefined)
+        else if (/^-?\d*\.?\d*$/.test(t) && !Number.isNaN(Number(t)) && t !== '.' && t !== '-') onChange(Number(t))
+      }}
+    />
+  )
+}
+
+function FieldInput({ value, kind, onChange, bad }: { value: unknown; kind: Kind; onChange: (v: unknown) => void; bad: boolean }) {
+  const cls = `mt-0.5 w-full rounded-lg border px-2 py-1 text-sm dark:bg-neutral-900 ${bad ? 'border-red-500 bg-red-50 dark:bg-red-950/30' : 'border-neutral-300 dark:border-neutral-700'}`
+  if (kind === 'number') return <NumberInput value={value} onChange={onChange} cls={cls} />
+  if (kind === 'text') return <input className={cls} value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value || undefined)} />
+  if (kind === 'list') return <ListInput value={value} onChange={onChange} cls={cls} />
+  if (kind === 'json') return <JsonInput value={value} onChange={onChange} cls={cls} />
   const t = typeof value === 'string' ? value : ''
   return <textarea className={cls} rows={Math.min(10, Math.max(2, Math.ceil(t.length / 90) + t.split('\n').length - 1))} value={t} onChange={(e) => onChange(e.target.value)} />
 }
@@ -123,26 +171,41 @@ export function DraftEditor({ draft, issues, onChange }: { draft: Json; issues: 
   const set = (path: string, v: unknown) => onChange(setPath(draft, path, v))
   const metaCls = 'mt-0.5 w-full rounded-lg border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900'
 
+  const topIssues = issues.filter((i) => !/^sections\.\d+/.test(i.path))
   return (
     <div className="flex flex-col gap-4 text-sm">
+      {topIssues.length ? (
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+          {topIssues.map((i, k) => (
+            <p key={k}>
+              ⚠ {i.path ? `${i.path}：` : ''}
+              {i.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
       <div className="grid gap-2 rounded-2xl border border-neutral-200 bg-white p-3 md:grid-cols-3 dark:border-neutral-800 dark:bg-neutral-900">
         {(
           [
-            ['id', '试卷 id(英文短横线,发布后不可改)', 'text'],
+            ['id', '试卷 id（英文短横线，保存后不可改）', 'text'],
             ['title', '标题', 'text'],
             ['year', '年份', 'number'],
             ['region', '地区', 'text'],
-            ['durationMinutes', '考试时长(分钟)', 'number'],
-            ['status', '状态(draft / published)', 'text'],
+            ['durationMinutes', '考试时长（分钟）', 'number'],
+            ['status', '状态（draft / published）', 'text'],
           ] as const
         ).map(([k, label, kind]) => (
           <label key={k}>
             <span className="text-neutral-500">{label}</span>
-            <input type={kind} className={`${metaCls} ${issueByPath.has(k) ? 'border-red-500' : ''}`} value={String(draft[k] ?? '')} onChange={(e) => set(k, kind === 'number' ? Number(e.target.value) : e.target.value)} />
+            {kind === 'number' ? (
+              <NumberInput value={draft[k]} onChange={(v) => set(k, v)} cls={`${metaCls} ${issueByPath.has(k) ? 'border-red-500' : ''}`} />
+            ) : (
+              <input className={`${metaCls} ${issueByPath.has(k) ? 'border-red-500' : ''}`} value={String(draft[k] ?? '')} onChange={(e) => set(k, e.target.value)} />
+            )}
           </label>
         ))}
         <p className="text-neutral-500 md:col-span-3">
-          总分 {sections.reduce((n, s) => n + ((s.groups as Json[] | undefined) ?? []).reduce((m, g) => m + ((g.items as Json[] | undefined) ?? []).reduce((k, it) => k + (Number(it.score) || 0), 0), 0), 0)} 分(由各小题分值自动求和)
+          总分 {sections.reduce((n, s) => n + ((s.groups as Json[] | undefined) ?? []).reduce((m, g) => m + ((g.items as Json[] | undefined) ?? []).reduce((k, it) => k + (Number(it.score) || 0), 0), 0), 0)} 分（由各小题分值自动求和）
         </p>
       </div>
 
@@ -184,7 +247,7 @@ export function DraftEditor({ draft, issues, onChange }: { draft: Json; issues: 
                   </label>
                   <label>
                     <span className="text-neutral-500">每题分值</span>
-                    <input type="number" className={metaCls} value={String(sec.scorePerItem ?? '')} onChange={(e) => set(`${sp}.scorePerItem`, Number(e.target.value))} />
+                    <NumberInput value={sec.scorePerItem} onChange={(v) => set(`${sp}.scorePerItem`, v)} cls={metaCls} />
                   </label>
                   <label className="md:col-span-4">
                     <span className="text-neutral-500">作答说明</span>
@@ -219,7 +282,7 @@ export function DraftEditor({ draft, issues, onChange }: { draft: Json; issues: 
                       ) : null}
                       {typeof g.frame === 'string' ? (
                         <label className="mt-1 block">
-                          <span className="text-neutral-500">框架({'{{n}}'} 为第 n 题空位)</span>
+                          <span className="text-neutral-500">框架（{'{{n}}'} 为第 n 题空位）</span>
                           <textarea className={metaCls} rows={4} value={g.frame} onChange={(e) => set(`${gp}.frame`, e.target.value)} />
                         </label>
                       ) : null}
@@ -233,7 +296,7 @@ export function DraftEditor({ draft, issues, onChange }: { draft: Json; issues: 
                             <div className="flex flex-wrap items-center gap-2">
                               <label className="flex items-center gap-1">
                                 题号
-                                <input type="number" className={`w-16 rounded-lg border px-2 py-0.5 dark:bg-neutral-900 ${issueByPath.has(`${ip}.number`) ? 'border-red-500' : 'border-neutral-300 dark:border-neutral-700'}`} value={String(it.number ?? '')} onChange={(e) => set(`${ip}.number`, Number(e.target.value))} />
+                                <NumberInput value={it.number} onChange={(v) => set(`${ip}.number`, v)} cls={`w-16 rounded-lg border px-2 py-0.5 dark:bg-neutral-900 ${issueByPath.has(`${ip}.number`) ? 'border-red-500' : 'border-neutral-300 dark:border-neutral-700'}`} />
                               </label>
                               <label className="flex items-center gap-1">
                                 题型
@@ -247,14 +310,14 @@ export function DraftEditor({ draft, issues, onChange }: { draft: Json; issues: 
                               </label>
                               <label className="flex items-center gap-1">
                                 分值
-                                <input type="number" step={0.5} className="w-16 rounded-lg border border-neutral-300 px-2 py-0.5 dark:border-neutral-700 dark:bg-neutral-900" value={String(it.score ?? '')} onChange={(e) => set(`${ip}.score`, Number(e.target.value))} />
+                                <NumberInput value={it.score} onChange={(v) => set(`${ip}.score`, v)} cls="w-16 rounded-lg border border-neutral-300 px-2 py-0.5 dark:border-neutral-700 dark:bg-neutral-900" />
                               </label>
                             </div>
                             {issues
                               .filter((i) => i.path === ip || i.path.startsWith(ip + '.'))
                               .map((i, k) => (
                                 <p key={k} className="mt-1 text-red-600">
-                                  ⚠ {i.path.slice(ip.length + 1) || '本题'}:{i.message}
+                                  ⚠ {i.path.slice(ip.length + 1) || '本题'}：{i.message}
                                 </p>
                               ))}
                             <div className="mt-1 grid gap-2 md:grid-cols-2">

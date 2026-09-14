@@ -42,9 +42,14 @@ export function ImportWizard() {
     const tick = async () => {
       try {
         const res = await fetch(`/api/teacher/jobs/${jobId}`)
-        const j = (await res.json()) as { job?: { status: string; result?: JobResult; error?: string } }
         if (!alive) return
         setElapsed(Math.round((Date.now() - started) / 1000))
+        if (!res.ok) {
+          setErr(res.status === 401 ? '登录已过期，请重新登录后再上传' : `查询解析任务失败（HTTP ${res.status}）`)
+          setStage('upload')
+          return
+        }
+        const j = (await res.json()) as { job?: { status: string; result?: JobResult; error?: string } }
         if (j.job?.status === 'done' && j.job.result) {
           setDraft(j.job.result.draft)
           setIssues(j.job.result.issues)
@@ -65,7 +70,13 @@ export function ImportWizard() {
         }
         setTimeout(tick, 2000)
       } catch {
-        if (alive) setTimeout(tick, 3000)
+        if (!alive) return
+        if (Date.now() - started > 5 * 60_000) {
+          setErr('网络不通，解析结果拿不到，请稍后重试')
+          setStage('upload')
+          return
+        }
+        setTimeout(tick, 3000)
       }
     }
     void tick()
@@ -78,6 +89,11 @@ export function ImportWizard() {
     const f = fileRef.current?.files?.[0]
     if (!f) return setErr('请选择 .docx 文件')
     setErr(null)
+    // 新一轮上传:清掉上一次的任务与草稿,轮询只认这次 POST 返回的 jobId。
+    setJobId(null)
+    setDraft(null)
+    setIssues([])
+    setAnswerKey(null)
     const fd = new FormData()
     fd.append('file', f)
     setStage('parsing')
@@ -110,7 +126,8 @@ export function ImportWizard() {
         const res = await fetch(`/api/teacher/papers/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(draft) })
         const j = (await res.json().catch(() => null)) as { ok?: boolean; issues?: Issue[]; error?: { message?: string } } | null
         if (!res.ok) {
-          if (j?.issues) setIssues(j.issues)
+          // 服务端只回 schema 问题:与本地的规则 / AI 标红合并,别把老师还没看的红标抹掉。
+          if (j?.issues) setIssues((prev) => [...prev.filter((i) => i.source !== 'schema'), ...j.issues!])
           setErr(j?.error?.message ?? '保存失败')
           return
         }

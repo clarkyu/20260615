@@ -393,14 +393,27 @@ export default function PlayPage() {
               交卷
             </button>
           ) : (
-            <button
-              type="button"
-              disabled={checking}
-              onClick={() => void checkGroup()}
-              className="min-h-11 flex-1 rounded-xl bg-blue-600 px-4 font-medium text-white disabled:opacity-60"
-            >
-              {checking ? '对答案中…' : '对答案'}
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={checking}
+                onClick={() => void checkGroup()}
+                className="min-h-11 flex-1 rounded-xl bg-blue-600 px-4 font-medium text-white disabled:opacity-60"
+              >
+                {checking ? '对答案中…' : '对答案'}
+              </button>
+              {/* 练习也要有「做完了」:交卷后老师端名单 / 学情才有这份成绩,自己也能看成绩页;之后还能再练。 */}
+              {groupIndex >= flat.length - 1 ? (
+                <button
+                  type="button"
+                  disabled={submitState === 'busy'}
+                  onClick={() => setSubmitState('confirm')}
+                  className="min-h-11 rounded-xl border border-blue-600 px-3 text-sm font-medium text-blue-700 disabled:opacity-60 dark:text-blue-300"
+                >
+                  完成
+                </button>
+              ) : null}
+            </>
           )}
           <button
             type="button"
@@ -419,11 +432,13 @@ export default function PlayPage() {
       {submitState !== 'idle' ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
           <div className="w-full max-w-sm rounded-2xl bg-white p-4 dark:bg-neutral-950">
-            <p className="text-lg font-bold">确认交卷?</p>
+            <p className="text-lg font-bold">{meta?.mode === 'exam' ? '确认交卷？' : '完成这次练习？'}</p>
             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
               {totalCount - answeredCount > 0
-                ? `还有 ${totalCount - answeredCount} 题没作答。交卷后不能再改。`
-                : '全部题目都已作答。交卷后不能再改。'}
+                ? `还有 ${totalCount - answeredCount} 题没作答。${meta?.mode === 'exam' ? '交卷后不能再改。' : '完成后这次就不能再改，可以再练一次。'}`
+                : meta?.mode === 'exam'
+                  ? '全部题目都已作答。交卷后不能再改。'
+                  : '全部题目都已作答。完成后可以看成绩，也可以再练一次。'}
             </p>
             {submitState === 'failed' ? (
               <p className="mt-1 text-sm text-red-600">交卷没成功,检查网络后再试。答案已存在手机上,不会丢。</p>
@@ -443,7 +458,7 @@ export default function PlayPage() {
                 onClick={() => void submitExam()}
                 className="min-h-11 flex-1 rounded-xl bg-blue-600 font-medium text-white disabled:opacity-60"
               >
-                {submitState === 'busy' ? '交卷中…' : submitState === 'failed' ? '重试交卷' : '确认交卷'}
+                {submitState === 'busy' ? '提交中…' : submitState === 'failed' ? '重试' : meta?.mode === 'exam' ? '确认交卷' : '完成'}
               </button>
             </div>
           </div>

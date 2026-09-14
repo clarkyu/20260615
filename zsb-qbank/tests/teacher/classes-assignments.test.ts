@@ -14,6 +14,8 @@ import {
   openState,
   parseSettings,
   releaseAssignment,
+  assignmentRoster,
+  startAssignmentAttempt,
   studentAssignments,
 } from '@/lib/db/assignments'
 import { assemblePaper, stripAssembledAnswers } from '@/lib/db/queries'
@@ -229,6 +231,26 @@ describe.skipIf(!url)('班级 / 任务(真库)', () => {
     expect(rs.find((r) => r.itemId === byNumber.get(3)!.id)?.score).toBeNull() // 范围外不判
     const fresh = await db.query.attempts.findFirst({ where: and(eq(attempts.id, t!.id), eq(attempts.userId, studentId)) })
     expect(fresh?.status).toBe('released') // on_submit
+  })
+
+  it('名单取「代表性作答」:交过卷后再练一次丢在半路,仍显示已交成绩;startAssignmentAttempt 事务内建 attempt 且续答同一份', async () => {
+    const c = await newClass()
+    await joinClassByCode(db, { code: c.joinCode, userId: studentId })
+    const a = await newAssignment(c.id, { mode: 'practice', durationMinutes: null })
+    await db.insert(attempts).values({ userId: studentId, paperId: PAPER, assignmentId: a.id, mode: 'practice', status: 'released', totalScore: 80, submittedAt: new Date(Date.now() - 60_000) })
+    const started = await startAssignmentAttempt(db, a, studentId)
+    expect(started.kind).toBe('created')
+    const again = await startAssignmentAttempt(db, a, studentId)
+    expect(again).toEqual({ kind: 'resume', attemptId: (started as { attemptId: string }).attemptId })
+    const roster = await assignmentRoster(db, a)
+    const me = roster.find((r) => r.userId === studentId)!
+    expect(me.status).toBe('released')
+    expect(me.totalScore).toBe(80)
+    const list = await studentAssignments(db, studentId)
+    expect(list.find((x) => x.id === a.id)?.attempt?.status).toBe('in_progress') // 学生卡片仍指向正在作答的那份
+    expect(list.find((x) => x.id === a.id)?.allowRetake).toBe(true)
+    const exam = await newAssignment(c.id)
+    expect((await studentAssignments(db, studentId)).find((x) => x.id === exam.id)?.allowRetake).toBe(false)
   })
 
   it('整卷任务 attemptItemScope 为 null;自由练习也为 null', async () => {

@@ -40,6 +40,7 @@ export default async function HomePage() {
         open: a.open,
         openReason: a.openReason,
         itemCount: a.itemCount,
+        allowRetake: a.allowRetake,
         attempt: a.attempt,
       }))
     : []

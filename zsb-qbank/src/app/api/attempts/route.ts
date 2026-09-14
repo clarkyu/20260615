@@ -3,8 +3,9 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { assignments, attempts, papers } from '@/lib/db/schema'
 import { ensureUser } from '@/lib/db/queries'
-import { decideAttempt } from '@/lib/db/assignments'
+import { startAssignmentAttempt } from '@/lib/db/assignments'
 import { getSession } from '@/lib/auth/session'
+import { isUuid } from '@/lib/uuid'
 
 // POST /api/attempts:开始作答(SPEC §9.4)。
 //   { assignmentId }        任务作答(M5):校验班级成员与开放期;mode 取任务;考试 deadline =
@@ -25,9 +26,11 @@ export async function POST(req: NextRequest) {
   const userId = await ensureUser(db, session.user)
 
   if (typeof body.assignmentId === 'string' && body.assignmentId) {
+    if (!isUuid(body.assignmentId)) return NextResponse.json({ error: { code: 'not_found', message: '任务不存在' } }, { status: 404 })
     const a = await db.query.assignments.findFirst({ where: eq(assignments.id, body.assignmentId) })
     if (!a || !a.paperId) return NextResponse.json({ error: { code: 'not_found', message: '任务不存在' } }, { status: 404 })
-    const rule = await decideAttempt(db, a, userId)
+    // 判定 + 建 attempt 在同一事务、按(任务, 学生)加锁:双击 / 双设备不会建出两份作答。
+    const rule = await startAssignmentAttempt(db, a, userId)
     if (rule.kind === 'denied') {
       const status = rule.code === 'not_member' ? 403 : rule.code === 'no_retake' ? 403 : 409
       return NextResponse.json({ error: { code: rule.code, message: rule.message } }, { status })
@@ -36,12 +39,8 @@ export async function POST(req: NextRequest) {
       const t = await db.query.attempts.findFirst({ where: eq(attempts.id, rule.attemptId) })
       return NextResponse.json({ attemptId: rule.attemptId, deadlineAt: t?.deadlineAt ?? null, resumed: true })
     }
-    const [row] = await db
-      .insert(attempts)
-      .values({ userId, paperId: a.paperId, assignmentId: a.id, mode: a.mode, deadlineAt: rule.deadlineAt })
-      .returning({ id: attempts.id })
-    if (!row) return NextResponse.json({ error: { code: 'internal', message: '创建失败' } }, { status: 500 })
-    return NextResponse.json({ attemptId: row.id, deadlineAt: rule.deadlineAt, resumed: false })
+    if (rule.kind === 'created') return NextResponse.json({ attemptId: rule.attemptId, deadlineAt: rule.deadlineAt, resumed: false })
+    return NextResponse.json({ error: { code: 'internal', message: '创建失败' } }, { status: 500 })
   }
 
   if (typeof body.paperId !== 'string' || !body.paperId) {

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireTeacherPage } from '@/lib/auth/teacher'
 import { getDb } from '@/lib/db/client'
-import { gradingQueue, queueFacets } from '@/lib/db/grading-queue'
+import { gradingQueue, queueFacets, QUEUE_LIMIT_DEFAULT } from '@/lib/db/grading-queue'
 import { orderBySimilarity } from '@/lib/grading/similarity'
 import { GradeRow } from '@/components/teacher/GradeRow'
 import { ITEM_TYPE_LABEL, itemPreview } from '@/lib/teacher/item-preview'
@@ -96,6 +96,7 @@ export default async function TeacherGrading({ searchParams }: { searchParams: P
         </p>
       ) : null}
       {filter.itemId ? <p className="mt-2 text-xs text-neutral-400">已按学生答案相似度排序，相近的答案挨在一起。</p> : null}
+      {rows.length >= QUEUE_LIMIT_DEFAULT ? <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">只显示前 {QUEUE_LIMIT_DEFAULT} 条，请用上面的任务 / 小题筛选缩小范围。</p> : null}
 
       {rows.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-6 text-center text-neutral-400 dark:border-neutral-800 dark:bg-neutral-900">

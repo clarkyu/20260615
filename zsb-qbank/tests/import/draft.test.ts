@@ -55,12 +55,23 @@ describe('ruleDraftToPaper / validateDraft', () => {
   it('答案留空 → zod 报「缺少参考答案」;规则 flag 与题号推断按路径进 issues', () => {
     const { paper, issues } = ruleDraftToPaper(rule, meta)
     expect(paper.totalScore).toBe(14)
-    expect(paper.sections[0]!.instructions).toContain('共 2 小题,每小题 2 分')
+    expect(paper.sections[0]!.instructions).toContain('共 2 小题，每小题 2 分')
     expect(issues.map((i) => i.path)).toEqual(expect.arrayContaining(['sections.0.groups.0.items.1', 'sections.0.groups.0.items.1.number', 'sections.1.groups.0.items.0.number']))
     const v = validateDraft(paper, issues)
     expect(v.ok).toBe(false)
     expect(v.issues.filter((i) => i.source === 'schema').map((i) => i.path)).toEqual(['sections.0.groups.0.items.0.answer.accepted', 'sections.0.groups.0.items.1.answer.accepted'])
     expect(v.issues.filter((i) => i.source === 'schema')[0]!.message).toBe('缺少参考答案')
+  })
+  it('题号重复按路径报出(schema 级,阻止保存);AI 用错答案形状也报缺少参考答案', () => {
+    const { paper } = ruleDraftToPaper(rule, meta)
+    paper.sections[1]!.groups[0]!.items[0]!.number = 1
+    const v = validateDraft(paper, [])
+    expect(v.issues.some((i) => i.path === 'sections.1.groups.0.items.0.number' && /重复/.test(i.message) && i.source === 'schema')).toBe(true)
+    expect(v.ok).toBe(false)
+    const { paper: p2 } = ruleDraftToPaper(rule, meta)
+    ;(p2.sections[0]!.groups[0]!.items[0] as unknown as { answer: unknown }).answer = { reference: 'biggest' }
+    const v2 = validateDraft(p2, [])
+    expect(v2.issues.find((i) => i.path === 'sections.0.groups.0.items.0.answer.accepted')?.message).toBe('缺少参考答案')
   })
   it('作文默认 rubric 分值之和等于满分', () => {
     const { paper } = ruleDraftToPaper(rule, meta)

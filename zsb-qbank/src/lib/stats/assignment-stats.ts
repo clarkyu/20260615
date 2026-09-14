@@ -54,6 +54,8 @@ export interface SectionStat {
 }
 export interface Distribution {
   submitted: number
+  /** 已交但仍有待评小题的人数:他们的总分不完整,不进均值 / 中位 / 分档 */
+  pendingStudents: number
   fullScore: number
   mean: number | null
   median: number | null
@@ -67,6 +69,8 @@ export interface StudentRow {
   name: string
   status: string
   totalScore: number | null
+  /** 已交但有小题待评(总分暂不完整) */
+  pending: boolean
   scores: Array<number | null> // 与 items 同序;未交 / 未答为 null
 }
 export interface AssignmentStats {
@@ -94,6 +98,8 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
   for (const r of responses) if (submittedAttempts.has(r.attemptId)) byAttemptItem.set(`${r.attemptId}|${r.itemId}`, r)
 
   const fullScore = items.reduce((n, it) => n + it.score, 0)
+  // 每题未取整的平均分(分大题 / 得分率用它累加,只在展示值上取整,避免 0.1 的舍入累积)。
+  const rawAvg = new Map<string, number>()
   const itemStats: ItemStat[] = items.map((it) => {
     const objective = isObjectiveType(it.type as Item['type'])
     let answered = 0
@@ -124,8 +130,10 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
     const submitted = submittedStudents.length
     // 平均分:已判(含空答 0 分)/ (已交 − 待评)
     const denom = submitted - pending
-    const avgScore = denom > 0 ? round1(sum / denom) : null
-    const rate = objective ? (submitted > 0 ? correct / submitted : null) : avgScore !== null && it.score > 0 ? avgScore / it.score : null
+    const avgRaw = denom > 0 ? sum / denom : null
+    if (avgRaw !== null) rawAvg.set(it.id, avgRaw)
+    const avgScore = avgRaw === null ? null : round1(avgRaw)
+    const rate = objective ? (submitted > 0 ? correct / submitted : null) : avgRaw !== null && it.score > 0 ? avgRaw / it.score : null
     return {
       itemId: it.id,
       number: it.number,
@@ -148,10 +156,9 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
 
   const sectionMap = new Map<string, SectionStat & { n: number }>()
   for (const it of items) {
-    const st = itemStats.find((x) => x.itemId === it.id)!
     const cur = sectionMap.get(it.sectionId) ?? { sectionId: it.sectionId, title: it.sectionTitle, fullScore: 0, avgScore: 0, rate: 0, n: 0 }
     cur.fullScore += it.score
-    cur.avgScore += st.avgScore ?? 0
+    cur.avgScore += rawAvg.get(it.id) ?? 0
     sectionMap.set(it.sectionId, cur)
   }
   const sections: SectionStat[] = [...sectionMap.values()].map((s) => ({
@@ -162,7 +169,10 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
     rate: s.fullScore > 0 ? Math.round((s.avgScore / s.fullScore) * 1000) / 1000 : 0,
   }))
 
-  const totals = submittedStudents.map((s) => s.totalScore ?? 0)
+  // 有待评小题的学生总分不完整(待评按 0 计会把他们全压进低分档),不进分布;单独报人数。
+  const hasPending = (s: StatStudent) => items.some((it) => byAttemptItem.get(`${s.attemptId}|${it.id}`)?.score === null && (byAttemptItem.get(`${s.attemptId}|${it.id}`)?.answerText.trim() ?? '') !== '')
+  const complete = submittedStudents.filter((s) => !hasPending(s))
+  const totals = complete.map((s) => s.totalScore ?? 0)
   const bins = [
     { label: '<60%', lo: 0, hi: 0.6 },
     { label: '60–69%', lo: 0.6, hi: 0.7 },
@@ -171,7 +181,8 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
     { label: '≥90%', lo: 0.9, hi: Infinity },
   ].map((b) => ({ label: b.label, count: totals.filter((t) => (fullScore > 0 ? t / fullScore : 0) >= b.lo && (fullScore > 0 ? t / fullScore : 0) < b.hi).length }))
   const distribution: Distribution = {
-    submitted: totals.length,
+    submitted: submittedStudents.length,
+    pendingStudents: submittedStudents.length - complete.length,
     fullScore,
     mean: totals.length ? round1(totals.reduce((a, b) => a + b, 0) / totals.length) : null,
     median: median(totals),
@@ -185,6 +196,7 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
     name: s.name,
     status: s.status,
     totalScore: s.attemptId && SUBMITTED.has(s.status) ? s.totalScore : null,
+    pending: !!s.attemptId && SUBMITTED.has(s.status) && hasPending(s),
     scores: items.map((it) => {
       if (!s.attemptId || !SUBMITTED.has(s.status)) return null
       const r = byAttemptItem.get(`${s.attemptId}|${it.id}`)
@@ -201,7 +213,7 @@ export function statsToCsvRows(stats: AssignmentStats, meta: { title: string; cl
   const head = ['学生', '状态', '总分', ...stats.items.map((it) => `${it.number}`)]
   const STATUS: Record<string, string> = { not_started: '未开始', in_progress: '作答中', submitted: '已交卷', graded: '已评分', released: '已发布' }
   const rows: unknown[][] = [[`${meta.title}（${meta.className}）`, `满分 ${stats.fullScore}`], head]
-  for (const s of stats.students) rows.push([s.name, STATUS[s.status] ?? s.status, s.totalScore, ...s.scores.map((x) => (x === null ? '' : x))])
+  for (const s of stats.students) rows.push([s.name, `${STATUS[s.status] ?? s.status}${s.pending ? '（有待评）' : ''}`, s.totalScore, ...s.scores.map((x) => (x === null ? '' : x))])
   rows.push([])
   rows.push(['题号', '大题', '题型', '满分', '已交', '作答', '正确 / 平均分', '正确率 / 得分率', '待评', '常见错答 1', '常见错答 2', '常见错答 3', '常见错答 4', '常见错答 5'])
   for (const it of stats.items) {
@@ -224,6 +236,6 @@ export function statsToCsvRows(stats: AssignmentStats, meta: { title: string; cl
   rows.push([])
   rows.push(['分布', ...stats.distribution.bins.map((b) => b.label)])
   rows.push(['人数', ...stats.distribution.bins.map((b) => b.count)])
-  rows.push(['已交', stats.distribution.submitted, '平均', stats.distribution.mean ?? '', '中位', stats.distribution.median ?? '', '最高', stats.distribution.max ?? '', '最低', stats.distribution.min ?? ''])
+  rows.push(['已交', stats.distribution.submitted, '待评未计入', stats.distribution.pendingStudents, '平均', stats.distribution.mean ?? '', '中位', stats.distribution.median ?? '', '最高', stats.distribution.max ?? '', '最低', stats.distribution.min ?? ''])
   return rows
 }

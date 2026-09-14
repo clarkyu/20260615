@@ -120,6 +120,8 @@ export interface StudentAssignmentView {
   open: boolean
   openReason: 'not_yet' | 'closed' | null
   itemCount: number | null
+  /** 考试是否允许重考(settings.allowRetake);练习随时可再练 */
+  allowRetake: boolean
   attempt: { id: string; status: string; totalScore: number | null } | null
 }
 
@@ -155,8 +157,27 @@ export async function studentAssignments(db: Db, userId: string, now = new Date(
       open: st.open,
       openReason: st.reason,
       itemCount: a.itemIds?.length ?? null,
+      allowRetake: a.mode !== 'exam' || parseSettings(a.settings).allowRetake,
       attempt: t ? { id: t.id, status: t.status, totalScore: t.totalScore } : null,
     }
+  })
+}
+
+/**
+ * 学生开始 / 续答任务:判定 + 建 attempt 放在同一事务里,并按 (任务, 学生) 加事务级咨询锁——
+ * 双击 / 双设备同时点「开始」不会建出两份 in_progress(第二个请求等锁后走 resume)。
+ */
+export async function startAssignmentAttempt(db: Db, a: AssignmentRow, userId: string, now = new Date()): Promise<AttemptRule | { kind: 'created'; attemptId: string; deadlineAt: Date | null }> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${a.id}:${userId}`}))`)
+    const rule = await decideAttempt(tx as unknown as Db, a, userId, now) // 只用 query/select,事务句柄同构
+    if (rule.kind !== 'create') return rule
+    const [row] = await tx
+      .insert(attempts)
+      .values({ userId, paperId: a.paperId, assignmentId: a.id, mode: a.mode, deadlineAt: rule.deadlineAt })
+      .returning({ id: attempts.id })
+    if (!row) throw new Error('创建失败')
+    return { kind: 'created', attemptId: row.id, deadlineAt: rule.deadlineAt }
   })
 }
 
@@ -215,14 +236,22 @@ export async function classMemberCount(db: Db, classIds: string[]): Promise<Map<
   return out
 }
 
-/** 教师任务详情:每个班级成员一行(姓名、最近 attempt 状态与分数)。 */
+/**
+ * 教师任务详情:每个班级成员一行(姓名、代表性 attempt 的状态与分数)。
+ * 代表性 attempt = 最近一次已交 / 已判 / 已发布的;一次都没交过才取正在作答的——学生交卷后又点
+ * 「再练一次」丢在半路,不能把已有成绩从名单 / 学情 / CSV 里抹掉。
+ */
 export async function assignmentRoster(db: Db, a: AssignmentRow) {
   const members = await db
     .select({ userId: classMembers.userId, name: users.name, joinedAt: classMembers.joinedAt })
     .from(classMembers)
     .innerJoin(users, eq(users.id, classMembers.userId))
     .where(eq(classMembers.classId, a.classId))
-  const tries = await db.select().from(attempts).where(eq(attempts.assignmentId, a.id)).orderBy(desc(attempts.startedAt))
+  const tries = await db
+    .select()
+    .from(attempts)
+    .where(eq(attempts.assignmentId, a.id))
+    .orderBy(sql`(${attempts.status} = 'in_progress')`, desc(attempts.startedAt))
   const latest = new Map<string, (typeof tries)[number]>()
   for (const t of tries) if (!latest.has(t.userId)) latest.set(t.userId, t)
   return members

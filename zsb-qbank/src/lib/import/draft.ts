@@ -23,7 +23,8 @@ export const SECTION_INSTRUCTION_DEFAULT: Record<string, string> = {
   fill: '每空填一词。',
   reorder: '将所给词块连成完整、正确的句子。',
   short_answer: '根据短文内容回答问题。',
-  translate_c2e_fill: '根据汉语意思,用括号内提示词的适当形式补全英文句子。',
+  translate_e2c: '将画线句子译成汉语。',
+  translate_c2e_fill: '根据汉语意思，用括号内提示词的适当形式补全英文句子。',
   writing: '按要求写作。',
 }
 
@@ -52,7 +53,7 @@ function defaultAnswer(it: RuleItem, score: number): Record<string, unknown> {
 
 function composeInstructions(sec: RuleSection): string {
   const parts: string[] = []
-  if (sec.count !== null && sec.scorePerItem !== null) parts.push(`共 ${sec.count} 小题,每小题 ${sec.scorePerItem} 分,共 ${sec.totalScore ?? sec.count * sec.scorePerItem} 分。`)
+  if (sec.count !== null && sec.scorePerItem !== null) parts.push(`共 ${sec.count} 小题，每小题 ${sec.scorePerItem} 分，共 ${sec.totalScore ?? sec.count * sec.scorePerItem} 分。`)
   else if (sec.scorePerItem !== null) parts.push(`每小题 ${sec.scorePerItem} 分。`)
   if (sec.instructions) parts.push(sec.instructions.replace(/\n+/g, ' '))
   else if (sec.itemType) parts.push(SECTION_INSTRUCTION_DEFAULT[sec.itemType] ?? '')
@@ -87,7 +88,7 @@ export function ruleDraftToPaper(rule: RuleDraft, meta: PaperMeta): { paper: Pap
           items: g.items.map((it, ii) => {
             const ip = `${gp}.items.${ii}`
             for (const f of it.flags) push(ip, f)
-            if (it.numberInferred) push(`${ip}.number`, { code: 'number_inferred', message: '题号为推断值,请确认' })
+            if (it.numberInferred) push(`${ip}.number`, { code: 'number_inferred', message: '题号为推断值，请确认' })
             const score = it.type === 'writing' ? (sec.totalScore ?? scorePerItem) : scorePerItem
             return {
               number: it.number,
@@ -129,11 +130,27 @@ export function validateDraft(paper: unknown, extra: DraftIssue[] = []): { ok: b
   if (!parsed.success) {
     for (const i of parsed.error.issues) {
       const path = i.path.join('.')
-      const message = /accepted/.test(path) && /too_small|expected/.test(i.code) ? '缺少参考答案' : i.message
+      const missingAnswer = /\.answer\.(accepted|reference|sample)$/.test(path) && (i.code === 'too_small' || i.code === 'invalid_type')
+      const message = missingAnswer ? '缺少参考答案' : i.message
       if (!issues.some((x) => x.path === path && x.message === message)) issues.push({ path, message, source: 'schema' })
     }
   }
-  return parsed.success ? { ok: issues.filter((i) => i.source === 'schema').length === 0, issues, paper: parsed.data } : { ok: false, issues }
+  // 题号全卷唯一(items 表有 (paper_id, number) 唯一索引,重复会在入库时 500):按路径报出来。
+  const seen = new Map<number, string>()
+  const p = paper as { sections?: Array<{ groups?: Array<{ items?: Array<{ number?: unknown }> }> }> } | null
+  p?.sections?.forEach((sec, si) =>
+    sec.groups?.forEach((g, gi) =>
+      g.items?.forEach((it, ii) => {
+        if (typeof it.number !== 'number') return
+        const path = `sections.${si}.groups.${gi}.items.${ii}.number`
+        const first = seen.get(it.number)
+        if (first) issues.push({ path, message: `题号 ${it.number} 重复（另一处在 ${first}）`, source: 'schema' })
+        else seen.set(it.number, path)
+      }),
+    ),
+  )
+  const ok = parsed.success && issues.every((i) => i.source !== 'schema')
+  return parsed.success ? { ok, issues, paper: parsed.data } : { ok: false, issues }
 }
 
 /** 把试卷 JSON 的 totalScore 与各小题分值对齐(教师改分后重算)。 */

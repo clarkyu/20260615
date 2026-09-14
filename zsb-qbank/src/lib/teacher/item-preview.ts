@@ -45,7 +45,7 @@ export function itemPreview(type: string, content: unknown, contextSnippet?: str
     case 'translate_e2c':
       return clip(str(c.source))
     case 'translate_c2e_fill':
-      return clip(str(c.chinese) || str(c.source) || str(c.frame))
+      return clip(str(c.zh) || str(c.source) || str(c.frame))
     case 'writing':
       return clip(str(c.title) || str(c.prompt) || str(c.topic))
     case 'single_choice':
@@ -57,10 +57,29 @@ export function itemPreview(type: string, content: unknown, contextSnippet?: str
   }
 }
 
+/** 展示时区:师生都在国内,固定北京时间——服务器容器多为 UTC,且服务端 / 客户端输出一致才不会水合不匹配。 */
+export const DISPLAY_TIME_ZONE = 'Asia/Shanghai'
+const fullFmt = new Intl.DateTimeFormat('zh-CN', { timeZone: DISPLAY_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+const shortFmt = new Intl.DateTimeFormat('zh-CN', { timeZone: DISPLAY_TIME_ZONE, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+
+function parts(f: Intl.DateTimeFormat, t: Date): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const p of f.formatToParts(t)) out[p.type] = p.value
+  return out
+}
+/** 2026-09-14 12:00(北京时间) */
 export function fmtTime(d: Date | string | null | undefined): string {
   if (!d) return '—'
   const t = typeof d === 'string' ? new Date(d) : d
   if (Number.isNaN(t.getTime())) return '—'
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`
+  const p = parts(fullFmt, t)
+  return `${p.year}-${p.month}-${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute}`
+}
+/** 9/14 12:00(学生卡片用的短格式) */
+export function fmtTimeShort(d: Date | string | null | undefined): string {
+  if (!d) return ''
+  const t = typeof d === 'string' ? new Date(d) : d
+  if (Number.isNaN(t.getTime())) return ''
+  const p = parts(shortFmt, t)
+  return `${p.month}/${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute}`
 }

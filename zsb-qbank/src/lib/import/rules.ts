@@ -57,7 +57,7 @@ const HEADING = new RegExp(`^\\s*(?:#+\\s*)?\\**\\s*([${CN_NUM}]+)\\s*[．.、,�
 const PASSAGE = /^\s*\**\s*Passage\s*\**\s*(\d+)\s*\**\s*[.．:：]?\s*(.*?)\**\s*$/i
 const ORDERED_LIST = /^(\d+)\.\s{2,}(.+)$/ // turndown 有序列表:编号已丢失
 const BULLET = /^[-*•l]\s+(.+)$/
-const NUMBERED = /^(\d{1,2})\s*[.．、:：]?\s*(.*)$/
+const NUMBERED = /^(\d{1,3})\s*[.．、:：]?\s*(.*)$/
 
 function flag(code: string, message: string): RuleFlag {
   return { code, message }
@@ -113,11 +113,11 @@ export function extractBlanks(text: string, expectedStart: number, opts: { numbe
     return `{{${number}}}`
   }
   // A:多空格夹数字(可带提示词)   1   (big)
-  out = out.replace(new RegExp(`${SP}{2,}(\\d{1,2})${SP}{2,}(?:\\(([^)]{1,40})\\)${SP}?)?`, 'g'), (_m, n: string, hint?: string) => ` ${take(Number(n), hint, false)} `)
+  out = out.replace(new RegExp(`${SP}{2,}(\\d{1,3})${SP}{2,}(?:\\(([^)]{1,40})\\)${SP}?)?`, 'g'), (_m, n: string, hint?: string) => ` ${take(Number(n), hint, false)} `)
   // B:数字 + 点 + 下划线   1.______ (proud)
-  out = out.replace(new RegExp(`(\\d{1,2})\\s*[.．]\\s*_{2,}${SP}*(?:\\(([^)]{1,40})\\))?`, 'g'), (_m, n: string, hint?: string) => take(Number(n), hint, false))
+  out = out.replace(new RegExp(`(\\d{1,3})\\s*[.．]\\s*_{2,}${SP}*(?:\\(([^)]{1,40})\\))?`, 'g'), (_m, n: string, hint?: string) => take(Number(n), hint, false))
   // C:下划线夹数字   ___1___ / __(1)__
-  out = out.replace(/_{2,}\s*\(?(\d{1,2})\)?\s*_{2,}/g, (_m, n: string) => take(Number(n), undefined, false))
+  out = out.replace(/_{2,}\s*\(?(\d{1,3})\)?\s*_{2,}/g, (_m, n: string) => take(Number(n), undefined, false))
   // D:已是占位符 {{n}}
   out = out.replace(/\{\{(\d+)\}\}/g, (_m, n: string) => {
     if (!blanks.some((b) => b.number === Number(n))) take(Number(n), undefined, false)
@@ -127,9 +127,9 @@ export function extractBlanks(text: string, expectedStart: number, opts: { numbe
   out = out.replace(new RegExp(`_{3,}|\\u00A0{2,}`, 'g'), () => ` ${take(null, undefined, true)} `)
   if (opts.numbered && blanks.length === 0) {
     // F:折叠后的单空格数字(兜底,按序号推断,标红)
-    out = out.replace(/(^|\s)(\d{1,2})(\s+\(([^)]{1,40})\))?(?=\s|$)/g, (m, pre: string, n: string, _h: string | undefined, hint?: string) => {
+    out = out.replace(/(^|\s)(\d{1,3})(\s+\(([^)]{1,40})\))?(?=\s|$)/g, (m, pre: string, n: string, _h: string | undefined, hint?: string) => {
       if (Number(n) !== next) return m
-      flags.push(flag('blank_inferred', `第 ${n} 空按序号推断(原文空位被折叠)`))
+      flags.push(flag('blank_inferred', `第 ${n} 空按序号推断（原文空位被折叠）`))
       return `${pre}${take(Number(n), hint, true)}`
     })
   }
@@ -148,10 +148,13 @@ export function sentenceAround(frame: string, n: number): string | undefined {
   if (idx < 0) return undefined
   const before = frame.slice(0, idx)
   const after = frame.slice(idx)
-  const start = Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('\n'))
+  // 句子起点:上一个「句末标点 + 空格」之后,或上一个换行之后(两者分隔符长度不同)
+  const punct = Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '))
+  const nl = before.lastIndexOf('\n')
+  const start = punct > nl ? punct + 2 : nl >= 0 ? nl + 1 : 0
   const endRel = after.search(/[.!?](\s|$)/)
   const end = endRel < 0 ? frame.length : idx + endRel + 1
-  return frame.slice(start < 0 ? 0 : start + 2, end).trim()
+  return frame.slice(start, end).trim()
 }
 
 interface Line {
@@ -167,7 +170,7 @@ function itemLine(line: string, expected: number): { number: number; inferred: b
   if (nm && nm[2]) {
     const n = Number(nm[1])
     // 编号必须接近期望值(允许跳号 ≤ 3),否则视为正文里的数字
-    if (n >= expected - 1 && n <= expected + 3) return { number: n, inferred: false, body: nm[2].trim() }
+    if (n >= expected && n <= expected + 3) return { number: n, inferred: false, body: nm[2].trim() }
   }
   return null
 }
@@ -224,8 +227,8 @@ function parseReorder(sec: RuleSection, lines: Line[], start: number): void {
       .map((c) => c.trim())
       .filter(Boolean)
     const flags: RuleFlag[] = []
-    if (it.inferred) flags.push(flag('number_inferred', '题号缺失,按顺序推断'))
-    if (chunks.length < 2) flags.push(flag('chunks_unclear', '词块少于 2 个,请检查分隔'))
+    if (it.inferred) flags.push(flag('number_inferred', '题号缺失，按顺序推断'))
+    if (chunks.length < 2) flags.push(flag('chunks_unclear', '词块少于 2 个，请检查分隔'))
     g.items.push({ number: it.number, numberInferred: it.inferred, type: 'reorder', raw: l.text, content: { chunks }, flags })
     expected = it.number + 1
   }
@@ -260,7 +263,7 @@ function parseReadingFill(sec: RuleSection, lines: Line[], start: number): void 
         // 空位被折叠得无影无踪:放到句末并标红
         const n = it ? it.number : expected
         frameLines.push(`${framed.replace(/\.?\s*$/, '')} {{${n}}}.`)
-        items.push({ number: n, numberInferred: !it || it.inferred, type: 'fill', raw: l.text, content: { blank: n, maxWords: 1 }, flags: [flag('blank_missing', `第 ${n} 空在原文中无法定位(空格被折叠),已放在句末,请校对位置`)] })
+        items.push({ number: n, numberInferred: !it || it.inferred, type: 'fill', raw: l.text, content: { blank: n, maxWords: 1 }, flags: [flag('blank_missing', `第 ${n} 空在原文中无法定位（空格被折叠），已放在句末，请校对位置`)] })
         expected = n + 1
         continue
       }
@@ -269,8 +272,8 @@ function parseReadingFill(sec: RuleSection, lines: Line[], start: number): void 
         const flags: RuleFlag[] = []
         // 行首有明确题号 → 第一个空位的题号可信;同一行后续空位、或整行无题号才算推断
         const inferred = it ? it.inferred || (bi > 0 && b.inferred) : b.inferred
-        if (it?.inferred) flags.push(flag('number_inferred', '题号缺失,按顺序推断'))
-        else if (inferred) flags.push(flag('number_inferred', '一行多个空位,后续编号按顺序推断'))
+        if (it?.inferred) flags.push(flag('number_inferred', '题号缺失，按顺序推断'))
+        else if (inferred) flags.push(flag('number_inferred', '一行多个空位，后续编号按顺序推断'))
         items.push({ number: b.number, numberInferred: inferred, type: 'fill', raw: l.text, content: { blank: b.number, maxWords: 1 }, flags })
         expected = b.number + 1
       })
@@ -304,8 +307,12 @@ function parseReadingQa(sec: RuleSection, lines: Line[], start: number): void {
       inItems = true
       const tr = /^Translate\s*(?:the\s+underlined\s+sentences?(?:\s+into\s+Chinese)?)?\s*[:：]?\s*[“"'‘]?\s*(.+?)\s*[”"'’]?\s*$/i.exec(it.body)
       const flags: RuleFlag[] = []
-      if (it.inferred) flags.push(flag('number_inferred', '题号缺失,按顺序推断'))
-      if (tr) items.push({ number: it.number, numberInferred: it.inferred, type: 'translate_e2c', raw: l.text, content: { source: tr[1]!.trim() }, flags })
+      if (it.inferred) flags.push(flag('number_inferred', '题号缺失，按顺序推断'))
+      if (tr) {
+        const source = tr[1]!.trim()
+        if (!/[A-Za-z]/.test(source)) flags.push(flag('source_missing', '翻译题没有识别出要翻译的句子（画线句可能只在原文里），请从材料中复制到「英文原句」'))
+        items.push({ number: it.number, numberInferred: it.inferred, type: 'translate_e2c', raw: l.text, content: { source: /[A-Za-z]/.test(source) ? source : '' }, flags })
+      }
       else items.push({ number: it.number, numberInferred: it.inferred, type: 'short_answer', raw: l.text, content: { question: it.body }, flags })
       expected = it.number + 1
     }
@@ -326,7 +333,7 @@ function parseC2E(sec: RuleSection, lines: Line[], start: number): void {
   const finish = (en: string | null) => {
     if (!pending) return
     const flags: RuleFlag[] = []
-    if (pending.inferred) flags.push(flag('number_inferred', '题号缺失,按顺序推断'))
+    if (pending.inferred) flags.push(flag('number_inferred', '题号缺失，按顺序推断'))
     let frame = en ?? ''
     let hint: string | undefined
     // 提示词:空位后的括号 或 句末括号
@@ -352,7 +359,7 @@ function parseC2E(sec: RuleSection, lines: Line[], start: number): void {
     const blanks = frame.match(/_{2,}/g)?.length ?? 0
     frame = frame.replace(/_{2,}/, '{{blank}}').replace(/_{2,}/g, '')
     if (!en) flags.push(flag('frame_missing', '缺少英文句子'))
-    else if (blanks !== 1) flags.push(flag('blank_unclear', `英文句子里识别到 ${blanks} 个空位(应为 1 个)`))
+    else if (blanks !== 1) flags.push(flag('blank_unclear', `英文句子里识别到 ${blanks} 个空位（应为 1 个）`))
     if (!hint) flags.push(flag('hint_missing', '没有识别出提示词'))
     frame = frame.replace(/\s+([.,!?])/g, '$1').replace(/\s{2,}/g, ' ').trim()
     g.items.push({ number: pending.number, numberInferred: pending.inferred, type: 'translate_c2e_fill', raw: `${pending.raw}\n${en ?? ''}`, content: { zh: pending.zh, frame, ...(hint ? { hint } : {}), maxWords }, flags })
@@ -383,7 +390,7 @@ function parseWriting(sec: RuleSection, lines: Line[], start: number): void {
   const reqs: string[] = []
   const prompt: string[] = []
   for (const l of lines) {
-    const own = /^(\d{1,2})\s*[.．、:：]\s*(.+)$/.exec(l.text)
+    const own = /^(\d{1,3})\s*[.．、:：]\s*(.+)$/.exec(l.text)
     if (own && Number(own[1]) === start) {
       prompt.push(stripBold(own[2]!))
       continue
@@ -415,6 +422,19 @@ function parseWriting(sec: RuleSection, lines: Line[], start: number): void {
       },
     ],
   })
+}
+
+/** 题型识别不出的大题:仍按编号行切成小题占位(暂作简答),每题标红等教师改题型;不让向导在这一步死掉。 */
+function parseUnknown(sec: RuleSection, lines: Line[], start: number): void {
+  const g: RuleGroup = { order: 1, kind: 'standalone', items: [], flags: [flag('type_unknown', '题型未知：已按编号行切成小题占位，请在上方选择题型并逐题核对')] }
+  let expected = start
+  for (const l of lines) {
+    const it = itemLine(l.text, expected)
+    if (!it) continue
+    g.items.push({ number: it.number, numberInferred: it.inferred, type: 'short_answer', raw: l.text, content: { question: it.body }, flags: [flag('type_unknown', '题型未知，请选择题型后核对内容')] })
+    expected = it.number + 1
+  }
+  sec.groups.push(g)
 }
 
 export function parseMarkdown(markdown: string): RuleDraft {
@@ -450,7 +470,7 @@ export function parseMarkdown(markdown: string): RuleDraft {
       const meta = parseHeadingMeta(rest)
       const { itemType } = inferSectionType(titleOnly)
       const sec: RuleSection = { order: cnNum(code), code, title: titleOnly, heading: rest, instructions: '', itemType, scorePerItem: meta.scorePerItem, count: meta.count, totalScore: meta.totalScore, groups: [], flags: [], raw: '' }
-      if (!itemType) sec.flags.push(flag('type_unknown', '无法从标题判断题型,请选择'))
+      if (!itemType) sec.flags.push(flag('type_unknown', '无法从标题判断题型，请选择'))
       cur = { sec, lines: [] }
       chunks.push(cur)
       continue
@@ -500,17 +520,17 @@ export function parseMarkdown(markdown: string): RuleDraft {
         parseWriting(sec, clean, expected)
         break
       default:
-        sec.groups.push({ order: 1, kind: 'standalone', items: [], flags: [flag('type_unknown', '题型未知,未切分')] })
+        parseUnknown(sec, clean, expected)
     }
     const n = sec.groups.reduce((m, g) => m + g.items.length, 0)
-    if (sec.count !== null && n !== sec.count) sec.flags.push(flag('count_mismatch', `标题写共 ${sec.count} 题,实际识别 ${n} 题`))
+    if (sec.count !== null && n !== sec.count) sec.flags.push(flag('count_mismatch', `标题写共 ${sec.count} 题，实际识别 ${n} 题`))
     if (sec.scorePerItem === null) {
       if (sec.itemType === 'writing' && sec.totalScore) sec.scorePerItem = sec.totalScore
-      else sec.flags.push(flag('score_missing', '标题里没有每题分值,请填写'))
+      else sec.flags.push(flag('score_missing', '标题里没有每题分值，请填写'))
     }
     if (n > 0) expected = Math.max(...sec.groups.flatMap((g) => g.items.map((i) => i.number))) + 1
   }
   if (draft.sections.length === 0) draft.sections = chunks.map((c) => c.sec)
-  if (draft.sections.length === 0) draft.flags.push(flag('no_sections', '没有识别出任何大题标题(需形如「一、」「二.」)'))
+  if (draft.sections.length === 0) draft.flags.push(flag('no_sections', '没有识别出任何大题标题（需形如「一、」「二.」）'))
   return draft
 }

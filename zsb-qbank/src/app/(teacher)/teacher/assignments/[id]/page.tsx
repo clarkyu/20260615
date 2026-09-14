@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, eq } from 'drizzle-orm'
 import { requireTeacherPage } from '@/lib/auth/teacher'
+import { isUuid } from '@/lib/uuid'
 import { getDb } from '@/lib/db/client'
 import { assignments, classes, papers } from '@/lib/db/schema'
 import { assignmentRoster, parseSettings } from '@/lib/db/assignments'
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic'
 export default async function TeacherAssignmentDetail({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await requireTeacherPage()
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const db = getDb()
   const row = await db
     .select({ a: assignments, className: classes.name, paperTitle: papers.title, paperTotal: papers.totalScore })
@@ -91,7 +93,7 @@ export default async function TeacherAssignmentDetail({ params }: { params: Prom
               <td className="p-3">
                 {r.attemptId && (r.status === 'submitted' || r.status === 'graded') ? <ReleaseButton kind="attempt" id={r.attemptId} label="发布" small /> : null}
                 {r.attemptId ? (
-                  <Link href={`/teacher/grading?attemptId=${r.attemptId}`} className="ml-2 text-xs text-blue-600 hover:underline">
+                  <Link href={`/teacher/grading?attemptId=${r.attemptId}&scope=subjective`} className="ml-2 text-xs text-blue-600 hover:underline">
                     批改
                   </Link>
                 ) : null}

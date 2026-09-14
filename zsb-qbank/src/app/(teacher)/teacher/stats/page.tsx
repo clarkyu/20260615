@@ -46,7 +46,12 @@ export default async function TeacherStats({ searchParams }: { searchParams: Pro
           <p className="mt-4 text-neutral-400">这个学生不在你的班级里。</p>
         ) : (
           <>
-            <h1 className="mt-2 text-2xl font-bold">{ov.name}</h1>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <h1 className="text-2xl font-bold">{ov.name}</h1>
+              <a href={`/api/teacher/students/${ov.userId}/export.csv`} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white">
+                导出 CSV
+              </a>
+            </div>
             <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
               {[
                 ['任务数', ov.assignments.length],
@@ -133,6 +138,7 @@ export default async function TeacherStats({ searchParams }: { searchParams: Pro
         <>
           <p className="mt-4 text-sm text-neutral-500">
             {data.paperTitle} · {data.className} · 满分 {data.stats.fullScore} · 已交 {data.stats.distribution.submitted} / {data.stats.students.length}
+            {data.stats.distribution.pendingStudents ? `（${data.stats.distribution.pendingStudents} 人有待评小题，未计入平均与分布）` : ''}
             {data.stats.distribution.mean !== null ? ` · 平均 ${data.stats.distribution.mean} · 中位 ${data.stats.distribution.median} · 最高 ${data.stats.distribution.max} · 最低 ${data.stats.distribution.min}` : ''}
           </p>
 
@@ -242,7 +248,10 @@ export default async function TeacherStats({ searchParams }: { searchParams: Pro
                         {s.name}
                       </Link>
                     </td>
-                    <td className="py-1 pr-2 whitespace-nowrap text-neutral-500">{ATTEMPT_STATUS_LABEL[s.status] ?? s.status}</td>
+                    <td className="py-1 pr-2 whitespace-nowrap text-neutral-500">
+                      {ATTEMPT_STATUS_LABEL[s.status] ?? s.status}
+                      {s.pending ? <span className="ml-1 text-amber-600">待评</span> : null}
+                    </td>
                     <td className="py-1 pr-2">{s.totalScore ?? '—'}</td>
                     {s.scores.map((x, i) => {
                       const it = data.stats.items[i]!

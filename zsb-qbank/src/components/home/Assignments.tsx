@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { fmtTimeShort } from '@/lib/teacher/item-preview'
 
 // 学生首页(SPEC §9.4 / M5):加入码入班 + 「我的任务」开始 / 继续 / 看成绩。
 // 文案短、口语、全角标点;可点区域 ≥ 44px(硬约束 5、8)。
@@ -74,15 +75,12 @@ export interface AssignmentCard {
   open: boolean
   openReason: 'not_yet' | 'closed' | null
   itemCount: number | null
+  allowRetake: boolean
   attempt: { id: string; status: string; totalScore: number | null } | null
 }
 
-function fmt(d: string | null): string {
-  if (!d) return ''
-  const t = new Date(d)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${t.getMonth() + 1}/${t.getDate()} ${p(t.getHours())}:${p(t.getMinutes())}`
-}
+// 时间统一按北京时间显示(服务端与客户端输出一致,不会水合不匹配)。
+const fmt = (d: string | null) => fmtTimeShort(d)
 
 export function AssignmentItem({ a }: { a: AssignmentCard }) {
   const router = useRouter()
@@ -133,9 +131,9 @@ export function AssignmentItem({ a }: { a: AssignmentCard }) {
             <Link href={`/result/${a.attempt!.id}`} className="inline-flex min-h-11 items-center rounded-xl border border-blue-600 px-4 font-medium text-blue-700 dark:text-blue-300">
               {a.attempt?.status === 'released' ? `看成绩${typeof a.attempt.totalScore === 'number' ? `（${a.attempt.totalScore} 分）` : ''}` : '看作答'}
             </Link>
-            {a.open && a.mode !== 'exam' ? (
+            {a.open && a.allowRetake ? (
               <button type="button" disabled={busy} onClick={start} className="min-h-11 rounded-xl bg-blue-600 px-4 font-medium text-white disabled:opacity-60">
-                {busy ? '准备中…' : '再练一次'}
+                {busy ? '准备中…' : a.mode === 'exam' ? '再考一次' : '再练一次'}
               </button>
             ) : null}
           </>

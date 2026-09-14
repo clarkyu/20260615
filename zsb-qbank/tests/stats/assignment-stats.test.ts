@@ -45,11 +45,12 @@ describe('computeAssignmentStats', () => {
       { sectionId: 's2', title: '四、阅读问答', fullScore: 4, avgScore: 4, rate: 1 },
     ])
   })
-  it('分布:均值 / 中位 / 极值 / 分档', () => {
-    expect(st.distribution).toMatchObject({ mean: 4, median: 4, max: 6, min: 2 })
-    expect(st.distribution.bins.map((b) => b.count)).toEqual([1, 0, 1, 0, 0]) // 6/8=75%, 2/8=25%
+  it('分布:有待评小题的学生不进均值 / 中位 / 分档,单独计数', () => {
+    // 乙的主观题待评 → 总分不完整,不进分布;只剩甲 6/8=75%
+    expect(st.distribution).toMatchObject({ submitted: 2, pendingStudents: 1, mean: 6, median: 6, max: 6, min: 6 })
+    expect(st.distribution.bins.map((b) => b.count)).toEqual([0, 0, 1, 0, 0])
   })
-  it('学生矩阵:未交为 null,未答为 0,待评为 null', () => {
+  it('学生矩阵:未交为 null,未答为 0,待评为 null;待评标记', () => {
     expect(st.students.map((s) => s.scores)).toEqual([
       [2, 0, 4],
       [0, 0, null],
@@ -57,6 +58,15 @@ describe('computeAssignmentStats', () => {
       [null, null, null],
     ])
     expect(st.students[2]!.totalScore).toBeNull()
+    expect(st.students.map((s) => s.pending)).toEqual([false, true, false, false])
+  })
+  it('分大题得分率用未取整的每题均值累加', () => {
+    // 8 人已交,5 人答对 2 分题:均值 1.25 → 展示 1.3,但大题累计按 1.25
+    const eight: StatStudent[] = Array.from({ length: 8 }, (_, i) => ({ userId: `s${i}`, name: `s${i}`, attemptId: `t${i}`, status: 'submitted', totalScore: 0 }))
+    const rs: StatResponse[] = eight.flatMap((s, i) => [{ attemptId: s.attemptId!, itemId: 'i1', score: i < 5 ? 2 : 0, verdict: i < 5 ? 'correct' : 'wrong', answerText: 'x' }])
+    const one = computeAssignmentStats([items[0]!], eight, rs)
+    expect(one.items[0]!.avgScore).toBe(1.3)
+    expect(one.sections[0]).toMatchObject({ avgScore: 1.3, rate: 0.625 })
   })
   it('空任务不崩', () => {
     const empty = computeAssignmentStats(items, [], [])
@@ -94,7 +104,7 @@ describe('CSV', () => {
     const rows = statsToCsvRows(st, { title: '期中', className: '一班' })
     expect(rows[1]).toEqual(['学生', '状态', '总分', '1', '2', '3'])
     expect(rows[2]).toEqual(['甲', '已交卷', 6, 2, 0, 4])
-    expect(rows[3]).toEqual(['乙', '已发布', 2, 0, 0, ''])
+    expect(rows[3]).toEqual(['乙', '已发布（有待评）', 2, 0, 0, ''])
     const itemHeader = rows.findIndex((r) => r[0] === '题号')
     expect(rows[itemHeader + 2]!.slice(0, 9)).toEqual([2, '一、短文填空', 'fill', 2, 2, 2, 0, '0%', 0])
     expect(rows[itemHeader + 2]![9]).toBe('finishing（2）')

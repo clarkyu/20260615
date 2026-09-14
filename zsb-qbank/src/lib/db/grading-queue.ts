@@ -44,9 +44,11 @@ function ownedCondition(teacherId: string) {
   return or(isNull(attempts.assignmentId), eq(classes.teacherId, teacherId))
 }
 
+export const QUEUE_LIMIT_DEFAULT = 500
+
 export async function gradingQueue(db: Db, teacherId: string, f: QueueFilter = {}): Promise<QueueRow[]> {
   const scope = f.scope ?? 'needs_review'
-  const limit = Math.min(Math.max(f.limit ?? 200, 1), 500)
+  const limit = Math.min(Math.max(f.limit ?? QUEUE_LIMIT_DEFAULT, 1), 1000)
   const conds = [ownedCondition(teacherId), sql`${attempts.status} <> 'in_progress'`]
   if (scope === 'needs_review') conds.push(eq(responses.needsReview, true))
   else conds.push(inArray(items.type, ['short_answer', 'translate_e2c', 'writing', 'translate_c2e_fill']))
@@ -144,8 +146,8 @@ export async function teacherGrade(db: Db, teacherId: string, responseId: string
   const detail = (r.gradeDetail ?? {}) as Record<string, unknown> & { ai?: { score?: number }; verdict?: string }
   let score: number
   if (input.score !== undefined) score = clampScore(input.score, it.score)
-  else if (typeof r.score === 'number') score = clampScore(r.score, it.score)
-  else if (typeof detail.ai?.score === 'number') score = clampScore(detail.ai.score, it.score)
+  // 「确认」只能沿用真正的 AI 分(grade_detail.ai.score);AI 未评 / 失败记的 0 分不算,必须老师给分。
+  else if (r.gradeSource === 'ai' && typeof detail.ai?.score === 'number') score = clampScore(detail.ai.score, it.score)
   else return { ok: false, code: 'no_score', message: '这题还没有 AI 分数，请直接给分' }
   const objective = isObjectiveType(it.type as Item['type'])
   const verdict = objective ? (score >= it.score ? 'correct' : 'wrong') : 'graded'

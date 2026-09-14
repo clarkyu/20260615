@@ -61,10 +61,10 @@ export function mergeAiItems(paper: Paper, sectionIndex: number, groupIndex: num
     target.difficulty = ai.difficulty
     if (ai.contentFix && typeof target.content === 'object' && target.content) {
       target.content = { ...(target.content as Record<string, unknown>), ...ai.contentFix }
-      issues.push({ path: `${path}.content`, message: 'AI 建议更正题干,请核对', source: 'ai' })
+      issues.push({ path: `${path}.content`, message: 'AI 建议更正题干，请核对', source: 'ai' })
     }
     target.origin = 'official'
-    if (ai.confidence < 0.6) issues.push({ path: `${path}.answer`, message: `AI 对答案没把握(置信 ${Math.round(ai.confidence * 100)}%),请核对`, source: 'ai' })
+    if (ai.confidence < 0.6) issues.push({ path: `${path}.answer`, message: `AI 对答案没把握（置信 ${Math.round(ai.confidence * 100)}%），请核对`, source: 'ai' })
   })
   return issues
 }

@@ -22,7 +22,7 @@ export async function GET() {
 const bodySchema = z.object({ name: z.string().trim().min(1).max(50) })
 
 export async function POST(req: NextRequest) {
-  const auth = await requireTeacherApi()
+  const auth = await requireTeacherApi(req)
   if (!auth.ok) return auth.res
   let raw: unknown
   try {
