@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { attempts, responses, users } from '@/lib/db/schema'
 import { assemblePaper, stripAssembledAnswers } from '@/lib/db/queries'
+import { attemptItemScope } from '@/lib/db/assignments'
 import { submitAttempt } from '@/lib/db/submit'
 import { isOverdueForAutoSubmit } from '@/lib/grading/deadline'
 import { getSession } from '@/lib/auth/session'
@@ -25,7 +26,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     attempt = (await db.query.attempts.findFirst({ where: eq(attempts.id, id) })) ?? attempt
   }
 
-  const paper = await assemblePaper(db, attempt.paperId ?? '')
+  // 任务勾选了小题子集时只装配这些小题(M5 组卷);整卷任务/自由练习为 null → 整卷。
+  const itemIds = await attemptItemScope(db, attempt)
+  const paper = await assemblePaper(db, attempt.paperId ?? '', { itemIds })
   if (!paper) return NextResponse.json({ error: { code: 'not_found', message: '试卷不存在' } }, { status: 404 })
   const saved = await db.select().from(responses).where(eq(responses.attemptId, attempt.id))
 
@@ -36,6 +39,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       status: attempt.status,
       startedAt: attempt.startedAt,
       deadlineAt: attempt.deadlineAt,
+      assignmentId: attempt.assignmentId,
     },
     serverNow: new Date().toISOString(),
     // 硬约束 1:唯一出口 stripAssembledAnswers,绝不直接吐装配树。

@@ -1,6 +1,7 @@
-import { and, eq, lt } from 'drizzle-orm'
+import { and, eq, inArray, lt } from 'drizzle-orm'
 import type { Db } from './client'
-import { attempts, items, responses } from './schema'
+import { assignments, attempts, items, responses } from './schema'
+import { parseSettings } from './assignments'
 import { itemSchema, studentAnswerSchema, type Item, type StudentAnswer } from '@/lib/schema/paper'
 import { gradeObjective, isObjectiveType } from '@/lib/grading/objective'
 import { SUBMIT_GRACE_MS } from '@/lib/grading/deadline'
@@ -36,7 +37,13 @@ export async function submitAttempt(db: Db, attempt: AttemptRow, opts: { auto?: 
   }
 
   const paperId = attempt.paperId ?? ''
-  const itemRows = await db.select().from(items).where(eq(items.paperId, paperId))
+  // 任务子集组卷(M5):只判任务范围内的小题;整卷任务/自由练习判整卷。
+  const assignment = attempt.assignmentId ? await db.query.assignments.findFirst({ where: eq(assignments.id, attempt.assignmentId) }) : null
+  const scope = assignment?.itemIds && assignment.itemIds.length > 0 ? assignment.itemIds : null
+  const itemRows = await db
+    .select()
+    .from(items)
+    .where(scope ? and(eq(items.paperId, paperId), inArray(items.id, scope)) : eq(items.paperId, paperId))
   const savedRows = await db.select().from(responses).where(eq(responses.attemptId, attempt.id))
   const savedByItem = new Map(savedRows.map((r) => [r.itemId, r]))
 
@@ -87,6 +94,14 @@ export async function submitAttempt(db: Db, attempt: AttemptRow, opts: { auto?: 
   }
 
   await recomputeAttemptScore(db, attempt.id)
+  // 任务设置「交卷即发布」(settings.release = on_submit):交卷后立刻 released,学生马上能看
+  // 参考答案与解析;主观题 AI 分数判完后由工作线程写回,成绩页会显示更新后的总分。
+  if (assignment && parseSettings(assignment.settings).release === 'on_submit') {
+    await db
+      .update(attempts)
+      .set({ status: 'released' })
+      .where(and(eq(attempts.id, attempt.id), inArray(attempts.status, ['submitted', 'graded'])))
+  }
   return { already: false, objectiveScore, pendingSubjective }
 }
 

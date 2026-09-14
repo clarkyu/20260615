@@ -1,6 +1,6 @@
 import { and, eq, inArray, ne, or, isNull, sql } from 'drizzle-orm'
 import type { Db } from './client'
-import { aiGradeCache, aiJobs, attempts, groups, items, responses, wrongAnswers } from './schema'
+import { aiGradeCache, aiJobs, attempts, groups, items, papers, responses, wrongAnswers } from './schema'
 import { itemSchema, studentAnswerSchema, type Item } from '@/lib/schema/paper'
 import { AiError, type AiCaller, extractJson } from '@/lib/ai/client'
 import { PROMPT_VERSION, buildExplainUser, buildGradeUser, gradePromptFor, loadPrompt, studentAnswerText } from '@/lib/ai/prompts'
@@ -14,6 +14,9 @@ import {
   type AiGradeResult,
 } from '@/lib/grading/ai-postprocess'
 import { normalizeText, wordCount } from '@/lib/grading/normalize'
+import { parseMarkdown } from '@/lib/import/rules'
+import { ruleDraftToPaper, suggestPaperId, suggestYear, validateDraft, type DraftIssue, type PaperMeta } from '@/lib/import/draft'
+import { mergeAiItems, parseGroupWithAi } from '@/lib/import/ai'
 
 // ai_jobs 队列(SPEC §9.1:数据库表 + 应用内轮询工作线程,不引 Redis)。
 //   grade  —— 主观题(short_answer / translate_e2c / writing)评分与 translate_c2e_fill 兜底
@@ -43,7 +46,15 @@ export interface ExplainJobPayload {
   kind: 'explain'
   itemId: string
 }
-export type AiJobPayload = GradeJobPayload | ExplainJobPayload
+/** docx 导入(M5):Markdown → 规则切分 → 逐题组 AI 补答案 / 解析 → 试卷 JSON 草稿 + 问题清单 */
+export interface ParseJobPayload {
+  kind: 'parse'
+  markdown: string
+  filename: string
+  meta?: Partial<PaperMeta>
+  createdBy: string
+}
+export type AiJobPayload = GradeJobPayload | ExplainJobPayload | ParseJobPayload
 type AiJobRow = typeof aiJobs.$inferSelect
 
 export interface AiModels {
@@ -139,13 +150,13 @@ export async function applyGradeToResponse(
 
 /** attempt 总分 = 已判小题得分之和(客观 + AI/教师);待评的不计。 */
 export async function recomputeAttemptScore(db: Db, attemptId: string): Promise<number> {
-  const [row] = await db
-    .select({ total: sql<number>`coalesce(sum(${responses.score}), 0)` })
-    .from(responses)
-    .where(eq(responses.attemptId, attemptId))
-  const total = Number(row?.total ?? 0)
-  await db.update(attempts).set({ totalScore: total }).where(eq(attempts.id, attemptId))
-  return total
+  // 单条语句(子查询求和):并发的 AI 任务 / 教师改分不会以「先读后写」把旧总分写回去。
+  const rows = await db
+    .update(attempts)
+    .set({ totalScore: sql`(select coalesce(sum(${responses.score}), 0) from ${responses} where ${responses.attemptId} = ${attempts.id})` })
+    .where(eq(attempts.id, attemptId))
+    .returning({ total: attempts.totalScore })
+  return Number(rows[0]?.total ?? 0)
 }
 
 /**
@@ -232,6 +243,12 @@ export async function enqueueExplainJob(db: Db, itemId: string): Promise<string>
   if (pending) return pending.id
   const payload: ExplainJobPayload = { kind: 'explain', itemId }
   const [job] = await db.insert(aiJobs).values({ kind: 'explain', payload }).returning({ id: aiJobs.id })
+  if (!job) throw new Error('入队失败')
+  return job.id
+}
+
+export async function enqueueParseJob(db: Db, payload: Omit<ParseJobPayload, 'kind'>): Promise<string> {
+  const [job] = await db.insert(aiJobs).values({ kind: 'parse', payload: { kind: 'parse', ...payload } satisfies ParseJobPayload }).returning({ id: aiJobs.id })
   if (!job) throw new Error('入队失败')
   return job.id
 }
@@ -400,10 +417,72 @@ async function runExplainJob(db: Db, job: AiJobRow, payload: ExplainJobPayload, 
   }
 }
 
+/**
+ * docx 导入任务:规则切分永远执行(AI 未配置也能得到可校对的草稿);AI 可用时逐题组补答案 / 解析,
+ * 单个题组失败只记问题不拖垮整卷。结果 = 试卷 JSON 草稿 + 问题清单 + 原文 Markdown。
+ */
+async function runParseJob(db: Db, job: AiJobRow, payload: ParseJobPayload, ai: AiCaller | null, model: string): Promise<'done' | 'failed' | 'retry'> {
+  const rule = parseMarkdown(payload.markdown)
+  const year = payload.meta?.year ?? suggestYear(rule.title)
+  const title = payload.meta?.title ?? rule.title ?? payload.filename.replace(/\.docx$/i, '')
+  // 建议 id 若已被占用(如种子卷),自动加后缀:导入向导保存时不会悄悄覆盖现有试卷。
+  let suggested = payload.meta?.id ?? suggestPaperId(title, year)
+  if (!payload.meta?.id) {
+    const base = suggested
+    for (let n = 2; await db.query.papers.findFirst({ where: eq(papers.id, suggested), columns: { id: true } }); n++) suggested = `${base}-import${n > 2 ? `-${n}` : ''}`
+  }
+  const meta: PaperMeta = {
+    id: suggested,
+    title,
+    year,
+    region: payload.meta?.region ?? (/湖北/.test(title) ? '湖北' : ''),
+    durationMinutes: payload.meta?.durationMinutes ?? 120,
+    source: payload.filename,
+    status: 'draft',
+  }
+  const { paper, issues } = ruleDraftToPaper(rule, meta)
+  const aiIssues: DraftIssue[] = []
+  let aiCalls = 0
+  if (ai) {
+    for (let si = 0; si < paper.sections.length; si++) {
+      const sec = paper.sections[si]!
+      for (let gi = 0; gi < sec.groups.length; gi++) {
+        const g = sec.groups[gi]!
+        if (g.items.length === 0) continue
+        try {
+          const items = await parseGroupWithAi(ai, model, sec, g, rule.answerKey)
+          aiCalls++
+          aiIssues.push(...mergeAiItems(paper, si, gi, items))
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          aiIssues.push({ path: `sections.${si}.groups.${gi}`, message: `AI 结构化失败：${msg}，请手动填写答案`, source: 'ai' })
+        }
+      }
+    }
+  } else {
+    aiIssues.push({ path: '', message: 'AI 未配置：答案与解析需手动填写', source: 'ai' })
+  }
+  const validated = validateDraft(paper, [...issues, ...aiIssues])
+  await finishJob(db, job, 'done', {
+    result: {
+      draft: paper,
+      issues: validated.issues,
+      valid: validated.ok,
+      answerKey: rule.answerKey,
+      markdown: payload.markdown,
+      aiUsed: !!ai,
+      aiCalls,
+    },
+  })
+  console.log(`[ai] parse job=${job.id} sections=${paper.sections.length} items=${paper.sections.reduce((n, s) => n + s.groups.reduce((m, g) => m + g.items.length, 0), 0)} aiCalls=${aiCalls} issues=${validated.issues.length}`)
+  return 'done'
+}
+
 /** 执行一条任务;ai 为 null 表示未配置 → 直接分流待评(不重试)。 */
 export async function runJob(db: Db, job: AiJobRow, ai: AiCaller | null, models: AiModels): Promise<'done' | 'failed' | 'retry'> {
   const payload = job.payload as AiJobPayload
   if (payload.kind === 'grade') return runGradeJob(db, job, payload, ai, models.gradingModel)
+  if (payload.kind === 'parse') return runParseJob(db, job, payload, ai, models.authoringModel)
   return runExplainJob(db, job, payload, ai, models.authoringModel)
 }
 
