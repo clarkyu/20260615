@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { buildAuthorizeUrl, getOidcConfig, newAuthRequest } from '@/lib/auth/oidc'
+import { buildAuthorizeUrl, getOidcConfig, newAuthRequest, safeReturnTo } from '@/lib/auth/oidc'
 import { getSession } from '@/lib/auth/session'
 
 export const dynamic = 'force-dynamic'
@@ -11,10 +11,9 @@ export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin
   const cfg = getOidcConfig(process.env, origin)
   if (!cfg) {
-    return NextResponse.redirect(new URL('/teacher/login?err=oidc_unconfigured', origin))
+    return NextResponse.redirect(new URL('/teacher/login?err=unconfigured', origin))
   }
-  const returnToRaw = req.nextUrl.searchParams.get('returnTo')
-  const returnTo = returnToRaw && returnToRaw.startsWith('/') && !returnToRaw.startsWith('//') ? returnToRaw : undefined
+  const returnTo = safeReturnTo(req.nextUrl.searchParams.get('returnTo'))
   const authReq = newAuthRequest()
   const session = await getSession()
   session.oidc = { ...authReq, returnTo, startedAt: Date.now() }

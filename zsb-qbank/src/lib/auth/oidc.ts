@@ -206,8 +206,44 @@ export async function exchangeCode(
   return json
 }
 
+// ── 登录失败原因 ─────────────────────────────────────────────────────────────
+// 回调只往 URL 里放原因码,页面按码查表显示中文:URL 参数里的文字是外部可构造的,
+// 原样显示等于在学校域名上留了个写钓鱼话术的位置。详细原因只进服务端日志。
+export const LOGIN_ERRORS = {
+  unconfigured: '统一身份登录还没配置，请联系管理员。',
+  denied: '身份服务器拒绝了这次登录，请重试或联系管理员。',
+  params: '回调参数不完整，请重新点登录。',
+  state: '登录状态已失效，请重新点登录。',
+  timeout: '登录超时，请重新点登录。',
+  token: '没能和身份服务器换取登录凭证，请稍后再试。',
+  claims: '身份服务器返回的登录凭证没通过校验，请联系管理员。',
+} as const
+export type LoginErrorCode = keyof typeof LOGIN_ERRORS
+
+/** 原因码 → 中文提示;认不出的码一律落到通用文案。 */
+export function loginErrorMessage(code: string | undefined | null): string | null {
+  if (!code) return null
+  return LOGIN_ERRORS[code as LoginErrorCode] ?? '登录没成功，请重试。'
+}
+
+// 判断 returnTo 是否站内:交给 URL 解析器裁决,不要自己写前缀规则。
+// `/\evil.com` 与 `/<TAB>/evil.com` 都能通过「以 / 开头且不以 // 开头」,
+// 但浏览器与 WHATWG URL 会把它们解析成 //evil.com —— 那就是一个开放重定向。
+const RETURN_TO_BASE = 'https://returnto.invalid'
+
+/** 只接受解析后仍落在本站的相对路径,并归一化;否则返回 undefined。 */
+export function safeReturnTo(raw: string | null | undefined): string | undefined {
+  if (!raw || !raw.startsWith('/')) return undefined
+  try {
+    const u = new URL(raw, RETURN_TO_BASE)
+    if (u.origin !== RETURN_TO_BASE) return undefined
+    return `${u.pathname}${u.search}${u.hash}`
+  } catch {
+    return undefined
+  }
+}
+
 /** 登录成功后按角色决定落地页。 */
 export function landingFor(role: SessionUser['role'], returnTo?: string | null): string {
-  if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) return returnTo
-  return role === 'student' ? '/' : '/teacher'
+  return safeReturnTo(returnTo) ?? (role === 'student' ? '/' : '/teacher')
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   CLOCK_SKEW_S,
+  LOGIN_ERRORS,
   OidcError,
   authorizeEndpoint,
   buildAuthorizeUrl,
@@ -9,9 +10,11 @@ import {
   exchangeCode,
   getOidcConfig,
   landingFor,
+  loginErrorMessage,
   mapRole,
   newAuthRequest,
   oidcConfigured,
+  safeReturnTo,
   toSessionUser,
   tokenEndpoint,
   validateClaims,
@@ -139,6 +142,43 @@ describe('角色映射与会话用户', () => {
     expect(landingFor('student', '/train')).toBe('/train')
     expect(landingFor('student', 'https://evil.com')).toBe('/')
     expect(landingFor('teacher', '//evil.com')).toBe('/teacher')
+  })
+})
+
+describe('returnTo 白名单', () => {
+  // 只写前缀规则挡不住:`/\evil.com` 与路径里夹 TAB 都会被 URL 解析器还原成 //evil.com,
+  // 登录后就把用户送到站外了。所以这里一律解析一遍、比对 origin。
+  it.each([
+    ['站内路径', '/teacher', '/teacher'],
+    ['带查询与锚点', '/train?a=1#b', '/train?a=1#b'],
+    ['根路径', '/', '/'],
+    ['协议相对', '//evil.com', undefined],
+    ['反斜杠绕过', '/\\evil.com', undefined],
+    ['反斜杠 + 斜杠', '/\\/evil.com', undefined],
+    ['夹 TAB 绕过', '/\t/evil.com', undefined],
+    ['夹换行绕过', '/\n/evil.com', undefined],
+    ['绝对地址', 'https://evil.com', undefined],
+    ['不以斜杠开头', 'teacher', undefined],
+    ['空', '', undefined],
+    ['null', null, undefined],
+  ])('%s', (_name, raw, want) => {
+    expect(safeReturnTo(raw)).toBe(want)
+  })
+  it('挡住的一律回默认落地页,不会把用户送出站', () => {
+    for (const bad of ['/\\evil.com', '/\t/evil.com', '//evil.com']) {
+      expect(new URL(landingFor('student', bad), 'https://zsb.example.com').origin).toBe('https://zsb.example.com')
+      expect(new URL(landingFor('teacher', bad), 'https://zsb.example.com').origin).toBe('https://zsb.example.com')
+    }
+  })
+})
+
+describe('登录失败原因码', () => {
+  it('每个码都有中文文案;认不出的码落到通用文案;没有码就不显示', () => {
+    expect(loginErrorMessage('state')).toBe(LOGIN_ERRORS.state)
+    expect(Object.values(LOGIN_ERRORS).every((m) => m.endsWith('。'))).toBe(true)
+    expect(loginErrorMessage('<img src=x>')).toBe('登录没成功，请重试。')
+    expect(loginErrorMessage('账号异常请加微信解冻')).toBe('登录没成功，请重试。')
+    expect(loginErrorMessage(undefined)).toBeNull()
   })
 })
 

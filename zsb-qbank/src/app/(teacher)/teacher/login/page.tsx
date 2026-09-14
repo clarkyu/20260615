@@ -1,24 +1,26 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
-import { oidcConfigured } from '@/lib/auth/oidc'
+import { loginErrorMessage, oidcConfigured } from '@/lib/auth/oidc'
 import { DevLoginButton } from '@/components/home/StartPractice'
 import { LoginButton } from '@/components/auth/LoginButton'
 
 export const dynamic = 'force-dynamic'
 
 // 教师登录页:优先统一身份登录(Casdoor);未配置时回落到开发登录(生产应关掉)。
-export default async function TeacherLogin({ searchParams }: { searchParams: Promise<{ err?: string; msg?: string }> }) {
+export default async function TeacherLogin({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
   const session = await getSession()
   if (session.user && (session.user.role === 'teacher' || session.user.role === 'admin')) redirect('/teacher')
   const sp = await searchParams
+  const errMsg = loginErrorMessage(sp.err)
   const oidc = oidcConfigured()
   const devLogin = process.env.AUTH_DEV_LOGIN === 'true'
   return (
     <main className="mx-auto max-w-md py-10">
       <h1 className="text-2xl font-bold">教师登录</h1>
-      {sp.err ? (
+      {errMsg ? (
         <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
-          {sp.err === 'oidc_unconfigured' ? '统一身份登录还没配置，请联系管理员。' : `登录没成功：${sp.msg ?? '请重试'}`}
+          {errMsg}
+          <span className="mt-1 block text-red-600/80 dark:text-red-400/80">管理员可在服务端日志里看到具体原因（搜「casdoor 登录失败」）。</span>
         </p>
       ) : null}
       {session.user ? (
