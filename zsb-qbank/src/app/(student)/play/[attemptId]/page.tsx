@@ -168,6 +168,33 @@ export default function PlayPage() {
     }
   }, [attemptId, router])
 
+  // 回到前台时用服务端时间重新校准倒计时(SPEC §7.7:iOS 微信切后台会冻结定时器;
+  // 硬约束 6:计时以服务端 deadline_at 为准,客户端只显示)。
+  useEffect(() => {
+    if (meta?.mode !== 'exam') return
+    let alive = true
+    const resync = () => {
+      if (document.visibilityState !== 'visible') return
+      void (async () => {
+        try {
+          const res = await fetch('/api/time', { cache: 'no-store' })
+          if (!res.ok || !alive) return
+          const { serverNow } = (await res.json()) as { serverNow: string }
+          if (alive) clockOffset.current = Date.parse(serverNow) - Date.now()
+        } catch {
+          // 拿不到就沿用上一次偏移;逾期仍有服务端惰性交卷兜底
+        }
+      })()
+    }
+    document.addEventListener('visibilitychange', resync)
+    window.addEventListener('pageshow', resync)
+    return () => {
+      alive = false
+      document.removeEventListener('visibilitychange', resync)
+      window.removeEventListener('pageshow', resync)
+    }
+  }, [meta?.mode])
+
   // 交卷(手动确认 / 到时自动):先冲同步队列再提交;失败保留本地数据供重试。
   const submitExam = useCallback(async () => {
     setSubmitState('busy')
@@ -321,7 +348,8 @@ export default function PlayPage() {
   const isFill = current.group.kind === 'cloze' || current.group.kind === 'reading_fill'
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    // overscroll-behavior: none —— 考试页禁下拉刷新(SPEC §7.7)
+    <div className="flex h-dvh flex-col overflow-hidden overscroll-none">
       <header className="shrink-0 border-b border-neutral-200 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] dark:border-neutral-800">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">

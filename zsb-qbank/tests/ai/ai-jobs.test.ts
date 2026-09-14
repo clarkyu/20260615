@@ -134,7 +134,10 @@ describe.skipIf(!url)('ai_jobs 队列(真库 + 假 AI)', () => {
     const o2 = await enqueue(a2, r2, 28)
     expect(o1.jobId && o2.jobId && o1.jobId !== o2.jobId).toBe(true)
     const ai = fake(() => grade(2))
-    expect(await processAiJobs(db, ai, MODELS)).toEqual({ done: 2, failed: 0, retry: 0 })
+    // concurrency: 1 —— 「执行前查缓存」只在两条任务先后执行时才省得掉第二次调用;同一批并发执行时
+    // 两条都会在对方写缓存之前查一次(生产里只是偶尔多花一次钱,不影响正确性)。这里要断言的是
+    // 「先后入队的相同答案不重复计费」,所以按串行跑。
+    expect(await processAiJobs(db, ai, MODELS, { concurrency: 1 })).toEqual({ done: 2, failed: 0, retry: 0 })
     expect(ai.calls).toHaveLength(1)
     expect((await resp(r1))?.score).toBe(2)
     expect((await resp(r2))?.score).toBe(2)

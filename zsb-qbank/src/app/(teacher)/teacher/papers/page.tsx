@@ -3,6 +3,7 @@ import { asc, count, eq } from 'drizzle-orm'
 import { requireTeacherPage } from '@/lib/auth/teacher'
 import { getDb } from '@/lib/db/client'
 import { items, papers } from '@/lib/db/schema'
+import { PaperStatus } from '@/components/teacher/PaperStatus'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,11 +27,13 @@ export default async function TeacherPapers() {
     .leftJoin(items, eq(items.paperId, papers.id))
     .groupBy(papers.id)
     .orderBy(asc(papers.year), asc(papers.title))
-  const STATUS: Record<string, string> = { draft: '草稿', published: '已发布', archived: '已归档' }
   return (
     <main>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">试卷</h1>
+        <div>
+          <h1 className="text-2xl font-bold">试卷</h1>
+          <p className="mt-1 text-sm text-neutral-500">学生在「自由练习」里只看得到「已发布」的试卷；任务作答不受此限。</p>
+        </div>
         <Link href="/teacher/import" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white">
           导入 Word 试卷
         </Link>
@@ -57,7 +60,9 @@ export default async function TeacherPapers() {
               <td className="p-3">
                 {p.totalScore} 分 · {p.durationMinutes} 分钟
               </td>
-              <td className="p-3">{STATUS[p.status] ?? p.status}</td>
+              <td className="p-3">
+                <PaperStatus paperId={p.id} status={p.status} />
+              </td>
               <td className="p-3">
                 <Link href={`/teacher/papers/${p.id}`} className="text-blue-600 hover:underline">
                   查看整卷

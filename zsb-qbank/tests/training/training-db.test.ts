@@ -40,6 +40,16 @@ describe.skipIf(!url)('训练模式(真库)', () => {
     await db.delete(users).where(inArray(users.id, userIds)) // training_progress / review_cards 级联
   })
 
+  /** 跑队列直到这条任务落定(别的文件 / 别的用例可能抢走一轮领取额度,最多跑 5 轮)。 */
+  async function drain(jobId: string, ai: AiCaller) {
+    for (let i = 0; i < 5; i++) {
+      await processAiJobs(db, ai, MODELS, { max: 5 })
+      const job = await db.query.aiJobs.findFirst({ where: eq(aiJobs.id, jobId) })
+      if (job && (job.status === 'done' || job.status === 'failed')) return job
+    }
+    return db.query.aiJobs.findFirst({ where: eq(aiJobs.id, jobId) })
+  }
+
   it('抽题:只抽已审核可训练题,带脚手架提示且不带答案 / 干扰项', async () => {
     const got = await pickTrainingItems(db, userId, { mode: 'targeted', type: 'fill', count: 5 })
     expect(got.length).toBe(5)
@@ -122,8 +132,7 @@ describe.skipIf(!url)('训练模式(真库)', () => {
     }
     const jobId = await enqueueGenerateJob(db, { itemId: fill1.id, mode: 'variants', count: 3, createdBy: userId })
     expect(await enqueueGenerateJob(db, { itemId: fill1.id, mode: 'variants', count: 3, createdBy: userId })).toBe(jobId) // 复用
-    await processAiJobs(db, fake, MODELS, { max: 5 })
-    const job = await db.query.aiJobs.findFirst({ where: eq(aiJobs.id, jobId) })
+    const job = await drain(jobId, fake)
     expect(job?.status).toBe('done')
     const result = job?.result as { created: Array<{ id: string; number: number }>; rejected: string[] }
     expect(result.created).toHaveLength(1)
@@ -149,8 +158,7 @@ describe.skipIf(!url)('训练模式(真库)', () => {
     expect(v!.scaffold!.options).toContain('tallest')
 
     const dj = await enqueueGenerateJob(db, { itemId: fill1.id, mode: 'distractors', count: 3, createdBy: userId })
-    await processAiJobs(db, fake, MODELS, { max: 5 })
-    const djob = await db.query.aiJobs.findFirst({ where: eq(aiJobs.id, dj) })
+    const djob = await drain(dj, fake)
     expect((djob?.result as { distractors: string[] }).distractors).toEqual(['big', 'bigger', 'bigness']) // 去掉了答案 biggest
     await db.delete(aiJobs).where(inArray(aiJobs.id, [jobId, dj]))
   })

@@ -11,7 +11,10 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "budget": "tsx scripts/check-budget.ts",
+    "backup": "./scripts/backup.sh",
+    "restore": "./scripts/restore.sh"
   },
   "dependencies": {
     "dexie": "^4.4.5",

@@ -50,8 +50,12 @@ export async function POST(req: NextRequest) {
   if (mode !== 'practice' && mode !== 'exam') {
     return NextResponse.json({ error: { code: 'bad_request', message: 'mode 需为 practice / exam' } }, { status: 400 })
   }
+  // 自由练习 / 自由模考只能开已发布的试卷(D7;任务作答走 assignmentId 分支,由教师发布把关)。
   const paper = await db.query.papers.findFirst({ where: eq(papers.id, body.paperId) })
   if (!paper) return NextResponse.json({ error: { code: 'not_found', message: '试卷不存在' } }, { status: 404 })
+  if (paper.status !== 'published' && session.user.role === 'student') {
+    return NextResponse.json({ error: { code: 'not_found', message: '这份试卷还没发布' } }, { status: 404 })
+  }
 
   if (mode === 'exam') {
     // 断线续答:同人同卷未交的自由模考直接返回原 attempt(倒计时不重置)。

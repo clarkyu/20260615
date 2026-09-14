@@ -1,4 +1,4 @@
-import { asc } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { papers } from '@/lib/db/schema'
 import { ensureUser } from '@/lib/db/queries'
@@ -10,7 +10,7 @@ import { StartAttemptButton, DevLoginButton } from '@/components/home/StartPract
 import { AssignmentItem, JoinClassForm, type AssignmentCard } from '@/components/home/Assignments'
 
 // 学生端首页(M5):加入班级 + 我的任务 + 自由练习。
-// 任务由老师在教师端发布(SPEC §8);自由练习列全部试卷(发布流转见 docs/DECISIONS.md D7)。
+// 任务由老师在教师端发布(SPEC §8);自由练习只列已发布(published)的试卷(D7 于 M7 收紧)。
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
@@ -28,6 +28,7 @@ export default async function HomePage() {
           durationMinutes: papers.durationMinutes,
         })
         .from(papers)
+        .where(eq(papers.status, 'published'))
         .orderBy(asc(papers.year), asc(papers.title))
     : []
   const userId = user ? await ensureUser(db, user) : null
