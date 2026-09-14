@@ -371,6 +371,18 @@ createdb -p 55432 zsb_restore_test        # 空库
 # 恢复后:papers=2 items=86 attempts=15 responses=12,与源库逐项一致
 ```
 
+### CI 首跑发现并修掉的测试竞态(2026-09-14)
+M7 的 PR 首跑 CI 红,两条真库集成用例失败,复现后确认是两处与 M7 改动无关的测试竞态(M4/M6 起就在,
+本地碰巧一直没撞上),已在本里程碑一并修掉:
+- 跨文件抢任务:`tests/ai/ai-jobs.test.ts` 与 `tests/training/training-db.test.ts` 共用同一个库与同一张
+  ai_jobs 队列,并行跑时一个文件的 `processAiJobs` 会把另一个文件刚入队的任务领走(领取用
+  `FOR UPDATE SKIP LOCKED`,本就不区分来源)。→ vitest 设 `fileParallelism: false`(整套只跑几秒),
+  训练用例再加一个「跑到自己这条任务落定为止」的 drain 辅助。
+- 同批并发绕过缓存:`processAiJobs` 默认并发 4,两条同答案的任务会在对方写缓存之前各查一次缓存,
+  于是都调了一次 AI(生产里只是偶尔多花一次钱,不影响正确性)。断言「不重复计费」的那条用例改为
+  `{ concurrency: 1 }` 串行跑,并写清楚为什么。
+本地对这两个文件连跑 8 次、整套连跑 3 次全绿。
+
 ### 未决问题
 - Casdoor OIDC 仍未接入(D2):生产先关 `AUTH_DEV_LOGIN`,由 clark 用开发登录建教师账号,学生用加入码进班。
 - Serwist / Service Worker 仍未接入(D3):断网续答靠 IndexedDB + 同步队列,首次打开仍需网络。
