@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { count, eq } from 'drizzle-orm'
 import { requireTeacherPage } from '@/lib/auth/teacher'
 import { getDb } from '@/lib/db/client'
-import { assignments, classes, papers, responses } from '@/lib/db/schema'
+import { assignments, classes, papers } from '@/lib/db/schema'
+import { pendingReviewCount } from '@/lib/db/grading-queue'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,12 +14,12 @@ export default async function TeacherHome() {
   const [nPapers] = await db.select({ n: count() }).from(papers)
   const [nClasses] = await db.select({ n: count() }).from(classes).where(eq(classes.teacherId, userId))
   const [nAssignments] = await db.select({ n: count() }).from(assignments).where(eq(assignments.createdBy, userId))
-  const [nReview] = await db.select({ n: count() }).from(responses).where(eq(responses.needsReview, true))
+  const nReview = await pendingReviewCount(db, userId)
   const cards: Array<[string, number, string, string]> = [
     ['试卷', nPapers?.n ?? 0, '/teacher/papers', '题库中的试卷'],
     ['班级', nClasses?.n ?? 0, '/teacher/classes', '我的班级与加入码'],
     ['任务', nAssignments?.n ?? 0, '/teacher/assignments', '已发布的任务'],
-    ['待复核', nReview?.n ?? 0, '/teacher/grading', '等老师改分的作答'],
+    ['待复核', nReview, '/teacher/grading', '等老师改分的作答'],
   ]
   return (
     <main>
