@@ -15,6 +15,13 @@
       "when": 1789318051273,
       "tag": "0001_same_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789372287593,
+      "tag": "0002_training_progress",
+      "breakpoints": true
     }
   ]
 }

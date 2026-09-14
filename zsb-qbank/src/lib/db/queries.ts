@@ -8,6 +8,8 @@ import type { SessionUser } from '@/lib/auth/session'
 
 export interface DbItemRow {
   id: string
+  status?: string
+  origin?: string
   number: number
   type: string
   score: number
@@ -54,7 +56,7 @@ export interface AssembledPaper {
  * 装配试卷树。opts.itemIds 给定时只保留这些小题(教师从题库勾选组卷,SPEC §8),
  * 空掉的题组/大题一并去掉;不给则整卷。
  */
-export async function assemblePaper(db: Db, paperId: string, opts: { itemIds?: string[] | null } = {}): Promise<AssembledPaper | null> {
+export async function assemblePaper(db: Db, paperId: string, opts: { itemIds?: string[] | null; includeDrafts?: boolean } = {}): Promise<AssembledPaper | null> {
   const paper = await db.query.papers.findFirst({ where: eq(papers.id, paperId) })
   if (!paper) return null
   const keep = opts.itemIds && opts.itemIds.length > 0 ? new Set(opts.itemIds) : null
@@ -70,9 +72,13 @@ export async function assemblePaper(db: Db, paperId: string, opts: { itemIds?: s
   const itemsByGroup = new Map<string, DbItemRow[]>()
   for (const it of itemRows) {
     if (keep && !keep.has(it.id)) continue
+    // AI 变式草稿(status=draft)未经教师审核不进任何试卷视图(练习 / 考试 / 学生端),教师页显式要求才带
+    if (it.status !== 'approved' && !opts.includeDrafts) continue
     const list = itemsByGroup.get(it.groupId) ?? []
     list.push({
       id: it.id,
+      status: it.status,
+      origin: it.origin,
       number: it.number,
       type: it.type,
       score: it.score,

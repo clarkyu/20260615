@@ -1,7 +1,8 @@
 import { and, eq, inArray, ne, or, isNull, sql } from 'drizzle-orm'
 import type { Db } from './client'
 import { aiGradeCache, aiJobs, attempts, groups, items, papers, responses, wrongAnswers } from './schema'
-import { itemSchema, studentAnswerSchema, type Item } from '@/lib/schema/paper'
+import { studentAnswerSchema, type Item } from '@/lib/schema/paper'
+import { parseItemRow } from './item-parse'
 import { AiError, type AiCaller, extractJson } from '@/lib/ai/client'
 import { PROMPT_VERSION, buildExplainUser, buildGradeUser, gradePromptFor, loadPrompt, studentAnswerText } from '@/lib/ai/prompts'
 import { answerHash } from '@/lib/ai/hash'
@@ -17,6 +18,7 @@ import { normalizeText, wordCount } from '@/lib/grading/normalize'
 import { parseMarkdown } from '@/lib/import/rules'
 import { ruleDraftToPaper, suggestPaperId, suggestYear, validateDraft, type DraftIssue, type PaperMeta } from '@/lib/import/draft'
 import { mergeAiItems, parseGroupWithAi } from '@/lib/import/ai'
+import { buildGenerateUser, cleanDistractors, distractorsResultSchema, validateVariant, variantsResultSchema } from '@/lib/ai/generate'
 
 // ai_jobs 队列(SPEC §9.1:数据库表 + 应用内轮询工作线程,不引 Redis)。
 //   grade  —— 主观题(short_answer / translate_e2c / writing)评分与 translate_c2e_fill 兜底
@@ -54,7 +56,15 @@ export interface ParseJobPayload {
   meta?: Partial<PaperMeta>
   createdBy: string
 }
-export type AiJobPayload = GradeJobPayload | ExplainJobPayload | ParseJobPayload
+/** 变式题 / 干扰项生成(M6):variants 直接以草稿入库(status=draft,origin=ai);distractors 存 job 结果等教师采纳 */
+export interface GenerateJobPayload {
+  kind: 'generate'
+  mode: 'variants' | 'distractors'
+  itemId: string
+  count: number
+  createdBy: string
+}
+export type AiJobPayload = GradeJobPayload | ExplainJobPayload | ParseJobPayload | GenerateJobPayload
 type AiJobRow = typeof aiJobs.$inferSelect
 
 export interface AiModels {
@@ -70,20 +80,7 @@ export interface EnqueueOutcome {
   empty: boolean
 }
 
-function parseItem(row: typeof items.$inferSelect): Item | null {
-  const parsed = itemSchema.safeParse({
-    number: row.number,
-    type: row.type,
-    score: row.score,
-    explanation: row.explanation ?? undefined,
-    knowledgeTags: row.knowledgeTags,
-    difficulty: row.difficulty as 1 | 2 | 3,
-    contextSnippet: row.contextSnippet ?? undefined,
-    content: row.content,
-    answer: row.answer,
-  })
-  return parsed.success ? parsed.data : null
-}
+const parseItem = parseItemRow
 
 async function stimulusOf(db: Db, groupId: string): Promise<string | null> {
   const g = await db.query.groups.findFirst({ where: eq(groups.id, groupId) })
@@ -249,6 +246,18 @@ export async function enqueueExplainJob(db: Db, itemId: string): Promise<string>
 
 export async function enqueueParseJob(db: Db, payload: Omit<ParseJobPayload, 'kind'>): Promise<string> {
   const [job] = await db.insert(aiJobs).values({ kind: 'parse', payload: { kind: 'parse', ...payload } satisfies ParseJobPayload }).returning({ id: aiJobs.id })
+  if (!job) throw new Error('入队失败')
+  return job.id
+}
+
+/** 生成任务:同一小题同一模式已有未完成任务则复用(教师重复点击不重复计费)。 */
+export async function enqueueGenerateJob(db: Db, args: { itemId: string; mode: GenerateJobPayload['mode']; count: number; createdBy: string }): Promise<string> {
+  const pending = await db.query.aiJobs.findFirst({
+    where: and(eq(aiJobs.kind, 'generate'), inArray(aiJobs.status, ['queued', 'running']), sql`${aiJobs.payload}->>'itemId' = ${args.itemId}`, sql`${aiJobs.payload}->>'mode' = ${args.mode}`),
+  })
+  if (pending) return pending.id
+  const payload: GenerateJobPayload = { kind: 'generate', ...args }
+  const [job] = await db.insert(aiJobs).values({ kind: 'generate', payload }).returning({ id: aiJobs.id })
   if (!job) throw new Error('入队失败')
   return job.id
 }
@@ -478,11 +487,97 @@ async function runParseJob(db: Db, job: AiJobRow, payload: ParseJobPayload, ai: 
   return 'done'
 }
 
+/**
+ * 变式题 / 干扰项生成(SPEC §6、§8、M6)。variants:模型返回的每题过 zod + 自检后,以草稿写入原题所在题组
+ * (status=draft、origin=ai,题号接在该试卷最大题号之后),教师审核通过才会被训练抽到;
+ * distractors:清洗(去掉与答案重合的、去重、最多 3 个)后存进 job 结果,教师采纳时才写入 content。
+ */
+async function runGenerateJob(db: Db, job: AiJobRow, payload: GenerateJobPayload, ai: AiCaller | null, model: string): Promise<'done' | 'failed' | 'retry'> {
+  if (!ai) {
+    await finishJob(db, job, 'failed', { error: 'ai_not_configured' })
+    return 'failed'
+  }
+  const itemRow = await db.query.items.findFirst({ where: eq(items.id, payload.itemId) })
+  const item = itemRow ? parseItem(itemRow) : null
+  if (!item || !itemRow) {
+    await finishJob(db, job, 'failed', { error: 'item_invalid' })
+    return 'failed'
+  }
+  try {
+    const stimulus = await stimulusOf(db, itemRow.groupId)
+    if (payload.mode === 'distractors') {
+      const out = await ai({ model, system: loadPrompt('generate-distractors'), user: buildGenerateUser(item, { stimulus }), maxTokens: 300 })
+      const parsed = distractorsResultSchema.safeParse(extractJson(out.text))
+      if (!parsed.success) throw new AiError('干扰项结果结构不合法', 'bad_response')
+      const accepted = 'accepted' in item.answer ? item.answer.accepted : []
+      const distractors = cleanDistractors(parsed.data.distractors, accepted)
+      if (distractors.length < 2) throw new AiError('可用干扰项不足 2 个', 'bad_response')
+      await finishJob(db, job, 'done', { result: { distractors, itemId: item ? itemRow.id : null, usage: out.usage, latencyMs: out.latencyMs, model: out.model } })
+      console.log(`[ai] distractors job=${job.id} item=${item.number} n=${distractors.length} tokens=${out.usage.promptTokens}+${out.usage.completionTokens}`)
+      return 'done'
+    }
+    const out = await ai({ model, system: loadPrompt('generate-variants'), user: buildGenerateUser(item, { stimulus, count: payload.count }), maxTokens: 2000 })
+    const parsed = variantsResultSchema.safeParse(extractJson(out.text))
+    if (!parsed.success) throw new AiError('变式题结果结构不合法', 'bad_response')
+    const created: Array<{ id: string; number: number }> = []
+    const rejected: string[] = []
+    await db.transaction(async (tx) => {
+      const [mx] = await tx.select({ n: sql<number>`coalesce(max(${items.number}), 0)::int` }).from(items).where(eq(items.paperId, itemRow.paperId))
+      let number = Math.max(mx?.n ?? 0, 1000) // 变式题从 1001 起编号,与真题题号区分
+      for (const v of parsed.data.items.slice(0, payload.count)) {
+        const why = validateVariant(v)
+        if (why) {
+          rejected.push(why)
+          continue
+        }
+        if (v.type !== item.type) {
+          rejected.push('题型与原题不一致')
+          continue
+        }
+        number += 1
+        const content = v.type === 'fill' ? { ...v.content, distractors: cleanDistractors(v.content.distractors, v.answer.accepted) } : v.type === 'translate_c2e_fill' ? { ...v.content, distractors: cleanDistractors(v.content.distractors, v.answer.accepted) } : v.content
+        const [row] = await tx
+          .insert(items)
+          .values({
+            groupId: itemRow.groupId,
+            sectionId: itemRow.sectionId,
+            paperId: itemRow.paperId,
+            number,
+            type: v.type,
+            score: item.score,
+            content,
+            answer: v.answer,
+            explanation: v.explanation,
+            knowledgeTags: v.knowledgeTags.length ? v.knowledgeTags : item.knowledgeTags,
+            difficulty: v.difficulty,
+            contextSnippet: v.type === 'fill' ? v.contextSnippet : null,
+            origin: 'ai',
+            status: 'draft',
+          })
+          .returning({ id: items.id, number: items.number })
+        if (row) created.push(row)
+      }
+    })
+    await finishJob(db, job, 'done', { result: { created, rejected, sourceItemId: itemRow.id, usage: out.usage, latencyMs: out.latencyMs, model: out.model } })
+    console.log(`[ai] variants job=${job.id} item=${item.number} created=${created.length} rejected=${rejected.length} tokens=${out.usage.promptTokens}+${out.usage.completionTokens}`)
+    return 'done'
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (isTransient(e) && job.attempts < MAX_ATTEMPTS) {
+      await finishJob(db, job, 'queued', { error: msg })
+      return 'retry'
+    }
+    await finishJob(db, job, 'failed', { error: msg })
+    return 'failed'
+  }
+}
+
 /** 执行一条任务;ai 为 null 表示未配置 → 直接分流待评(不重试)。 */
 export async function runJob(db: Db, job: AiJobRow, ai: AiCaller | null, models: AiModels): Promise<'done' | 'failed' | 'retry'> {
   const payload = job.payload as AiJobPayload
   if (payload.kind === 'grade') return runGradeJob(db, job, payload, ai, models.gradingModel)
   if (payload.kind === 'parse') return runParseJob(db, job, payload, ai, models.authoringModel)
+  if (payload.kind === 'generate') return runGenerateJob(db, job, payload, ai, models.authoringModel)
   return runExplainJob(db, job, payload, ai, models.authoringModel)
 }
 

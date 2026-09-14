@@ -27,7 +27,7 @@ export async function loadAssignmentStats(db: Db, teacherId: string, assignmentI
     .select({ id: items.id, number: items.number, type: items.type, score: items.score, sectionId: items.sectionId, sectionTitle: sections.title })
     .from(items)
     .innerJoin(sections, eq(items.sectionId, sections.id))
-    .where(eq(items.paperId, paperId))
+    .where(and(eq(items.paperId, paperId), eq(items.status, 'approved')))
     .orderBy(asc(items.number))
   const statItems: StatItem[] = itemRows.filter((it) => !scope || scope.has(it.id))
   const roster = await assignmentRoster(db, a)
@@ -77,7 +77,7 @@ export async function loadStudentOverview(db: Db, teacherId: string, studentId: 
   for (const r of tasks) if (!latest.has(r.a.id)) latest.set(r.a.id, r)
   // 满分:整卷取试卷满分,子集取所选小题分值和
   const paperIds = [...new Set([...latest.values()].map((r) => r.a.paperId).filter((x): x is string => !!x))]
-  const itemRows = paperIds.length ? await db.select({ id: items.id, paperId: items.paperId, type: items.type, score: items.score }).from(items).where(inArray(items.paperId, paperIds)) : []
+  const itemRows = paperIds.length ? await db.select({ id: items.id, paperId: items.paperId, type: items.type, score: items.score }).from(items).where(and(inArray(items.paperId, paperIds), eq(items.status, 'approved'))) : []
   const fullScoreOf = (a: typeof assignments.$inferSelect) => {
     const list = itemRows.filter((it) => it.paperId === a.paperId && (!a.itemIds?.length || a.itemIds.includes(it.id)))
     return list.reduce((n, it) => n + it.score, 0)

@@ -43,7 +43,7 @@ export async function submitAttempt(db: Db, attempt: AttemptRow, opts: { auto?: 
   const itemRows = await db
     .select()
     .from(items)
-    .where(scope ? and(eq(items.paperId, paperId), inArray(items.id, scope)) : eq(items.paperId, paperId))
+    .where(and(eq(items.paperId, paperId), eq(items.status, 'approved'), ...(scope ? [inArray(items.id, scope)] : [])))
   const savedRows = await db.select().from(responses).where(eq(responses.attemptId, attempt.id))
   const savedByItem = new Map(savedRows.map((r) => [r.itemId, r]))
 

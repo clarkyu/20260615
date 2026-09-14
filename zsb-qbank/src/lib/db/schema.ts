@@ -159,6 +159,20 @@ export const reviewCards = pgTable('review_cards', {
   lastResult: text('last_result'),
 }, (t) => [primaryKey({ columns: [t.userId, t.itemId] })])
 
+// 训练进度(SPEC §6 训练模式 / M6):每人每题的脚手架等级与三级连对次数、练习次数与正确次数。
+// level 1 选词块 / 2 首字母 / 3 自由拼写;三级连续两次答对 → scaffold_off 永久关闭;答错降一级。
+export const trainingProgress = pgTable('training_progress', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  itemId: uuid('item_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
+  level: integer('level').notNull().default(1),
+  l3Streak: integer('l3_streak').notNull().default(0),
+  scaffoldOff: boolean('scaffold_off').notNull().default(false),
+  attempts: integer('attempts').notNull().default(0),
+  correct: integer('correct').notNull().default(0),
+  lastResult: text('last_result'),
+  lastAt: timestamp('last_at', { withTimezone: true }),
+}, (t) => [primaryKey({ columns: [t.userId, t.itemId] })])
+
 export const aiJobs = pgTable('ai_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
   kind: text('kind', { enum: ['grade', 'explain', 'generate', 'parse'] }).notNull(),
