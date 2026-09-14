@@ -6,6 +6,7 @@ import { attempts, items, responses, users, wrongAnswers } from '@/lib/db/schema
 import { itemSchema, studentAnswerSchema, type StudentAnswer } from '@/lib/schema/paper'
 import { gradeObjective, isObjectiveType } from '@/lib/grading/objective'
 import { enqueueGradeJob, recomputeAttemptScore, recordWrongAnswer } from '@/lib/db/ai-jobs'
+import { attemptItemScope } from '@/lib/db/assignments'
 import { rateLimit } from '@/lib/rate-limit'
 import { getSession } from '@/lib/auth/session'
 
@@ -40,14 +41,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: { code: 'forbidden', message: '考试模式交卷后才判分' } }, { status: 403 })
   }
 
+  // 任务子集组卷:只判任务范围内的小题(范围外的 id 静默忽略)。
+  const scope = await attemptItemScope(db, attempt)
+  const wanted = scope ? parsed.data.itemIds.filter((x) => scope.includes(x)) : parsed.data.itemIds
+  if (wanted.length === 0) return NextResponse.json({ results: [] })
   const itemRows = await db
     .select()
     .from(items)
-    .where(and(inArray(items.id, parsed.data.itemIds), eq(items.paperId, attempt.paperId ?? '')))
+    .where(and(inArray(items.id, wanted), eq(items.paperId, attempt.paperId ?? '')))
   const savedRows = await db
     .select()
     .from(responses)
-    .where(and(eq(responses.attemptId, attempt.id), inArray(responses.itemId, parsed.data.itemIds)))
+    .where(and(eq(responses.attemptId, attempt.id), inArray(responses.itemId, wanted)))
   const savedByItem = new Map(savedRows.map((r) => [r.itemId, r]))
 
   // 常见错答(§5.4):客观题答错时附前 5 条高频错答(排除本次答案)。

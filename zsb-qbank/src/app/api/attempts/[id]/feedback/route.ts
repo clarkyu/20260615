@@ -3,6 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
 import { attempts, items, responses, users } from '@/lib/db/schema'
+import { attemptItemScope } from '@/lib/db/assignments'
 import { getSession } from '@/lib/auth/session'
 
 // GET /api/attempts/:id/feedback?itemIds=a,b(SPEC §7.5):练习/训练模式轮询 AI 评分结果
@@ -28,8 +29,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: { code: 'forbidden', message: '考试模式交卷后在成绩页查看' } }, { status: 403 })
   }
 
-  const itemRows = await db.select().from(items).where(and(inArray(items.id, ids), eq(items.paperId, attempt.paperId ?? '')))
-  const savedRows = await db.select().from(responses).where(and(eq(responses.attemptId, attempt.id), inArray(responses.itemId, ids)))
+  const scope = await attemptItemScope(db, attempt)
+  const wanted = scope ? ids.filter((x) => scope.includes(x)) : ids
+  if (wanted.length === 0) return NextResponse.json({ results: [] })
+  const itemRows = await db.select().from(items).where(and(inArray(items.id, wanted), eq(items.paperId, attempt.paperId ?? '')))
+  const savedRows = await db.select().from(responses).where(and(eq(responses.attemptId, attempt.id), inArray(responses.itemId, wanted)))
   const savedByItem = new Map(savedRows.map((r) => [r.itemId, r]))
 
   const results = itemRows.map((row) => {

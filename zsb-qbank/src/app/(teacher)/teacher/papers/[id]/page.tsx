@@ -1,91 +1,81 @@
-import { notFound, redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { requireTeacherPage } from '@/lib/auth/teacher'
 import { getDb } from '@/lib/db/client'
-import { getSession } from '@/lib/auth/session'
-import { papers, sections, groups, items } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import { papers } from '@/lib/db/schema'
+import { assemblePaper } from '@/lib/db/queries'
+import { ITEM_TYPE_LABEL, itemPreview } from '@/lib/teacher/item-preview'
 
 export const dynamic = 'force-dynamic'
 
-// 教师端只读整卷页(M1 验收):按 大题 → 题组 → 小题 展示,含答案与解析——
-// 仅教师/管理员可见(学生端接口一律经 stripAnswers,本页是唯一例外的教师视图)。
-export default async function TeacherPaperPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session.user) redirect('/teacher/login')
-  if (session.user.role !== 'teacher' && session.user.role !== 'admin') redirect('/')
+// 教师看整卷(含参考答案与解析):按大题 / 题组 / 小题展开;顶部直达「发布任务」。
+function answerText(type: string, answer: unknown): string {
+  const a = (answer && typeof answer === 'object' ? answer : {}) as Record<string, unknown>
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  if (typeof a.reference === 'string') return a.reference
+  if (Array.isArray(a.correct)) return list(a.correct).join('、')
+  if (Array.isArray(a.accepted)) return list(a.accepted).join(' / ')
+  return type === 'writing' ? '(见评分要点)' : JSON.stringify(answer)
+}
 
+export default async function TeacherPaperPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireTeacherPage()
   const { id } = await params
   const db = getDb()
-  const paper = await db.query.papers.findFirst({ where: eq(papers.id, id) })
+  const paper = await assemblePaper(db, id)
   if (!paper) notFound()
-  const sectionRows = await db.select().from(sections).where(eq(sections.paperId, id)).orderBy(asc(sections.order))
-  const groupRows = await db
-    .select()
-    .from(groups)
-    .innerJoin(sections, eq(groups.sectionId, sections.id))
-    .where(eq(sections.paperId, id))
-    .orderBy(asc(sections.order), asc(groups.order))
-  const itemRows = await db.select().from(items).where(eq(items.paperId, id)).orderBy(asc(items.number))
-
-  const groupsBySection = new Map<string, (typeof groupRows)[number]['groups'][]>()
-  for (const row of groupRows) {
-    const list = groupsBySection.get(row.groups.sectionId) ?? []
-    list.push(row.groups)
-    groupsBySection.set(row.groups.sectionId, list)
-  }
-  const itemsByGroup = new Map<string, typeof itemRows>()
-  for (const it of itemRows) {
-    const list = itemsByGroup.get(it.groupId) ?? []
-    list.push(it)
-    itemsByGroup.set(it.groupId, list)
-  }
-
+  const meta = await db.query.papers.findFirst({ where: eq(papers.id, id), columns: { answerKeyNote: true, status: true } })
+  const nItems = paper.sections.reduce((n, s) => n + s.groups.reduce((m, g) => m + g.items.length, 0), 0)
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6">
-      <h1 className="text-2xl font-bold">{paper.title}</h1>
-      <p className="mt-1 text-sm text-neutral-500">
-        {paper.year} 年 · {paper.region} · 满分 {paper.totalScore} · {paper.durationMinutes} 分钟 · 状态 {paper.status}
-      </p>
-      {paper.answerKeyNote ? <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{paper.answerKeyNote}</p> : null}
-
-      {sectionRows.map((s) => (
-        <section key={s.id} className="mt-8">
-          <h2 className="text-lg font-bold">
-            {s.title}
-            <span className="ml-2 text-sm font-normal text-neutral-500">每题 {s.scorePerItem} 分 · {s.itemType}</span>
+    <main>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">{paper.title}</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {paper.year} · {paper.region} · 满分 {paper.totalScore} 分 · {paper.durationMinutes} 分钟 · {nItems} 小题
+          </p>
+        </div>
+        <Link href={`/teacher/assignments?paperId=${encodeURIComponent(paper.id)}`} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white">
+          发布任务
+        </Link>
+      </div>
+      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">本页含参考答案与解析，仅教师可见；请勿投屏给学生。</p>
+      {meta?.answerKeyNote ? <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">{meta.answerKeyNote}</p> : null}
+      {paper.sections.map((s) => (
+        <section key={s.id} className="mt-6 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="text-lg font-semibold">
+            {s.code} {s.title}
+            <span className="ml-2 text-sm font-normal text-neutral-500">每题 {s.scorePerItem} 分</span>
           </h2>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{s.instructions}</p>
-
-          {(groupsBySection.get(s.id) ?? []).map((g) => (
-            <div key={g.id} className="mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-              <p className="text-xs font-medium text-neutral-400">题组 {g.order} · {g.kind}</p>
-              {g.stimulus ? (
-                <div className="mt-2 rounded-xl bg-neutral-50 p-3 text-sm whitespace-pre-wrap dark:bg-neutral-900">
-                  {(g.stimulus as { title?: string; body: string }).title ? (
-                    <p className="mb-1 font-semibold">{(g.stimulus as { title?: string }).title}</p>
-                  ) : null}
-                  {(g.stimulus as { body: string }).body}
-                </div>
-              ) : null}
-              {g.frame ? <p className="mt-2 text-sm whitespace-pre-wrap">{g.frame}</p> : null}
-
-              <ul className="mt-3 space-y-3">
-                {(itemsByGroup.get(g.id) ?? []).map((it) => (
-                  <li key={it.id} className="rounded-xl bg-neutral-50 p-3 text-sm dark:bg-neutral-900">
-                    <p className="font-medium">
-                      {it.number}. <span className="text-neutral-400">[{it.type} · {it.score} 分 · 难度 {it.difficulty}]</span>
-                    </p>
-                    <pre className="mt-1 whitespace-pre-wrap font-sans text-neutral-700 dark:text-neutral-300">{JSON.stringify(it.content, null, 2)}</pre>
-                    <p className="mt-2 font-medium text-emerald-700 dark:text-emerald-400">参考答案</p>
-                    <pre className="whitespace-pre-wrap font-sans text-neutral-700 dark:text-neutral-300">{JSON.stringify(it.answer, null, 2)}</pre>
-                    {it.explanation ? <p className="mt-2 text-neutral-600 dark:text-neutral-400">解析:{it.explanation}</p> : null}
-                    {it.knowledgeTags.length > 0 ? (
-                      <p className="mt-1 text-xs text-neutral-400">标签:{it.knowledgeTags.join('、')}</p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600 dark:text-neutral-300">{s.instructions}</p>
+          {s.groups.map((g) => {
+            const stim = (g.stimulus && typeof g.stimulus === 'object' ? g.stimulus : null) as { title?: string; body?: string } | null
+            return (
+              <div key={g.id} className="mt-4 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                {stim?.body ? (
+                  <details className="mb-2">
+                    <summary className="cursor-pointer text-sm text-blue-600">{stim.title ?? '材料'}（展开）</summary>
+                    <p className="mt-2 whitespace-pre-wrap text-sm">{stim.body}</p>
+                  </details>
+                ) : null}
+                {g.frame ? <p className="mb-2 whitespace-pre-wrap text-sm text-neutral-600 dark:text-neutral-300">{g.frame}</p> : null}
+                <table className="w-full text-sm">
+                  <tbody>
+                    {g.items.map((it) => (
+                      <tr key={it.id} className="border-t border-neutral-100 align-top dark:border-neutral-800">
+                        <td className="w-12 py-2 pr-2 font-mono">{it.number}</td>
+                        <td className="w-16 py-2 pr-2 text-neutral-500">{ITEM_TYPE_LABEL[it.type] ?? it.type}</td>
+                        <td className="py-2 pr-2">{itemPreview(it.type, it.content, it.contextSnippet)}</td>
+                        <td className="w-1/3 py-2 pr-2 text-emerald-700 dark:text-emerald-300">{answerText(it.type, it.answer)}</td>
+                        <td className="w-1/4 py-2 text-xs text-neutral-500">{it.explanation ?? ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
         </section>
       ))}
     </main>

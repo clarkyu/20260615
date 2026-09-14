@@ -3,6 +3,8 @@ import { and, eq } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { attempts, responses, users } from '@/lib/db/schema'
 import { assemblePaper } from '@/lib/db/queries'
+import { attemptItemScope, parseSettings } from '@/lib/db/assignments'
+import { assignments } from '@/lib/db/schema'
 import { submitAttempt } from '@/lib/db/submit'
 import { summarize, revealAnswers, maskUnreleased, type SavedGrade } from '@/lib/grading/aggregate'
 import { isOverdueForAutoSubmit } from '@/lib/grading/deadline'
@@ -30,7 +32,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: { code: 'not_submitted', message: '还没交卷,交卷后再看成绩' } }, { status: 409 })
   }
 
-  const paper = await assemblePaper(db, attempt.paperId ?? '')
+  // 任务子集组卷:成绩页只按任务里的小题算分与展示(满分随之缩小)。
+  const itemIds = await attemptItemScope(db, attempt)
+  const paper = await assemblePaper(db, attempt.paperId ?? '', { itemIds })
   if (!paper) return NextResponse.json({ error: { code: 'not_found', message: '试卷不存在' } }, { status: 404 })
   const savedRows = await db.select().from(responses).where(eq(responses.attemptId, attempt.id))
   const savedByItem = new Map<string, SavedGrade>(savedRows.map((r) => [r.itemId, { score: r.score, verdict: (r.gradeDetail as { verdict?: string } | null)?.verdict ?? null }]))
@@ -38,6 +42,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const feedbackByItem = new Map(savedRows.map((r) => [r.itemId, r.feedback]))
 
   // 考试未发布(§9.4):主观题只显示待评、不计总分,AI 评语一律不下发(评语会点出漏答要点)。
+  // 任务的 settings.showExplanation=false 时,即使发布也不带解析(参考答案仍给,§8)。
+  const assignment = attempt.assignmentId ? await db.query.assignments.findFirst({ where: eq(assignments.id, attempt.assignmentId) }) : null
+  const showExplanation = assignment ? parseSettings(assignment.settings).showExplanation : true
   const reveal = revealAnswers(attempt.mode, attempt.status)
   const summary = maskUnreleased(
     summarize(
@@ -58,7 +65,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         for (const it of g.items) {
           const a = it.answer as { accepted?: string[]; correct?: string[] } | null
           const accepted = Array.isArray(a?.accepted) ? a.accepted : Array.isArray(a?.correct) ? a.correct : []
-          detailByItem.set(it.id, { accepted, explanation: it.explanation })
+          detailByItem.set(it.id, { accepted, explanation: showExplanation ? it.explanation : null })
         }
       }
     }
@@ -71,8 +78,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       status: attempt.status,
       submittedAt: attempt.submittedAt,
       autoSubmitted: (attempt.clientMeta as { autoSubmitted?: boolean } | null)?.autoSubmitted === true,
+      assignmentId: attempt.assignmentId,
     },
-    paper: { id: paper.id, title: paper.title, totalScore: paper.totalScore },
+    // 子集组卷时满分 = 所选小题分值之和,不是整卷满分。
+    paper: { id: paper.id, title: paper.title, totalScore: itemIds ? summary.sections.reduce((s, x) => s + x.fullScore, 0) : paper.totalScore },
     total: summary.total,
     sections: summary.sections.map((s) => ({
       id: s.id,

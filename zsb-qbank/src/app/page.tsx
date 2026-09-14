@@ -1,19 +1,23 @@
 import { asc } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { papers } from '@/lib/db/schema'
+import { ensureUser } from '@/lib/db/queries'
+import { studentAssignments } from '@/lib/db/assignments'
 import { getSession } from '@/lib/auth/session'
 import { StartAttemptButton, DevLoginButton } from '@/components/home/StartPractice'
+import { AssignmentItem, JoinClassForm, type AssignmentCard } from '@/components/home/Assignments'
 
-// 学生端首页(M3):试卷列表 + 「开始练习 / 模拟考试」入口。任务(assignment)列表在 M5/M6 接入。
-// M2 先列全部试卷(发布流转在 M5 落地后改为学生仅见 published,见 docs/DECISIONS.md D7)。
+// 学生端首页(M5):加入班级 + 我的任务 + 自由练习。
+// 任务由老师在教师端发布(SPEC §8);自由练习列全部试卷(发布流转见 docs/DECISIONS.md D7)。
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
   const session = await getSession()
   const user = session.user
+  const db = getDb()
 
   const rows = user
-    ? await getDb()
+    ? await db
         .select({
           id: papers.id,
           title: papers.title,
@@ -23,6 +27,21 @@ export default async function HomePage() {
         })
         .from(papers)
         .orderBy(asc(papers.year), asc(papers.title))
+    : []
+  const tasks: AssignmentCard[] = user
+    ? (await studentAssignments(db, await ensureUser(db, user))).map((a) => ({
+        id: a.id,
+        title: a.title,
+        mode: a.mode,
+        className: a.className,
+        dueAt: a.dueAt?.toISOString() ?? null,
+        opensAt: a.opensAt?.toISOString() ?? null,
+        durationMinutes: a.durationMinutes,
+        open: a.open,
+        openReason: a.openReason,
+        itemCount: a.itemCount,
+        attempt: a.attempt,
+      }))
     : []
 
   return (
@@ -45,28 +64,54 @@ export default async function HomePage() {
         </div>
       ) : (
         <>
-          <p className="text-sm text-neutral-500">
-            {user.name},选一份试卷开始练习。做完一组点「对答案」,立刻看对错和解析。
-          </p>
-          {rows.length === 0 ? (
-            <div className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-              <p className="font-medium">还没有试卷</p>
-              <p className="mt-1 text-sm text-neutral-500">等老师导入试卷后,这里会出现练习入口。</p>
-            </div>
-          ) : (
-            rows.map((p) => (
-              <div key={p.id} className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-                <p className="truncate font-medium">{p.title}</p>
-                <p className="mt-1 text-sm text-neutral-500">
-                  满分 {p.totalScore} 分 · 考试限时 {p.durationMinutes} 分钟
-                </p>
-                <div className="mt-3 flex justify-end gap-2">
-                  <StartAttemptButton paperId={p.id} mode="exam" label="模拟考试" variant="outline" />
-                  <StartAttemptButton paperId={p.id} mode="practice" label="开始练习" />
+          <section className="flex flex-col gap-3">
+            <h2 className="font-semibold">我的任务</h2>
+            {tasks.length === 0 ? (
+              <div className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
+                <p className="font-medium">还没有任务</p>
+                <p className="mt-1 text-sm text-neutral-500">输入老师发的加入码进班，老师布置的练习和考试会出现在这里。</p>
+                <div className="mt-3">
+                  <JoinClassForm />
                 </div>
               </div>
-            ))
-          )}
+            ) : (
+              <>
+                {tasks.map((a) => (
+                  <AssignmentItem key={a.id} a={a} />
+                ))}
+                <details className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
+                  <summary className="min-h-11 cursor-pointer leading-[2.75rem] text-sm text-neutral-500">加入另一个班级</summary>
+                  <div className="mt-2">
+                    <JoinClassForm />
+                  </div>
+                </details>
+              </>
+            )}
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="font-semibold">自由练习</h2>
+            <p className="text-sm text-neutral-500">{user.name},选一份试卷开始练习。做完一组点「对答案」,立刻看对错和解析。</p>
+            {rows.length === 0 ? (
+              <div className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
+                <p className="font-medium">还没有试卷</p>
+                <p className="mt-1 text-sm text-neutral-500">等老师导入试卷后,这里会出现练习入口。</p>
+              </div>
+            ) : (
+              rows.map((p) => (
+                <div key={p.id} className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
+                  <p className="truncate font-medium">{p.title}</p>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    满分 {p.totalScore} 分 · 考试限时 {p.durationMinutes} 分钟
+                  </p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <StartAttemptButton paperId={p.id} mode="exam" label="模拟考试" variant="outline" />
+                    <StartAttemptButton paperId={p.id} mode="practice" label="开始练习" />
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
         </>
       )}
     </main>
