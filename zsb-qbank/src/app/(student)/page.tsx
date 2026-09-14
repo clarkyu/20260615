@@ -3,6 +3,8 @@ import { getDb } from '@/lib/db/client'
 import { papers } from '@/lib/db/schema'
 import { ensureUser } from '@/lib/db/queries'
 import { studentAssignments } from '@/lib/db/assignments'
+import { dailyPlan } from '@/lib/db/training'
+import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { StartAttemptButton, DevLoginButton } from '@/components/home/StartPractice'
 import { AssignmentItem, JoinClassForm, type AssignmentCard } from '@/components/home/Assignments'
@@ -28,8 +30,10 @@ export default async function HomePage() {
         .from(papers)
         .orderBy(asc(papers.year), asc(papers.title))
     : []
-  const tasks: AssignmentCard[] = user
-    ? (await studentAssignments(db, await ensureUser(db, user))).map((a) => ({
+  const userId = user ? await ensureUser(db, user) : null
+  const plan = userId ? await dailyPlan(db, userId) : null
+  const tasks: AssignmentCard[] = user && userId
+    ? (await studentAssignments(db, userId)).map((a) => ({
         id: a.id,
         title: a.title,
         mode: a.mode,
@@ -65,6 +69,17 @@ export default async function HomePage() {
         </div>
       ) : (
         <>
+          {plan ? (
+            <Link href="/train" className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/40">
+              <div>
+                <p className="font-medium">每日训练</p>
+                <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  复习错题 {plan.dueDone} / {plan.due} · 新题 {plan.newDone} / {plan.newTarget}
+                </p>
+              </div>
+              <span className="min-h-11 inline-flex items-center rounded-xl bg-blue-600 px-4 font-medium text-white">去训练</span>
+            </Link>
+          ) : null}
           <section className="flex flex-col gap-3">
             <h2 className="font-semibold">我的任务</h2>
             {tasks.length === 0 ? (

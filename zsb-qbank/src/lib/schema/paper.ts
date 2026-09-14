@@ -32,7 +32,13 @@ const itemBase = {
 export const fillItemSchema = z.object({
   ...itemBase,
   type: z.literal('fill'),
-  content: z.object({ blank: z.number().int().positive(), hint: z.string().optional(), maxWords: z.number().int().positive() }),
+  content: z.object({
+    blank: z.number().int().positive(),
+    hint: z.string().optional(),
+    maxWords: z.number().int().positive(),
+    /** 训练模式一级脚手架的干扰变形(AI 生成、教师审核后存入,SPEC §6) */
+    distractors: z.array(z.string()).optional(),
+  }),
   answer: z.object({
     accepted: z.array(z.string()).min(1),
     acceptedPatterns: z.array(z.string()).optional(),
@@ -71,6 +77,8 @@ export const translateC2EFillItemSchema = z.object({
     frame: z.string(),
     hint: z.string().optional(),
     maxWords: z.number().int().positive(),
+    /** 训练模式一级脚手架的干扰变形(AI 生成、教师审核后存入,SPEC §6) */
+    distractors: z.array(z.string()).optional(),
   }),
   answer: z.object({ accepted: z.array(z.string()).min(1), acceptedPatterns: z.array(z.string()).optional() }),
 })

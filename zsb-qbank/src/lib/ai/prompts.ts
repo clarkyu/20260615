@@ -9,7 +9,7 @@ import type { Item, StudentAnswer } from '@/lib/schema/paper'
 
 export const PROMPT_VERSION = 'v2'
 
-export type PromptName = 'grade-short-answer' | 'grade-translate-e2c' | 'grade-writing' | 'grade-c2e-fallback' | 'explain-item' | 'parse-paper'
+export type PromptName = 'grade-short-answer' | 'grade-translate-e2c' | 'grade-writing' | 'grade-c2e-fallback' | 'explain-item' | 'parse-paper' | 'generate-variants' | 'generate-distractors'
 
 const cache = new Map<PromptName, string>()
 

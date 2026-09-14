@@ -78,3 +78,19 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   })
   return NextResponse.json({ ok: true, item: updated, invalidated: answerChanged || scoreChanged })
 }
+
+// DELETE /api/teacher/items/:id:只允许删除 AI 变式草稿(status=draft 且 origin=ai);真题小题不可删。
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await requireTeacherApi(req)
+  if (!auth.ok) return auth.res
+  const { id } = await ctx.params
+  if (!isUuid(id)) return NextResponse.json({ error: { code: 'not_found', message: '小题不存在' } }, { status: 404 })
+  const db = getDb()
+  const row = await db.query.items.findFirst({ where: eq(items.id, id) })
+  if (!row) return NextResponse.json({ error: { code: 'not_found', message: '小题不存在' } }, { status: 404 })
+  if (row.status !== 'draft' || row.origin !== 'ai') {
+    return NextResponse.json({ error: { code: 'forbidden', message: '只能删除 AI 生成的草稿题' } }, { status: 403 })
+  }
+  await db.delete(items).where(eq(items.id, id))
+  return NextResponse.json({ ok: true })
+}
