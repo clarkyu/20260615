@@ -114,6 +114,23 @@ describe.skipIf(!url)('批改队列(真库)', () => {
     expect((await gradingQueue(db, teacherA, { attemptId: free.attemptId })).map((r) => r.responseId)).toEqual([free.responseId])
   })
 
+  it('筛选项跟随 scope:AI 都判完时,抽查模式仍要有得筛', async () => {
+    // 规模预演抓到的:批改页超过 500 条会提示「请用任务 / 小题筛选缩小范围」,
+    // 而筛选项原本只按「待复核」算 —— AI 全判完(待复核为 0)时筛选栏是空的,
+    // 页面让老师筛却没东西可筛,而「抽查全部主观题」恰恰是条数最多的那一档。
+    const graded = await attemptFor(teacherA, { needsReview: false, score: 2, gradeSource: 'ai' })
+    const needFacets = await queueFacets(db, teacherA, 'needs_review')
+    const subjFacets = await queueFacets(db, teacherA, 'subjective')
+    const subjRows = await gradingQueue(db, teacherA, { scope: 'subjective', limit: 500 })
+    expect(subjRows.some((r) => r.responseId === graded.responseId)).toBe(true)
+    // 这条已判、不待复核的作答:抽查筛选项里有它的小题,待复核筛选项里没有
+    expect(subjFacets.items.some((i) => i.id === shortAnswerItem.id)).toBe(true)
+    expect(subjFacets.assignments.some((a) => a.id === graded.assignmentId)).toBe(true)
+    expect(needFacets.assignments.some((a) => a.id === graded.assignmentId)).toBe(false)
+    // 默认仍是「待复核」口径,不影响原有调用
+    expect(await queueFacets(db, teacherA)).toEqual(needFacets)
+  })
+
   it('作答中的 attempt 不进队列;抽查范围列出非待复核的主观题', async () => {
     const x = await attemptFor(teacherA, { needsReview: false })
     await db.update(attempts).set({ status: 'in_progress' }).where(eq(attempts.id, x.attemptId))
