@@ -11,6 +11,7 @@ import { WritingItem } from '@/components/items/WritingItem'
 import { AnswerSheet, type SheetSection } from '@/components/play/AnswerSheet'
 import type { PlayGroup, PlayPaper, PlaySection } from '@/lib/play/types'
 import { useAttemptStore, flushNow, type GradedFeedback } from '@/lib/sync/attempt-store'
+import { warmShell } from '@/lib/offline/warm-shell'
 import type { StudentAnswer } from '@/lib/schema/paper'
 
 // 作答编排页(SPEC §7):顶栏(大题名 + 进度 + 同步状态 + 答题卡)、
@@ -167,6 +168,12 @@ export default function PlayPage() {
       alive = false
     }
   }, [attemptId, router])
+
+  // 预热应用壳:从首页点进来是客户端跳转,SW 没见过这一页的文档请求;
+  // 不预热的话,断网后刷新就打不开这一页(作答其实还在本地)。
+  useEffect(() => {
+    warmShell()
+  }, [])
 
   // 回到前台时用服务端时间重新校准倒计时(SPEC §7.7:iOS 微信切后台会冻结定时器;
   // 硬约束 6:计时以服务端 deadline_at 为准,客户端只显示)。

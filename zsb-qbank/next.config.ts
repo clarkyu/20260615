@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import withSerwistInit from '@serwist/next'
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
@@ -37,4 +39,17 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+// Service Worker(SPEC §9.2):源码在 src/app/sw.ts,构建时注入预缓存清单后产出 public/sw.js。
+// dev 关掉 —— 开发时 SW 缓存只会制造「改了没生效」的假象。
+const withSerwist = withSerwistInit({
+  swSrc: 'src/app/sw.ts',
+  swDest: 'public/sw.js',
+  disable: process.env.NODE_ENV === 'development',
+  // 自动注入的清单只有 /_next/static 下的构建产物(不含任何个人信息);
+  // 断网兜底页要显式加进来 —— fallback 必须是预缓存过的,否则断网时它自己也打不开。
+  // revision 每次构建都变,页面改了不会留旧版。
+  additionalPrecacheEntries: [{ url: '/offline', revision: randomUUID() }],
+  reloadOnOnline: false,
+})
+
+export default withSerwist(nextConfig)

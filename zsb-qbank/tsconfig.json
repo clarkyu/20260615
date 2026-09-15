@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    // webworker 是为 src/app/sw.ts(Service Worker)加的:它和页面共用这份配置,
+    // 这样 `pnpm build` 的类型检查能覆盖到 SW,不用再维护第二份 tsconfig 与第二条 CI 命令。
+    "lib": ["dom", "dom.iterable", "esnext", "webworker"],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,

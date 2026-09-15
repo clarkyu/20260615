@@ -10,3 +10,7 @@ next-env.d.ts
 .env.local
 .pgdata/
 backups/
+# Service Worker 是构建产物(源码在 src/app/sw.ts):提交它只会和构建结果打架
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js
