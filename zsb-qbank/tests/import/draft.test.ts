@@ -113,3 +113,16 @@ describe('ruleDraftToPaper / validateDraft', () => {
     expect(suggestYear(null)).toBe(new Date().getFullYear())
   })
 })
+
+describe('导入的小题直接可用(不是草稿)', () => {
+  // 预演抓到的:导入的小题存成 draft,而学生端所有查询只认 approved ——
+  // 「导入 → 保存 → 发布 → 布置」之后,学生打开是一份 0 题的空卷,试卷列表却显示 43 题。
+  it('小题存 approved,试卷本身仍是草稿(发布由教师把关)', () => {
+    const { paper } = ruleDraftToPaper(rule, { id: 'p1', title: 't', year: 2026, region: '湖北', durationMinutes: 120 })
+    const all = paper.sections.flatMap((s) => s.groups.flatMap((g) => g.items))
+    expect(all.length).toBeGreaterThan(0)
+    expect(all.every((i) => i.status === 'approved')).toBe(true)
+    expect(all.every((i) => i.origin === 'official')).toBe(true)
+    expect(paper.status).toBe('draft') // 试卷仍需教师点「发布」学生才看得到
+  })
+})

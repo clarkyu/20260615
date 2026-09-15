@@ -246,6 +246,20 @@ pnpm build && AUTH_DEV_LOGIN=true pnpm start
 
 做完把库删掉:`dropdb -h 127.0.0.1 -U zsb zsb_rehearsal`。
 
+**导入一份新试卷也顺带验一下**(这是新内容进系统的唯一入口):
+
+11. 教师端「导入」→ 传一份 .docx → 等解析(每个题组调一次 AI)→ 校对页出现「AI 已补全答案与解析
+    （N 次调用），请逐题核对」→ 逐题核对标红处 → 「保存试卷」。
+12. 「试卷」列表里新卷显示正确的小题数 → 点「发布」→ **学生端开这份卷,顶栏应显示「已答 0/43」
+    而不是「0/0」**。0/0 表示小题没进 approved,学生会拿到一份空卷(2026-09-15 修过,见 D45)。
+
+> 如果你在 2026-09-15 之前导入过试卷,那批小题存的是 `draft`,学生开卷会是空的。
+> 一条 SQL 就地修好(把 `<试卷 id>` 换成实际的):
+> ```sql
+> update items set status = 'approved' where paper_id = '<试卷 id>' and origin = 'official';
+> ```
+> 只改 `origin='official'` 的,AI 变式题(`origin='ai'`)仍需在试卷页逐题审核。
+
 ---
 
 ## 四、已知限制
