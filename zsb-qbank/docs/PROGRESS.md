@@ -391,3 +391,46 @@ M7 的 PR 首跑 CI 红,两条真库集成用例失败,复现后确认是两处�
 ### 下一步
 SPEC §10 的七个里程碑到此全部完成。后续按 clark 的实际使用反馈迭代:优先补 Casdoor 登录与
 Service Worker,再看题库管理筛选 UI 与 accepted 候选采纳。
+
+## 后续迭代 · Casdoor 统一身份登录(2026-09-14)
+
+SPEC §9.1 与 D2 的遗留项:M0–M7 一直用开发登录占位,这次把 Casdoor OIDC(授权码 + PKCE)接上。
+
+- [通过] 登录链路:`GET /api/auth/login` 生成 state / nonce / code_verifier 存进加密会话并跳授权端点;
+  `GET /api/auth/callback` 核对 state(一次性,用完即清)、10 分钟超时、用授权码 + verifier 换 token、
+  校验 id_token 的 iss / aud / exp / iat / nonce(±120 秒时钟偏移)、按组映射角色、建会话并建档、
+  按角色或 returnTo 回跳。失败一律回登录页并显示中文原因,不抛服务器细节。
+- [通过] 角色映射:组 / 角色名命中 `CASDOOR_ADMIN_GROUPS` → admin,命中 `CASDOOR_TEACHER_GROUPS` →
+  teacher,其余 student;默认 `teacher,教师` / `admin,管理员`,大小写不敏感。老师只需在 Casdoor 里加组,
+  系统这边不用建账号。
+- [通过] 个人信息最小化(§9.5):会话只存 `sub`(带 `casdoor:` 前缀)、姓名、角色;邮箱与手机号不落库,
+  日志只记 `role`。
+- [通过] 未配置时回落:三项配置缺任一项即视为未接入,登录按钮不出现,开发登录照旧(生产两者二选一)。
+- [通过] 界面:学生首页与 `/teacher/login` 出现「统一身份登录」按钮;登录页显示失败原因,
+  以及「当前账号没有教师权限」的提示。
+- [通过] 自查修掉的两处(开 PR 后重读自己的代码发现,已在同一分支修):
+  1. **登录后开放重定向**:`returnTo` 原先只判断「以 `/` 开头且不以 `//` 开头」,但 `/\evil.com`
+     和路径里夹 TAB / 换行的写法会被 WHATWG URL 与浏览器还原成 `//evil.com` —— 登录成功后
+     就把人送到站外了(钓鱼)。改成 `safeReturnTo()`:解析一遍比对 origin,只放行仍落在本站的路径,
+     顺带归一化。12 条表驱动用例覆盖各种绕法。
+  2. **失败原因不再走 URL 文字**:原先回调把中文原因塞进 `?msg=`,登录页原样显示 —— 等于谁都能在
+     学校域名的登录页上写一句话(「账号异常,请加微信 xxx 解冻」)。改成固定原因码 + 页面查表,
+     详细原因只进服务端日志。
+- [通过] 单测 46 例:配置解析与回调地址推导、PKCE(S256 与 RFC 7636 长度)、授权链接参数、
+  id_token 声明校验 10 种情形、角色映射 9 种、token 交换(请求体、错误响应、缺 id_token、连不上)、
+  `returnTo` 白名单 12 种绕法、失败原因码查表、整条链路串起来跑一遍(假 token 端点,不打真接口)。
+- [通过] 假 IdP 全链路实跑:本地起一个假 Casdoor(token 端点按 nonce 回吐 id_token),用生产构建
+  跑通「点登录 → 授权跳转 → 回调 → 建会话 → 回跳」。教师组落到 `/teacher` 且页面显示姓名;
+  学生组落到 `/train`,访问 `/teacher` 被挡回登录页并看到「没有教师权限」;同一个 state 重放第二次
+  被拒(「登录状态已失效」);假 IdP 侧确认收到了 `client_secret`、`code_verifier` 与一致的
+  `redirect_uri`;应用日志只出现 `[auth] casdoor 登录成功 role=teacher`,没有 sub 与姓名。
+- [需真环境] 真 Casdoor 联调:按 RUNBOOK 一(5) 建应用、填三项配置、重启,然后用教师账号与学生账号
+  各登录一次,确认角色正确、回跳正确;故意把 client id 填错应在登录页看到「audience 不匹配」。
+  **注意:本次只跑了假 IdP,id_token 签名没有验签**——真 Casdoor 的 id_token 由 TLS 直连 token 端点
+  取回(不走浏览器前端通道),声明逐项核对过,但 JWKS 验签待真环境接入时再补(见未决问题)。
+
+### 未决问题(更新)
+- Serwist / Service Worker 仍未接入(D3)。
+- 登出只清本地会话,没做 RP-initiated logout(不跳 Casdoor 的 end_session);单点登出以后要的话再加。
+- id_token 不验签:授权码流里 token 是服务端经 TLS 直连 token 端点取回的,OIDC Core §3.1.3.7(6)
+  允许用 TLS 校验代替验签(D36)。哪天改用前端通道(implicit / form_post)必须先接 JWKS 验签。

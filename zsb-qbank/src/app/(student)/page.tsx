@@ -6,6 +6,8 @@ import { studentAssignments } from '@/lib/db/assignments'
 import { dailyPlan } from '@/lib/db/training'
 import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
+import { oidcConfigured } from '@/lib/auth/oidc'
+import { LoginButton } from '@/components/auth/LoginButton'
 import { StartAttemptButton, DevLoginButton } from '@/components/home/StartPractice'
 import { AssignmentItem, JoinClassForm, type AssignmentCard } from '@/components/home/Assignments'
 
@@ -16,6 +18,7 @@ export const dynamic = 'force-dynamic'
 export default async function HomePage() {
   const session = await getSession()
   const user = session.user
+  const oidc = oidcConfigured()
   const db = getDb()
 
   const rows = user
@@ -60,7 +63,16 @@ export default async function HomePage() {
       {!user ? (
         <div className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
           <p className="font-medium">请先登录</p>
-          <p className="mt-1 text-sm text-neutral-500">正式登录入口接入中;开发环境可用下面的快捷登录。</p>
+          {oidc ? (
+            <>
+              <p className="mt-1 text-sm text-neutral-500">用学校统一身份登录，登录后就能看到老师布置的任务。</p>
+              <div className="mt-3">
+                <LoginButton returnTo="/" label="登录" />
+              </div>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-neutral-500">统一身份登录还没配置；开发环境可用下面的快捷登录。</p>
+          )}
           {process.env.AUTH_DEV_LOGIN === 'true' ? (
             <div className="mt-3 flex gap-2">
               <DevLoginButton role="student" label="以学生身份登录" />
