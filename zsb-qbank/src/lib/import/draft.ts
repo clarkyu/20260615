@@ -100,7 +100,11 @@ export function ruleDraftToPaper(rule: RuleDraft, meta: PaperMeta): { paper: Pap
               content: it.content,
               answer: defaultAnswer(it, score),
               origin: 'official' as const,
-              status: 'draft' as const,
+              // 导入的小题存 approved:教师在校对页已经逐题确认过了(向导原话「逐题确认后保存」),
+              // 再让他在试卷页点 43 次「通过」没有意义 —— 而且学生端所有查询都只认 approved,
+              // 存 draft 会让「导入 → 发布 → 布置」之后学生打开是一份 0 题的空卷(预演实测)。
+              // draft 留给 AI 变式题(SPEC §8:变式题审核通过才能被训练抽到)。
+              status: 'approved' as const,
             }
           }),
         }
