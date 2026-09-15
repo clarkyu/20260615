@@ -39,6 +39,7 @@ export async function loadAssignmentStats(db: Db, teacherId: string, assignmentI
     score: r.score,
     verdict: (r.gradeDetail as { verdict?: string } | null)?.verdict ?? null,
     answerText: studentAnswerText(studentAnswerSchema.safeParse(r.answer).data ?? null),
+    timeSpentMs: r.timeSpentMs,
   }))
   const stats = computeAssignmentStats(statItems, roster, statResponses)
   return { assignment: a, className: found.className, paperTitle: found.paperTitle ?? '', stats }

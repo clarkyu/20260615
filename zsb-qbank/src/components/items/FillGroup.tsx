@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FrameText } from '@/components/play/FrameText'
 import { AnswerBar } from '@/components/play/AnswerBar'
 import { SplitPane } from '@/components/play/SplitPane'
@@ -12,12 +12,16 @@ import { useAttemptStore } from '@/lib/sync/attempt-store'
 // 点芯片切换当前空;作答条固定底部;输入实时回填芯片。
 
 export function FillGroup({ group }: { group: PlayGroup }) {
-  const { answers, graded, setAnswer } = useAttemptStore()
+  const { answers, graded, setAnswer, touchItem } = useAttemptStore()
   const fillItems = useMemo(() => group.items.filter((it) => it.type === 'fill'), [group.items])
   const byNumber = useMemo(() => new Map(fillItems.map((it) => [String(it.number), it])), [fillItems])
   const [active, setActive] = useState<string | null>(fillItems[0] ? String(fillItems[0].number) : null)
 
   const activeItem = active ? byNumber.get(active) : undefined
+  // 切到哪个空,就从哪一题开始计时(每个空是一道小题)。
+  useEffect(() => {
+    if (activeItem) touchItem(activeItem.id)
+  }, [activeItem, touchItem])
   const values: Record<string, string> = {}
   for (const it of fillItems) {
     const a = answers[it.id]
