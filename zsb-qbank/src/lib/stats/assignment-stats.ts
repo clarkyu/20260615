@@ -1,10 +1,12 @@
 import { normalizeText } from '@/lib/grading/normalize'
+import { medianMs } from '@/lib/sync/item-timer'
 import { isObjectiveType } from '@/lib/grading/objective'
 import type { Item } from '@/lib/schema/paper'
 
 // 学情统计(SPEC §8「学情分析」任务维度):每题正确率 / 得分率、前五常见错答、分大题得分率、
 // 班级分布、学生 × 小题得分矩阵。纯函数:输入是已查好的行,输出可直接渲染或转 CSV。
-// 「每题中位用时」需要客户端逐题计时埋点,首期无数据,不在此计算(PROGRESS 记录)。
+// 「每题中位用时」来自 responses.time_spent_ms(客户端逐题埋点,尽力而为):
+// 只统计有埋点的作答,没埋点的题显示「—」,不拿 0 充数。
 
 export interface StatItem {
   id: string
@@ -27,6 +29,8 @@ export interface StatResponse {
   score: number | null
   verdict: string | null
   answerText: string
+  /** 逐题用时埋点(毫秒);没埋到就是 null */
+  timeSpentMs?: number | null
 }
 
 export interface ItemStat {
@@ -44,6 +48,10 @@ export interface ItemStat {
   /** 客观题 = 正确人数 / 已交;主观题 = 平均分 / 满分 */
   rate: number | null
   topWrong: Array<{ answer: string; count: number }>
+  /** 中位用时(毫秒);没有任何埋点数据时为 null */
+  medianTimeMs: number | null
+  /** 有用时数据的人数(让老师知道这个中位数是几个人算出来的) */
+  timeSamples: number
 }
 export interface SectionStat {
   sectionId: string
@@ -107,6 +115,7 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
     let pending = 0
     let sum = 0
     const wrong = new Map<string, number>()
+    const times: number[] = []
     for (const s of submittedStudents) {
       const r = byAttemptItem.get(`${s.attemptId}|${it.id}`)
       if (!r || r.answerText.trim() === '') {
@@ -114,6 +123,7 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
         continue
       }
       answered++
+      if (typeof r.timeSpentMs === 'number' && r.timeSpentMs > 0) times.push(r.timeSpentMs)
       if (r.score === null) {
         pending++
         continue
@@ -151,6 +161,8 @@ export function computeAssignmentStats(items: StatItem[], students: StatStudent[
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .slice(0, 5)
         .map(([answer, count]) => ({ answer, count })),
+      medianTimeMs: medianMs(times),
+      timeSamples: times.length,
     }
   })
 
@@ -215,7 +227,7 @@ export function statsToCsvRows(stats: AssignmentStats, meta: { title: string; cl
   const rows: unknown[][] = [[`${meta.title}（${meta.className}）`, `满分 ${stats.fullScore}`], head]
   for (const s of stats.students) rows.push([s.name, `${STATUS[s.status] ?? s.status}${s.pending ? '（有待评）' : ''}`, s.totalScore, ...s.scores.map((x) => (x === null ? '' : x))])
   rows.push([])
-  rows.push(['题号', '大题', '题型', '满分', '已交', '作答', '正确 / 平均分', '正确率 / 得分率', '待评', '常见错答 1', '常见错答 2', '常见错答 3', '常见错答 4', '常见错答 5'])
+  rows.push(['题号', '大题', '题型', '满分', '已交', '作答', '正确 / 平均分', '正确率 / 得分率', '待评', '中位用时（秒）', '用时样本数', '常见错答 1', '常见错答 2', '常见错答 3', '常见错答 4', '常见错答 5'])
   for (const it of stats.items) {
     rows.push([
       it.number,
@@ -227,6 +239,8 @@ export function statsToCsvRows(stats: AssignmentStats, meta: { title: string; cl
       it.objective ? it.correct : it.avgScore,
       it.rate === null ? '' : `${Math.round(it.rate * 100)}%`,
       it.pending,
+      it.medianTimeMs === null ? '' : Math.round(it.medianTimeMs / 1000),
+      it.timeSamples,
       ...[0, 1, 2, 3, 4].map((i) => (it.topWrong[i] ? `${it.topWrong[i]!.answer}（${it.topWrong[i]!.count}）` : '')),
     ])
   }

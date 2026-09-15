@@ -22,6 +22,13 @@
       "when": 1789372287593,
       "tag": "0002_training_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789456074701,
+      "tag": "0003_response_time_spent",
+      "breakpoints": true
     }
   ]
 }

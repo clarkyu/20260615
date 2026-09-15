@@ -25,6 +25,54 @@ const responses: StatResponse[] = [
   { attemptId: 'a3', itemId: 'i1', score: 2, verdict: 'correct', answerText: 'big' }, // 作答中,不计
 ]
 
+describe('每题中位用时(SPEC §8)', () => {
+  // 埋点是尽力而为的:没埋到的不能拿 0 充数,否则中位数会被拉到 0、老师被误导。
+  const withTime: StatResponse[] = [
+    { attemptId: 'a1', itemId: 'i1', score: 2, verdict: 'correct', answerText: 'big', timeSpentMs: 10_000 },
+    { attemptId: 'a2', itemId: 'i1', score: 0, verdict: 'wrong', answerText: 'bigger', timeSpentMs: 30_000 },
+    { attemptId: 'a1', itemId: 'i2', score: 0, verdict: 'wrong', answerText: 'x', timeSpentMs: 5_000 },
+    { attemptId: 'a2', itemId: 'i2', score: 0, verdict: 'wrong', answerText: 'y' }, // 没埋到
+    { attemptId: 'a1', itemId: 'i3', score: 4, verdict: 'graded', answerText: 'z' }, // 整题都没埋到
+    { attemptId: 'a2', itemId: 'i3', score: null, verdict: 'pending', answerText: 'w' },
+  ]
+  const st = computeAssignmentStats(items, students, withTime)
+
+  it('两个样本取中间两个的平均', () => {
+    expect(st.items[0]).toMatchObject({ medianTimeMs: 20_000, timeSamples: 2 })
+  })
+  it('只有一个人有埋点时,中位数就是他的用时,样本数如实报 1', () => {
+    expect(st.items[1]).toMatchObject({ medianTimeMs: 5_000, timeSamples: 1 })
+  })
+  it('整题没有埋点数据 → null,而不是 0', () => {
+    expect(st.items[2]).toMatchObject({ medianTimeMs: null, timeSamples: 0 })
+  })
+  it('没作答的人不进用时样本', () => {
+    const rs: StatResponse[] = [
+      { attemptId: 'a1', itemId: 'i1', score: 2, verdict: 'correct', answerText: 'big', timeSpentMs: 8_000 },
+      { attemptId: 'a2', itemId: 'i1', score: 0, verdict: 'empty', answerText: '   ', timeSpentMs: 60_000 },
+    ]
+    expect(computeAssignmentStats([items[0]!], students, rs).items[0]).toMatchObject({ medianTimeMs: 8_000, timeSamples: 1 })
+  })
+  it('0 与负数不算样本(埋点坏了)', () => {
+    const rs: StatResponse[] = [
+      { attemptId: 'a1', itemId: 'i1', score: 2, verdict: 'correct', answerText: 'big', timeSpentMs: 0 },
+      { attemptId: 'a2', itemId: 'i1', score: 2, verdict: 'correct', answerText: 'big', timeSpentMs: -1 },
+    ]
+    expect(computeAssignmentStats([items[0]!], students, rs).items[0]).toMatchObject({ medianTimeMs: null, timeSamples: 0 })
+  })
+  it('CSV 带上中位用时(秒)与样本数;没数据的留空不写 0', () => {
+    const rows = statsToCsvRows(st, { title: 't', className: 'c' })
+    const head = rows.find((r) => r[0] === '题号')!
+    const i = head.indexOf('中位用时（秒）')
+    expect(i).toBeGreaterThan(0)
+    expect(head[i + 1]).toBe('用时样本数')
+    const rowI1 = rows.find((r) => r[0] === 1 && r.length === head.length)!
+    expect(rowI1[i]).toBe(20)
+    const rowI3 = rows.find((r) => r[0] === 3 && r.length === head.length)!
+    expect(rowI3[i]).toBe('')
+  })
+})
+
 describe('computeAssignmentStats', () => {
   const st = computeAssignmentStats(items, students, responses)
   it('分母 = 已交人数;作答中 / 未开始不计', () => {
@@ -107,7 +155,9 @@ describe('CSV', () => {
     expect(rows[3]).toEqual(['乙', '已发布（有待评）', 2, 0, 0, ''])
     const itemHeader = rows.findIndex((r) => r[0] === '题号')
     expect(rows[itemHeader + 2]!.slice(0, 9)).toEqual([2, '一、短文填空', 'fill', 2, 2, 2, 0, '0%', 0])
-    expect(rows[itemHeader + 2]![9]).toBe('finishing（2）')
+    // 按表头名定位,加列不会再让这条用例误报
+    const wrongCol = rows[itemHeader]!.indexOf('常见错答 1')
+    expect(rows[itemHeader + 2]![wrongCol]).toBe('finishing（2）')
     const text = toCsvWithBom(rows)
     expect(text.split('\r\n').length).toBeGreaterThan(10)
   })

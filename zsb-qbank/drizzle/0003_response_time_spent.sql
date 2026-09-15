@@ -1,0 +1,1 @@
+ALTER TABLE "responses" ADD COLUMN "time_spent_ms" integer;

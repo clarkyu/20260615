@@ -124,7 +124,7 @@ function GroupView({ group }: { group: PlayGroup }) {
 export default function PlayPage() {
   const { attemptId } = useParams<{ attemptId: string }>()
   const router = useRouter()
-  const { answers, syncState, applyGraded } = useAttemptStore()
+  const { answers, syncState, applyGraded, touchItem } = useAttemptStore()
 
   const [paper, setPaper] = useState<PlayPaper | null>(null)
   const [meta, setMeta] = useState<{ mode: string; deadlineAt: string | null } | null>(null)
@@ -220,6 +220,13 @@ export default function PlayPage() {
     [paper],
   )
   const current: { section: PlaySection; group: PlayGroup } | undefined = flat[groupIndex]
+
+  // 逐题计时(SPEC §8 中位用时):进到某一组就从这组第一题开始计;
+  // 多空的题组由 FillGroup 在切空位时再细化到具体某一空。
+  const firstItemId = current?.group.items[0]?.id
+  useEffect(() => {
+    if (firstItemId) touchItem(firstItemId)
+  }, [firstItemId, touchItem])
 
   const sheetSections: SheetSection[] = useMemo(() => {
     if (!paper) return []

@@ -139,6 +139,8 @@ export const responses = pgTable('responses', {
   gradeDetail: jsonb('grade_detail'),
   feedback: text('feedback'),
   needsReview: boolean('needs_review').notNull().default(false),
+  /** 这一题的累计作答用时(毫秒),客户端埋点、尽力而为:可能为空(旧数据 / 埋点失败 / 离线未补传) */
+  timeSpentMs: integer('time_spent_ms'),
 }, (t) => [uniqueIndex('responses_attempt_item_uq').on(t.attemptId, t.itemId)])
 
 export const wrongAnswers = pgTable('wrong_answers', {

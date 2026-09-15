@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db/client'
 import { attempts, items, responses, users } from '@/lib/db/schema'
 import { studentAnswerSchema } from '@/lib/schema/paper'
 import { isSaveRejected } from '@/lib/grading/deadline'
+import { MAX_ITEM_MS, mergeTime } from '@/lib/sync/item-timer'
 import { getSession } from '@/lib/auth/session'
 
 const bodySchema = z.object({
@@ -14,6 +15,8 @@ const bodySchema = z.object({
         itemId: z.uuid(),
         answer: studentAnswerSchema,
         clientUpdatedAt: z.string().refine((s) => !Number.isNaN(Date.parse(s)), '不是合法时间'),
+        /** 逐题用时埋点(SPEC §8 中位用时):客户端累计值,尽力而为,缺了不影响保存 */
+        timeSpentMs: z.number().int().min(0).max(MAX_ITEM_MS).optional(),
       }),
     )
     .min(1)
@@ -21,6 +24,7 @@ const bodySchema = z.object({
 })
 
 // PUT /api/attempts/:id/responses:批量保存作答,按小题以 clientUpdatedAt 最新者为准,幂等。
+// 另收逐题用时埋点(可选,尽力而为):累计值取较大者。
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session.user) return NextResponse.json({ error: { code: 'unauthorized', message: '请先登录' } }, { status: 401 })
@@ -70,15 +74,18 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (!existing) {
       await db
         .insert(responses)
-        .values({ attemptId: attempt.id, itemId: r.itemId, answer: r.answer, clientUpdatedAt: clientAt })
+        .values({ attemptId: attempt.id, itemId: r.itemId, answer: r.answer, clientUpdatedAt: clientAt, timeSpentMs: r.timeSpentMs ?? null })
         .onConflictDoNothing()
       saved++
     } else if (existing.clientUpdatedAt < clientAt) {
       await db
         .update(responses)
-        .set({ answer: r.answer, clientUpdatedAt: clientAt, updatedAt: new Date() })
+        .set({ answer: r.answer, clientUpdatedAt: clientAt, updatedAt: new Date(), timeSpentMs: mergeTime(existing.timeSpentMs, r.timeSpentMs) })
         .where(eq(responses.id, existing.id))
       saved++
+    } else if (r.timeSpentMs !== undefined && (existing.timeSpentMs ?? 0) < r.timeSpentMs) {
+      // 作答没变但用时更长了(比如学生回来又看了一会儿):只更用时,不动 clientUpdatedAt。
+      await db.update(responses).set({ timeSpentMs: r.timeSpentMs }).where(eq(responses.id, existing.id))
     }
   }
   return NextResponse.json({ ok: true, saved })

@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db/client'
 import { assignments, classes } from '@/lib/db/schema'
 import { loadAssignmentStats, loadStudentOverview } from '@/lib/db/stats'
 import { ATTEMPT_STATUS_LABEL, ITEM_TYPE_LABEL, MODE_LABEL, fmtTime } from '@/lib/teacher/item-preview'
+import { fmtDuration } from '@/lib/sync/item-timer'
 
 export const dynamic = 'force-dynamic'
 
@@ -203,6 +204,7 @@ export default async function TeacherStats({ searchParams }: { searchParams: Pro
                   <th className="py-1">正确 / 平均</th>
                   <th className="py-1">率</th>
                   <th className="py-1">待评</th>
+                  <th className="py-1">中位用时</th>
                   <th className="py-1">常见错答（前五）</th>
                 </tr>
               </thead>
@@ -218,6 +220,12 @@ export default async function TeacherStats({ searchParams }: { searchParams: Pro
                     <td className="py-1">{it.objective ? `${it.correct} 人` : `${it.avgScore ?? '—'} 分`}</td>
                     <td className={`py-1 ${heat(it.rate)}`}>{pct(it.rate)}</td>
                     <td className="py-1">{it.pending || ''}</td>
+                    <td className="py-1 whitespace-nowrap" title={it.timeSamples ? `${it.timeSamples} 人有用时数据` : '这一题还没有用时数据'}>
+                      {fmtDuration(it.medianTimeMs)}
+                      {it.medianTimeMs !== null && it.timeSamples < it.submitted ? (
+                        <span className="ml-1 text-xs text-neutral-400">({it.timeSamples})</span>
+                      ) : null}
+                    </td>
                     <td className="py-1 text-neutral-600 dark:text-neutral-300">{it.topWrong.map((w) => `${w.answer}（${w.count}）`).join('　')}</td>
                   </tr>
                 ))}
@@ -266,7 +274,10 @@ export default async function TeacherStats({ searchParams }: { searchParams: Pro
               </tbody>
             </table>
           </section>
-          <p className="mt-2 text-xs text-neutral-400">发布时间 {fmtTime(data.assignment.createdAt)}；「每题中位用时」需要逐题计时埋点，首期未采集。</p>
+          <p className="mt-2 text-xs text-neutral-400">
+            发布时间 {fmtTime(data.assignment.createdAt)}；「中位用时」只统计有埋点的作答（括号里是样本数），
+            旧作答与埋点丢失的显示「—」。单段超过 3 分钟按 3 分钟计（人离开了不该算在里面）。
+          </p>
         </>
       ) : null}
     </main>
