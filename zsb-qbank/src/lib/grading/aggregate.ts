@@ -94,7 +94,9 @@ export function maskUnreleased(summary: ResultSummary, mode: string, status: str
   let pending = 0
   let empty = 0
   const sections = summary.sections.map((s) => {
-    const items = s.items.map((r) => (r.objective ? r : { ...r, verdict: 'pending', score: null }))
+    // 只遮「答了的」主观题:没作答的本来就是 0 分,遮成「待评」会让学生一直刷新
+    // 等一个永远不会来的分数,未作答题数也会少算(预演里空卷显示「11 题在等 AI 评分」就是这么来的)。
+    const items = s.items.map((r) => (r.objective || r.verdict === 'empty' ? r : { ...r, verdict: 'pending', score: null }))
     const sScore = items.reduce((n, r) => n + (r.score ?? 0), 0)
     const sPending = items.filter((r) => r.score === null).length
     score += sScore

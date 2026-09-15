@@ -94,6 +94,23 @@ describe('aggregate · maskUnreleased(考试未发布:主观题只显示待评�
     expect(r.sections[1]?.items.map((i) => [i.verdict, i.score])).toEqual([['pending', null], ['pending', null]])
     expect(r.total).toEqual({ score: 2, fullScore: 6, pending: 2, empty: 0 })
   })
+  it('没作答的主观题不遮成「待评」:它本来就是 0 分,等不来分数', () => {
+    // 上线预演抓到的:整卷不答交上去,成绩页显示「还有 11 题在等 AI 或老师评分」,
+    // 学生会一直刷新等一个永远不会来的分数,未作答题数也少算了。
+    const blank = maskUnreleased(summarize(sections, new Map()), 'exam', 'submitted')
+    expect(blank.sections[1]?.items.map((i) => [i.verdict, i.score])).toEqual([['empty', 0], ['empty', 0]])
+    expect(blank.total).toEqual({ score: 0, fullScore: 6, pending: 0, empty: 3 })
+  })
+  it('答了的主观题照旧遮成「待评」,没答的照旧算未作答', () => {
+    const mixed = new Map<string, SavedGrade>([
+      ['i1', { score: 2, verdict: 'correct' }],
+      ['i3', { score: 2, verdict: 'graded' }], // 答了、AI 判了 → 未发布时遮住
+      // i4 没作答
+    ])
+    const r = maskUnreleased(summarize(sections, mixed), 'exam', 'submitted')
+    expect(r.sections[1]?.items.map((i) => [i.verdict, i.score])).toEqual([['pending', null], ['empty', 0]])
+    expect(r.total).toMatchObject({ pending: 1, empty: 1 })
+  })
   it('released 或练习:原样返回', () => {
     const s = summarize(sections, saved)
     expect(maskUnreleased(s, 'exam', 'released')).toBe(s)
