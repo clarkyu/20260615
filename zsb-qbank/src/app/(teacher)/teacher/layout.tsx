@@ -4,6 +4,7 @@ import Link from 'next/link'
 const NAV: Array<[string, string]> = [
   ['/teacher', '概览'],
   ['/teacher/papers', '试卷'],
+  ['/teacher/bank', '题库'],
   ['/teacher/import', '导入'],
   ['/teacher/classes', '班级'],
   ['/teacher/assignments', '任务'],
