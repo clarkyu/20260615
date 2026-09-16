@@ -6,7 +6,8 @@ import { ruleDraftToPaper } from '@/lib/import/draft'
 import { upsertPaper } from '@/lib/db/import-paper'
 import { assemblePaper } from '@/lib/db/queries'
 import { createClassWithCode } from '@/lib/db/assignments'
-import { submitAttempt } from '@/lib/db/submit'
+import { submitAttempt, sweepOverdueExams } from '@/lib/db/submit'
+import { SUBMIT_GRACE_MS } from '@/lib/grading/deadline'
 import { loadAssignmentStats } from '@/lib/db/stats'
 import type { RuleDraft } from '@/lib/import/rules'
 
@@ -174,5 +175,52 @@ describe.skipIf(!url)('预演回归 · 学情数字与独立算法一致', () =>
       const sum = s.scores.reduce<number>((n, x) => n + (x ?? 0), 0)
       expect(Math.abs(sum - (s.totalScore ?? 0)), `${s.name} 的总分`).toBeLessThan(0.01)
     }
+  })
+})
+
+describe.skipIf(!url)('预演回归 · 逾期未交的考试会被清扫掉(硬约束 6 / §9.5)', () => {
+  let db: Db
+  const userIds: string[] = []
+  const attemptIds: string[] = []
+  const RUN = `${Date.now()}`
+
+  beforeAll(() => {
+    db = getDb()
+  })
+  afterAll(async () => {
+    if (attemptIds.length) {
+      await db.delete(responses).where(inArray(responses.attemptId, attemptIds))
+      await db.delete(attempts).where(inArray(attempts.id, attemptIds))
+    }
+    if (userIds.length) await db.delete(users).where(inArray(users.id, userIds))
+  })
+
+  it('过了截止 + 60 秒宽限的自动交卷;宽限内的不动', async () => {
+    // 学生把页面一关就再也不打开(手机没电、退出微信),客户端的到点自动交卷根本没机会跑。
+    // 这时只剩服务端这一层兜底:它要是不灵,这份卷会永远停在「作答中」,老师那边永远等不到成绩。
+    const mk = async (tag: string, deadlineMs: number) => {
+      const [u] = await db.insert(users).values({ casdoorSub: `sweep-${tag}-${RUN}`, name: `S${tag}`, role: 'student' }).returning({ id: users.id })
+      userIds.push(u!.id)
+      const [a] = await db
+        .insert(attempts)
+        .values({ userId: u!.id, paperId: PAPER, mode: 'exam', status: 'in_progress', deadlineAt: new Date(Date.now() + deadlineMs) })
+        .returning({ id: attempts.id })
+      attemptIds.push(a!.id)
+      return a!.id
+    }
+    const overdue = await mk('overdue', -(SUBMIT_GRACE_MS + 30_000)) // 截止 + 宽限都过了
+    const inGrace = await mk('grace', -(SUBMIT_GRACE_MS - 30_000)) // 过了截止但还在宽限内
+    const running = await mk('running', 30 * 60_000) // 还在考
+
+    await sweepOverdueExams(db)
+
+    const status = async (id: string) => (await db.query.attempts.findFirst({ where: eq(attempts.id, id) }))!
+    const swept = await status(overdue)
+    expect(swept.status, '逾期未交的应当被自动交卷').not.toBe('in_progress')
+    // 老师要能一眼看出这份是系统代交的,不是学生自己点的
+    expect((swept.clientMeta as { autoSubmitted?: boolean } | null)?.autoSubmitted).toBe(true)
+
+    expect((await status(inGrace)).status, '还在 60 秒宽限内的不能提前收走').toBe('in_progress')
+    expect((await status(running)).status, '还在考的更不能动').toBe('in_progress')
   })
 })
