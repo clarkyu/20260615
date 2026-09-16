@@ -88,8 +88,12 @@ export async function gradingQueue(db: Db, teacherId: string, f: QueueFilter = {
   })
 }
 
-/** 队列筛选用:本教师范围内有待复核作答的任务与小题清单。 */
-export async function queueFacets(db: Db, teacherId: string): Promise<{ assignments: Array<{ id: string; title: string; pending: number }>; items: Array<{ id: string; number: number; type: string; paperId: string; pending: number }> }> {
+/**
+ * 筛选项(任务 / 小题)。**必须跟随当前 scope**:批改页在超过 QUEUE_LIMIT_DEFAULT 条时会提示
+ * 「请用上面的任务 / 小题筛选缩小范围」,而「抽查全部主观题」这档恰恰是条数最多的 —— 若筛选项
+ * 只按「待复核」算,AI 都判完(待复核为 0)时筛选栏就是空的,页面让老师筛却没东西可筛。
+ */
+export async function queueFacets(db: Db, teacherId: string, scope: QueueFilter['scope'] = 'needs_review'): Promise<{ assignments: Array<{ id: string; title: string; pending: number }>; items: Array<{ id: string; number: number; type: string; paperId: string; pending: number }> }> {
   const base = db
     .select({ assignmentId: attempts.assignmentId, assignmentTitle: assignments.title, itemId: items.id, number: items.number, type: items.type, paperId: items.paperId })
     .from(responses)
@@ -97,7 +101,13 @@ export async function queueFacets(db: Db, teacherId: string): Promise<{ assignme
     .innerJoin(items, eq(responses.itemId, items.id))
     .leftJoin(assignments, eq(attempts.assignmentId, assignments.id))
     .leftJoin(classes, eq(assignments.classId, classes.id))
-    .where(and(ownedCondition(teacherId), eq(responses.needsReview, true), sql`${attempts.status} <> 'in_progress'`))
+    .where(
+      and(
+        ownedCondition(teacherId),
+        scope === 'needs_review' ? eq(responses.needsReview, true) : inArray(items.type, ['short_answer', 'translate_e2c', 'writing', 'translate_c2e_fill']),
+        sql`${attempts.status} <> 'in_progress'`,
+      ),
+    )
   const rows = await base
   const byA = new Map<string, { id: string; title: string; pending: number }>()
   const byI = new Map<string, { id: string; number: number; type: string; paperId: string; pending: number }>()

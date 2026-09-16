@@ -35,7 +35,7 @@ export default async function TeacherGrading({ searchParams }: { searchParams: P
   const db = getDb()
   let rows = await gradingQueue(db, userId, filter)
   if (filter.itemId) rows = orderBySimilarity(rows, (r) => r.answerText)
-  const facets = await queueFacets(db, userId)
+  const facets = await queueFacets(db, userId, filter.scope)
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams()
     const merged = { ...filter, ...patch }
