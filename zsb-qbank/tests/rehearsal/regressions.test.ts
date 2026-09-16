@@ -1,0 +1,178 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { eq, inArray, asc } from 'drizzle-orm'
+import { getDb, type Db } from '@/lib/db/client'
+import { assignments, attempts, classMembers, classes, items, papers, responses, users } from '@/lib/db/schema'
+import { ruleDraftToPaper } from '@/lib/import/draft'
+import { upsertPaper } from '@/lib/db/import-paper'
+import { assemblePaper } from '@/lib/db/queries'
+import { createClassWithCode } from '@/lib/db/assignments'
+import { submitAttempt } from '@/lib/db/submit'
+import { loadAssignmentStats } from '@/lib/db/stats'
+import type { RuleDraft } from '@/lib/import/rules'
+
+// 上线预演里手动抓到的问题,固化成用例 —— 以后不用靠人跑一遍才发现。
+// 需要已迁移 + 已种子的 DATABASE_URL。
+
+const url = process.env.DATABASE_URL
+const PAPER = 'hubei-zsb-english-2025'
+
+describe.skipIf(!url)('预演回归 · 导入的卷学生拿得到题(D45)', () => {
+  let db: Db
+  const PID = `rehearsal-import-${Date.now()}`
+
+  beforeAll(() => {
+    db = getDb()
+  })
+  afterAll(async () => {
+    await db.delete(papers).where(eq(papers.id, PID)) // 级联删 sections / groups / items
+  })
+
+  it('规则草稿 → 保存 → 学生组卷:题数与草稿一致,不是 0', async () => {
+    // 这条盯的是 2026-09-15 的线上级坑:导入的小题曾存成 draft,而 assemblePaper 只认 approved,
+    // 于是「导入 → 发布 → 布置」之后学生打开是一份 0 题的空卷,试卷列表却显示有题。
+    const rule: RuleDraft = {
+      title: '回归用卷',
+      answerKey: null,
+      flags: [],
+      sections: [
+        {
+          order: 1,
+          code: '一',
+          title: '短文填空',
+          instructions: '在空白处填入一个适当的单词。',
+          itemType: 'fill',
+          scorePerItem: 2,
+          totalScore: 4,
+          flags: [],
+          groups: [
+            {
+              order: 1,
+              kind: 'cloze',
+              frame: 'It is the {{1}} city in the country, and it {{2}} fast.',
+              stimulus: null,
+              flags: [],
+              items: [
+                { number: 1, type: 'fill', content: { blank: 1, maxWords: 1 }, flags: [] },
+                { number: 2, type: 'fill', content: { blank: 2, maxWords: 1, hint: 'grow' }, flags: [] },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as RuleDraft
+
+    const { paper } = ruleDraftToPaper(rule, { id: PID, title: '回归用卷', year: 2026, region: '湖北', durationMinutes: 120 })
+    const draftItemCount = paper.sections.flatMap((s) => s.groups.flatMap((g) => g.items)).length
+    expect(draftItemCount).toBe(2)
+
+    await upsertPaper(db, paper)
+
+    // 学生开卷走的就是 assemblePaper(只认 approved)
+    const assembled = await assemblePaper(db, PID)
+    expect(assembled).toBeTruthy()
+    const served = assembled!.sections.flatMap((s) => s.groups.flatMap((g) => g.items)).length
+    expect(served).toBe(draftItemCount)
+    expect(served).toBeGreaterThan(0)
+
+    // 试卷本身仍是草稿:学生看不看得到由教师点「发布」把关(D7)
+    const row = await db.query.papers.findFirst({ where: eq(papers.id, PID) })
+    expect(row?.status).toBe('draft')
+  })
+})
+
+describe.skipIf(!url)('预演回归 · 学情数字与独立算法一致', () => {
+  let db: Db
+  let teacherId: string
+  let assignmentId: string
+  const userIds: string[] = []
+  const classIds: string[] = []
+  const attemptIds: string[] = []
+  const RUN = `${Date.now()}`
+  const N = 4 // 4 人交卷,够验分母与计数口径
+  /** itemId → 按作答模式手算的期望 */
+  const expected = new Map<string, { number: number; objective: boolean; answered: number; correct: number }>()
+
+  beforeAll(async () => {
+    db = getDb()
+    const mk = async (role: 'teacher' | 'student', tag: string) => {
+      const [u] = await db.insert(users).values({ casdoorSub: `rehearsal-${tag}-${RUN}`, name: `R${tag}`, role }).returning({ id: users.id })
+      userIds.push(u!.id)
+      return u!.id
+    }
+    teacherId = await mk('teacher', 'T')
+    const cls = await createClassWithCode(db, { name: `回归班 ${RUN}`, teacherId })
+    classIds.push(cls.id)
+    const [a] = await db.insert(assignments).values({ classId: cls.id, paperId: PAPER, mode: 'exam', title: `回归任务 ${RUN}`, createdBy: teacherId }).returning({ id: assignments.id })
+    assignmentId = a!.id
+
+    // 只用客观填空题:判分确定、不依赖 AI,期望值可以手算
+    const fillItems = (
+      await db.select({ id: items.id, number: items.number, answer: items.answer, type: items.type }).from(items).where(eq(items.paperId, PAPER)).orderBy(asc(items.number))
+    )
+      .filter((r) => r.type === 'fill')
+      .slice(0, 5)
+    for (const it of fillItems) expected.set(it.id, { number: it.number, objective: true, answered: 0, correct: 0 })
+
+    for (let i = 0; i < N; i++) {
+      const sid = await mk('student', `S${i}-${RUN}`)
+      await db.insert(classMembers).values({ classId: cls.id, userId: sid })
+      const [at] = await db.insert(attempts).values({ userId: sid, paperId: PAPER, assignmentId, mode: 'exam', status: 'in_progress' }).returning()
+      attemptIds.push(at!.id)
+      for (const [j, it] of fillItems.entries()) {
+        const blank = (i + j) % 5 === 0 // 每 5 个留一个空不答
+        const wrong = !blank && (i + j) % 2 === 0
+        if (blank) continue
+        const accepted = (it.answer as { accepted?: string[] }).accepted?.[0] ?? 'x'
+        await db.insert(responses).values({
+          attemptId: at!.id,
+          itemId: it.id,
+          answer: { type: 'text', value: wrong ? `zz-${i}-${j}` : accepted },
+          clientUpdatedAt: new Date(),
+          timeSpentMs: 4000 + i * 1000,
+        })
+        const e = expected.get(it.id)!
+        e.answered++
+        if (!wrong) e.correct++
+      }
+      const fresh = await db.query.attempts.findFirst({ where: eq(attempts.id, at!.id) })
+      await submitAttempt(db, fresh!)
+    }
+  })
+
+  afterAll(async () => {
+    if (attemptIds.length) {
+      await db.delete(responses).where(inArray(responses.attemptId, attemptIds))
+      await db.delete(attempts).where(inArray(attempts.id, attemptIds))
+    }
+    if (classIds.length) {
+      await db.delete(assignments).where(inArray(assignments.classId, classIds))
+      await db.delete(classMembers).where(inArray(classMembers.classId, classIds))
+      await db.delete(classes).where(inArray(classes.id, classIds))
+    }
+    if (userIds.length) await db.delete(users).where(inArray(users.id, userIds))
+  })
+
+  it('逐题的已交 / 作答 / 正确数与手算一致(聚合口径漂了就会红)', async () => {
+    const out = await loadAssignmentStats(db, teacherId, assignmentId)
+    expect(out).toBeTruthy()
+    for (const [itemId, e] of expected) {
+      const got = out!.stats.items.find((i) => i.itemId === itemId)
+      expect(got, `题 ${e.number} 不在学情里`).toBeTruthy()
+      expect(got!.submitted, `题 ${e.number} 的已交人数`).toBe(N)
+      expect(got!.answered, `题 ${e.number} 的作答数`).toBe(e.answered)
+      expect(got!.correct, `题 ${e.number} 的正确数`).toBe(e.correct)
+      expect(got!.rate, `题 ${e.number} 的正确率`).toBe(Math.round((e.correct / N) * 1000) / 1000)
+      expect(got!.timeSamples, `题 ${e.number} 的用时样本数`).toBe(e.answered)
+    }
+  })
+
+  it('学生总分 = 其各题得分之和;矩阵宽度 = 题数', async () => {
+    const out = await loadAssignmentStats(db, teacherId, assignmentId)
+    const st = out!.stats
+    expect(st.students.every((s) => s.scores.length === st.items.length)).toBe(true)
+    for (const s of st.students.filter((x) => x.totalScore !== null)) {
+      const sum = s.scores.reduce<number>((n, x) => n + (x ?? 0), 0)
+      expect(Math.abs(sum - (s.totalScore ?? 0)), `${s.name} 的总分`).toBeLessThan(0.01)
+    }
+  })
+})
