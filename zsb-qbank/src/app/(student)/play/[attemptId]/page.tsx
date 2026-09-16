@@ -10,7 +10,7 @@ import { TranslateC2EItem } from '@/components/items/TranslateC2EItem'
 import { WritingItem } from '@/components/items/WritingItem'
 import { AnswerSheet, type SheetSection } from '@/components/play/AnswerSheet'
 import type { PlayGroup, PlayPaper, PlaySection } from '@/lib/play/types'
-import { useAttemptStore, flushNow, pendingCount, type GradedFeedback } from '@/lib/sync/attempt-store'
+import { useAttemptStore, flushNow, pendingCount, setClockOffset, type GradedFeedback } from '@/lib/sync/attempt-store'
 import { warmShell } from '@/lib/offline/warm-shell'
 import type { StudentAnswer } from '@/lib/schema/paper'
 
@@ -124,7 +124,7 @@ function GroupView({ group }: { group: PlayGroup }) {
 export default function PlayPage() {
   const { attemptId } = useParams<{ attemptId: string }>()
   const router = useRouter()
-  const { answers, syncState, applyGraded, touchItem } = useAttemptStore()
+  const { answers, syncState, conflict, applyGraded, touchItem } = useAttemptStore()
 
   const [paper, setPaper] = useState<PlayPaper | null>(null)
   const [meta, setMeta] = useState<{ mode: string; deadlineAt: string | null } | null>(null)
@@ -158,7 +158,7 @@ export default function PlayPage() {
           return
         }
         clockOffset.current = Date.parse(data.serverNow) - Date.now()
-        await useAttemptStore.getState().init(attemptId, data.responses)
+        await useAttemptStore.getState().init(attemptId, data.responses, data.serverNow)
         if (!alive) return
         setMeta({ mode: data.attempt.mode, deadlineAt: data.attempt.deadlineAt })
         setPaper(data.paper)
@@ -189,7 +189,10 @@ export default function PlayPage() {
           const res = await fetch('/api/time', { cache: 'no-store' })
           if (!res.ok || !alive) return
           const { serverNow } = (await res.json()) as { serverNow: string }
-          if (alive) clockOffset.current = Date.parse(serverNow) - Date.now()
+          if (alive) {
+            clockOffset.current = Date.parse(serverNow) - Date.now()
+            setClockOffset(serverNow) // 作答时间戳与倒计时用同一个偏移
+          }
         } catch {
           // 拿不到就沿用上一次偏移;逾期仍有服务端惰性交卷兜底
         }
@@ -212,6 +215,12 @@ export default function PlayPage() {
     async (opts?: { force?: boolean }) => {
       setSubmitState('busy')
       try {
+        // 服务端已经不收这份作答的保存了(在别的设备上交了 / 过了宽限期):
+        // 这时候说「还有几题没传上去,等网络好点再重试」是假话,重试一万次也没用。
+        if (useAttemptStore.getState().conflict === 'submitted') {
+          router.replace(`/result/${attemptId}`)
+          return
+        }
         const drained = await flushNow()
         if (!drained && !opts?.force) {
           setUnsynced(await pendingCount(attemptId))
@@ -419,6 +428,16 @@ export default function PlayPage() {
           >
             还剩不到 5 分钟,到时会自动交卷。点一下关闭提醒。
           </button>
+        ) : null}
+        {conflict ? (
+          <Link
+            href={`/result/${attemptId}`}
+            className="mt-1 block w-full rounded-lg bg-amber-50 px-2 py-1.5 text-left text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          >
+            {conflict === 'submitted'
+              ? '这份卷已经交过了（可能是在你的另一台手机上）。这里再写就不算数了，点这里去看成绩。'
+              : '考试已经结束了，答案以交卷时为准。点这里去看成绩。'}
+          </Link>
         ) : null}
         {checkError ? (
           <button

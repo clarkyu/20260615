@@ -30,6 +30,8 @@ const dexie = new Dexie('zsb-qbank') as Dexie & { answers: EntityTable<LocalAnsw
 dexie.version(1).stores({ answers: 'key, attemptId, dirty' })
 
 export type SyncState = 'synced' | 'pending' | 'offline'
+/** 服务端已经不再接受这份作答的保存了(409)。两种成因对学生要说不同的话。 */
+export type SyncConflict = 'submitted' | 'deadline'
 
 /** 判分反馈(check 接口返回,经编排页归一化后入 store)。 */
 export interface GradedFeedback {
@@ -49,8 +51,10 @@ interface AttemptState {
   answers: Record<string, StudentAnswer> // itemId → answer
   graded: Record<string, GradedFeedback>
   syncState: SyncState
-  /** 初始化:本地恢复 + 服务端合并(按 clientUpdatedAt 新者胜)。 */
-  init: (attemptId: string, server: { itemId: string; answer: unknown; clientUpdatedAt: string }[]) => Promise<void>
+  /** 这份作答已经不收保存了:在别的设备上交了 / 考试过了宽限期。重试没有意义。 */
+  conflict: SyncConflict | null
+  /** 初始化:本地恢复 + 服务端合并(按 clientUpdatedAt 新者胜);serverNow 用来校准时钟偏移。 */
+  init: (attemptId: string, server: { itemId: string; answer: unknown; clientUpdatedAt: string }[], serverNow?: string) => Promise<void>
   /** 写作答:先落 IndexedDB,标 dirty,更新内存。 */
   setAnswer: (itemId: string, answer: StudentAnswer) => Promise<void>
   /** 标记「正在做这道题」:逐题计时用(SPEC §8 中位用时)。埋点失败不影响作答。 */
@@ -68,6 +72,28 @@ let retryAfter = 0
 let offListeners: (() => void) | null = null
 // 逐题计时(SPEC §8):只在内存 + 随作答一起落 IndexedDB;埋点出任何问题都不能影响作答。
 let timer: TimerState = createTimerState()
+
+/**
+ * 服务端时间 − 本机时间。作答的时间戳要按它校正到「服务端时间轴」再送出去。
+ *
+ * 服务端合并作答的规则是「clientUpdatedAt 新者胜」,而这个时间戳原本直接取自设备时钟。
+ * 两台设备(微信里一个、浏览器里一个;或者换了手机接着做)时钟差几分钟,学生**后**改对的
+ * 答案就会被**先**写的旧答案盖掉 —— 屏幕上是对的,交上去是错的,谁都不知道(双设备预演实测)。
+ * 硬约束 6 已经为倒计时立过同一条规矩:设备时钟只能拿来显示,不能用来判定。
+ */
+let clockOffsetMs = 0
+
+/** 用服务端时间校准本机时钟偏移(进作答页、以及切回前台重新校时的时候调)。 */
+export function setClockOffset(serverNowIso: string | null | undefined): void {
+  const t = Date.parse(serverNowIso ?? '')
+  if (!Number.isNaN(t)) clockOffsetMs = t - Date.now()
+}
+
+/** 本机时间戳 → 服务端时间轴上的时间戳。 */
+function onServerClock(iso: string): string {
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? iso : new Date(t + clockOffsetMs).toISOString()
+}
 
 /** 把计时结果写回本地记录(有作答的才写:没作答的题不需要用时)。 */
 async function persistTime(attemptId: string, itemId: string): Promise<void> {
@@ -90,8 +116,10 @@ export const useAttemptStore = create<AttemptState>((set, get) => ({
   answers: {},
   graded: {},
   syncState: 'synced',
+  conflict: null,
 
-  async init(attemptId, server) {
+  async init(attemptId, server, serverNow) {
+    setClockOffset(serverNow)
     const local = await dexie.answers.where('attemptId').equals(attemptId).toArray()
     const merged: Record<string, StudentAnswer> = {}
     const localByItem = new Map(local.map((l) => [l.itemId, l]))
@@ -103,7 +131,8 @@ export const useAttemptStore = create<AttemptState>((set, get) => ({
     const serverAt = new Map(server.map((r) => [r.itemId, Date.parse(r.clientUpdatedAt)]))
     for (const l of localByItem.values()) {
       const sAt = serverAt.get(l.itemId) ?? 0
-      if (Date.parse(l.clientUpdatedAt) > sAt) {
+      // 同样校正到服务端时间轴再比:服务端存的是校正过的,本地存的是原始设备时间。
+      if (Date.parse(onServerClock(l.clientUpdatedAt)) > sAt) {
         merged[l.itemId] = l.answer
         await dexie.answers.update(l.key, { dirty: 1, timeOnly: 0 }) // 本地这份作答比服务端新,得传上去
       }
@@ -117,6 +146,7 @@ export const useAttemptStore = create<AttemptState>((set, get) => ({
       attemptId,
       answers: merged,
       graded: {},
+      conflict: null,
       syncState: pending === 0 ? 'synced' : typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'pending',
     })
 
@@ -181,6 +211,7 @@ export const useAttemptStore = create<AttemptState>((set, get) => ({
   async flush() {
     const attemptId = get().attemptId
     if (!attemptId) return
+    if (get().conflict) return // 服务端已经不收这份作答了,再冲也是白冲
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       set({ syncState: 'offline' })
       return
@@ -196,9 +227,24 @@ export const useAttemptStore = create<AttemptState>((set, get) => ({
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          responses: dirtyRows.slice(0, 100).map((r) => ({ itemId: r.itemId, answer: r.answer, clientUpdatedAt: r.clientUpdatedAt, ...(r.timeSpentMs ? { timeSpentMs: r.timeSpentMs } : {}) })),
+          // 时间戳校正到服务端时间轴再送:合并规则按它定胜负,不能让设备时钟说了算(见 clockOffsetMs)。
+          responses: dirtyRows.slice(0, 100).map((r) => ({ itemId: r.itemId, answer: r.answer, clientUpdatedAt: onServerClock(r.clientUpdatedAt), ...(r.timeSpentMs ? { timeSpentMs: r.timeSpentMs } : {}) })),
         }),
       })
+      // 409:这份作答已经不收保存了(在别的设备上交了 / 过了截止的 60 秒宽限)。
+      // 重试一万次也没用 —— 再退避重试只会让学生对着「保存中」干等,还以为是自己网不好。
+      if (res.status === 409) {
+        const code = await res
+          .json()
+          .then((b: { error?: { code?: string } }) => b?.error?.code)
+          .catch(() => undefined)
+        if (flushTimer) {
+          clearInterval(flushTimer)
+          flushTimer = null
+        }
+        set({ syncState: 'pending', conflict: code === 'deadline_passed' ? 'deadline' : 'submitted' })
+        return
+      }
       if (!res.ok) throw new Error(String(res.status))
       for (const r of dirtyRows.slice(0, 100)) await dexie.answers.update(r.key, { dirty: 0, timeOnly: 0 })
       backoffMs = 0
