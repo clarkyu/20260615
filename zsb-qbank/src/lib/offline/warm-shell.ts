@@ -10,8 +10,24 @@
 
 export function warmShell(): void {
   if (typeof window === 'undefined') return
-  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return
-  if (!navigator.onLine) return
+  if (!('serviceWorker' in navigator)) return
+  const sw = navigator.serviceWorker
+
+  let done = false
   // 只预热当前这一页;失败就算了,这只是个锦上添花的优化。
-  void fetch(window.location.pathname, { credentials: 'same-origin' }).catch(() => {})
+  // 没被 SW 接管的时候发这一发是白发的(请求根本不经过 SW,存不下来),所以要等接管。
+  const warm = () => {
+    if (done || !navigator.onLine || !sw.controller) return
+    done = true
+    sw.removeEventListener('controllerchange', warm)
+    void fetch(window.location.pathname, { credentials: 'same-origin' }).catch(() => {})
+  }
+
+  warm()
+  if (done) return
+  // SW 刚装上、还没接管这个页面 —— 学生**第一次**打开作答页就是这种情况(实测 mount 时
+  // controller 还是 null,几秒后才接管)。早先这里直接 return 就不管了,于是第一次开卷的壳
+  // 永远存不下来,断网一刷新只能弹到 /offline 页;而第一次用恰恰最容易乱点乱刷新。
+  sw.addEventListener('controllerchange', warm)
+  void sw.ready.then(warm).catch(() => {})
 }

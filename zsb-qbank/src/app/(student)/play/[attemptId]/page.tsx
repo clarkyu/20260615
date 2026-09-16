@@ -10,7 +10,7 @@ import { TranslateC2EItem } from '@/components/items/TranslateC2EItem'
 import { WritingItem } from '@/components/items/WritingItem'
 import { AnswerSheet, type SheetSection } from '@/components/play/AnswerSheet'
 import type { PlayGroup, PlayPaper, PlaySection } from '@/lib/play/types'
-import { useAttemptStore, flushNow, type GradedFeedback } from '@/lib/sync/attempt-store'
+import { useAttemptStore, flushNow, pendingCount, type GradedFeedback } from '@/lib/sync/attempt-store'
 import { warmShell } from '@/lib/offline/warm-shell'
 import type { StudentAnswer } from '@/lib/schema/paper'
 
@@ -134,7 +134,9 @@ export default function PlayPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [checking, setChecking] = useState(false)
   const [timeWarning, setTimeWarning] = useState(false)
-  const [submitState, setSubmitState] = useState<'idle' | 'confirm' | 'busy' | 'failed'>('idle')
+  const [submitState, setSubmitState] = useState<'idle' | 'confirm' | 'busy' | 'failed' | 'unsynced'>('idle')
+  const [unsynced, setUnsynced] = useState(0)
+  const [checkError, setCheckError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -202,18 +204,29 @@ export default function PlayPage() {
     }
   }, [meta?.mode])
 
-  // 交卷(手动确认 / 到时自动):先冲同步队列再提交;失败保留本地数据供重试。
-  const submitExam = useCallback(async () => {
-    setSubmitState('busy')
-    try {
-      await flushNow()
-      const res = await fetch(`/api/attempts/${attemptId}/submit`, { method: 'POST' })
-      if (!res.ok) throw new Error(String(res.status))
-      router.replace(`/result/${attemptId}`)
-    } catch {
-      setSubmitState('failed')
-    }
-  }, [attemptId, router])
+  // 交卷(手动确认 / 到时自动):先把同步队列冲干净再提交;失败保留本地数据供重试。
+  // 队列没冲干净就**不能交** —— 交卷后保存接口对已交的 attempt 一律 409,卡在手机上的
+  // 那几题再也传不上去,会按没答判 0 分(硬约束 7;弱网预演实测)。
+  // 到点自动交卷是例外:那时服务端本来就过了宽限期不再收保存,拦着只会把学生困在死页面上。
+  const submitExam = useCallback(
+    async (opts?: { force?: boolean }) => {
+      setSubmitState('busy')
+      try {
+        const drained = await flushNow()
+        if (!drained && !opts?.force) {
+          setUnsynced(await pendingCount(attemptId))
+          setSubmitState('unsynced')
+          return
+        }
+        const res = await fetch(`/api/attempts/${attemptId}/submit`, { method: 'POST' })
+        if (!res.ok) throw new Error(String(res.status))
+        router.replace(`/result/${attemptId}`)
+      } catch {
+        setSubmitState('failed')
+      }
+    },
+    [attemptId, router],
+  )
 
   const flat = useMemo(
     () => (paper ? paper.sections.flatMap((s) => s.groups.map((g) => ({ section: s, group: g }))) : []),
@@ -302,7 +315,13 @@ export default function PlayPage() {
     if (!current || checking) return
     setChecking(true)
     try {
-      await flushNow() // 先冲同步队列,保证服务端拿到最新作答再判(§7.6)
+      // 先冲同步队列,保证服务端拿到最新作答再判(§7.6)。没冲干净就别判:
+      // 判的会是服务端那份旧底稿,把刚写过的题报成「没答」,白挨一次打击。
+      if (!(await flushNow())) {
+        setCheckError('刚写的还没传上去,等网络好一点再对答案。')
+        return
+      }
+      setCheckError(null)
       const scoreById = new Map(current.group.items.map((it) => [it.id, it.score]))
       const res = await fetch(`/api/attempts/${attemptId}/check`, {
         method: 'POST',
@@ -380,7 +399,7 @@ export default function PlayPage() {
                 deadlineMs={Date.parse(meta.deadlineAt)}
                 offsetMs={clockOffset.current}
                 onDanger={() => setTimeWarning(true)}
-                onExpire={() => void submitExam()}
+                onExpire={() => void submitExam({ force: true })}
               />
             ) : null}
             <button
@@ -399,6 +418,15 @@ export default function PlayPage() {
             className="mt-1 w-full rounded-lg bg-red-50 px-2 py-1.5 text-left text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
           >
             还剩不到 5 分钟,到时会自动交卷。点一下关闭提醒。
+          </button>
+        ) : null}
+        {checkError ? (
+          <button
+            type="button"
+            onClick={() => setCheckError(null)}
+            className="mt-1 w-full rounded-lg bg-amber-50 px-2 py-1.5 text-left text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          >
+            {checkError}点一下关闭。
           </button>
         ) : null}
         {current.section.instructions ? (
@@ -485,6 +513,12 @@ export default function PlayPage() {
             {submitState === 'failed' ? (
               <p className="mt-1 text-sm text-red-600">交卷没成功,检查网络后再试。答案已存在手机上,不会丢。</p>
             ) : null}
+            {submitState === 'unsynced' ? (
+              <p className="mt-1 text-sm text-red-600">
+                还有 {unsynced} 题没传到服务器,先没给你交 —— 交了这几题会按没答算。答案都在手机上存着,
+                等网络好一点再点「重试」就能补上去。
+              </p>
+            ) : null}
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
@@ -500,7 +534,13 @@ export default function PlayPage() {
                 onClick={() => void submitExam()}
                 className="min-h-11 flex-1 rounded-xl bg-blue-600 font-medium text-white disabled:opacity-60"
               >
-                {submitState === 'busy' ? '提交中…' : submitState === 'failed' ? '重试' : meta?.mode === 'exam' ? '确认交卷' : '完成'}
+                {submitState === 'busy'
+                  ? '提交中…'
+                  : submitState === 'failed' || submitState === 'unsynced'
+                    ? '重试'
+                    : meta?.mode === 'exam'
+                      ? '确认交卷'
+                      : '完成'}
               </button>
             </div>
           </div>
