@@ -73,42 +73,44 @@ export default async function TeacherAssignmentDetail({ params }: { params: Prom
           </div>
         ))}
       </div>
-      <table className="mt-4 w-full border-collapse overflow-hidden rounded-2xl border border-neutral-200 bg-white text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <thead className="bg-neutral-100 text-left dark:bg-neutral-800">
-          <tr>
-            <th className="p-3">学生</th>
-            <th className="p-3">状态</th>
-            <th className="p-3">分数</th>
-            <th className="p-3">交卷时间</th>
-            <th className="p-3">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {roster.map((r) => (
-            <tr key={r.userId} className="border-t border-neutral-200 dark:border-neutral-800">
-              <td className="p-3">{r.name}</td>
-              <td className="p-3">{ATTEMPT_STATUS_LABEL[r.status] ?? r.status}</td>
-              <td className="p-3">{typeof r.totalScore === 'number' ? r.totalScore : '—'}</td>
-              <td className="p-3 text-neutral-500">{fmtTime(r.submittedAt)}</td>
-              <td className="p-3">
-                {r.attemptId && (r.status === 'submitted' || r.status === 'graded') ? <ReleaseButton kind="attempt" id={r.attemptId} label="发布" small /> : null}
-                {r.attemptId ? (
-                  <Link href={`/teacher/grading?attemptId=${r.attemptId}&scope=subjective`} className="ml-2 text-xs text-blue-600 hover:underline">
-                    批改
-                  </Link>
-                ) : null}
-              </td>
-            </tr>
-          ))}
-          {roster.length === 0 ? (
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-neutral-100 text-left dark:bg-neutral-800">
             <tr>
-              <td className="p-6 text-center text-neutral-400" colSpan={5}>
-                班级里还没有学生。
-              </td>
+              <th className="p-3">学生</th>
+              <th className="p-3">状态</th>
+              <th className="p-3">分数</th>
+              <th className="p-3">交卷时间</th>
+              <th className="p-3">操作</th>
             </tr>
-          ) : null}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {roster.map((r) => (
+              <tr key={r.userId} className="border-t border-neutral-200 dark:border-neutral-800">
+                <td className="p-3">{r.name}</td>
+                <td className="p-3">{ATTEMPT_STATUS_LABEL[r.status] ?? r.status}</td>
+                <td className="p-3">{typeof r.totalScore === 'number' ? r.totalScore : '—'}</td>
+                <td className="p-3 text-neutral-500">{fmtTime(r.submittedAt)}</td>
+                <td className="p-3">
+                  {r.attemptId && (r.status === 'submitted' || r.status === 'graded') ? <ReleaseButton kind="attempt" id={r.attemptId} label="发布" small /> : null}
+                  {r.attemptId ? (
+                    <Link href={`/teacher/grading?attemptId=${r.attemptId}&scope=subjective`} className="ml-2 text-xs text-blue-600 hover:underline">
+                      批改
+                    </Link>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+            {roster.length === 0 ? (
+              <tr>
+                <td className="p-6 text-center text-neutral-400" colSpan={5}>
+                  班级里还没有学生。
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </main>
   )
 }

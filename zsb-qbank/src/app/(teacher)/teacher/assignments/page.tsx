@@ -37,55 +37,57 @@ export default async function TeacherAssignments({ searchParams }: { searchParam
         <h2 className="mb-3 font-semibold">发布新任务</h2>
         <AssignmentForm papers={paperRows} classes={classRows.map((c) => ({ ...c, members: members.get(c.id) ?? 0 }))} initialPaperId={sp.paperId} initialClassId={sp.classId} />
       </section>
-      <table className="mt-6 w-full border-collapse overflow-hidden rounded-2xl border border-neutral-200 bg-white text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <thead className="bg-neutral-100 text-left dark:bg-neutral-800">
-          <tr>
-            <th className="p-3">任务</th>
-            <th className="p-3">班级</th>
-            <th className="p-3">试卷 / 范围</th>
-            <th className="p-3">模式</th>
-            <th className="p-3">开放 → 截止</th>
-            <th className="p-3">进度</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ a, className, paperTitle }) => {
-            const p = progress.get(a.id)
-            const n = members.get(a.classId) ?? 0
-            return (
-              <tr key={a.id} className="border-t border-neutral-200 dark:border-neutral-800">
-                <td className="p-3 font-medium">
-                  <Link href={`/teacher/assignments/${a.id}`} className="text-blue-600 hover:underline">
-                    {a.title}
-                  </Link>
-                </td>
-                <td className="p-3">{className}</td>
-                <td className="p-3">
-                  {paperTitle ?? '—'}
-                  <span className="ml-1 text-neutral-400">{a.itemIds?.length ? `（${a.itemIds.length} 题）` : '（整卷）'}</span>
-                </td>
-                <td className="p-3">
-                  {MODE_LABEL[a.mode] ?? a.mode}
-                  {a.mode === 'exam' && a.durationMinutes ? <span className="text-neutral-400"> · {a.durationMinutes} 分钟</span> : null}
-                </td>
-                <td className="p-3 text-neutral-500">
-                  {fmtTime(a.opensAt)} → {fmtTime(a.dueAt)}
-                </td>
-                <td className="p-3">
-                  已交 {p?.submitted ?? 0} / 开始 {p?.started ?? 0} / 共 {n}
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-neutral-100 text-left dark:bg-neutral-800">
+            <tr>
+              <th className="p-3">任务</th>
+              <th className="p-3">班级</th>
+              <th className="p-3">试卷 / 范围</th>
+              <th className="p-3">模式</th>
+              <th className="p-3">开放 → 截止</th>
+              <th className="p-3">进度</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ a, className, paperTitle }) => {
+              const p = progress.get(a.id)
+              const n = members.get(a.classId) ?? 0
+              return (
+                <tr key={a.id} className="border-t border-neutral-200 dark:border-neutral-800">
+                  <td className="p-3 font-medium">
+                    <Link href={`/teacher/assignments/${a.id}`} className="text-blue-600 hover:underline">
+                      {a.title}
+                    </Link>
+                  </td>
+                  <td className="p-3">{className}</td>
+                  <td className="p-3">
+                    {paperTitle ?? '—'}
+                    <span className="ml-1 text-neutral-400">{a.itemIds?.length ? `（${a.itemIds.length} 题）` : '（整卷）'}</span>
+                  </td>
+                  <td className="p-3">
+                    {MODE_LABEL[a.mode] ?? a.mode}
+                    {a.mode === 'exam' && a.durationMinutes ? <span className="text-neutral-400"> · {a.durationMinutes} 分钟</span> : null}
+                  </td>
+                  <td className="p-3 text-neutral-500">
+                    {fmtTime(a.opensAt)} → {fmtTime(a.dueAt)}
+                  </td>
+                  <td className="p-3">
+                    已交 {p?.submitted ?? 0} / 开始 {p?.started ?? 0} / 共 {n}
+                  </td>
+                </tr>
+              )
+            })}
+            {rows.length === 0 ? (
+              <tr>
+                <td className="p-6 text-center text-neutral-400" colSpan={6}>
+                  还没有任务。
                 </td>
               </tr>
-            )
-          })}
-          {rows.length === 0 ? (
-            <tr>
-              <td className="p-6 text-center text-neutral-400" colSpan={6}>
-                还没有任务。
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </main>
   )
 }
