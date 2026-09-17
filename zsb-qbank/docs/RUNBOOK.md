@@ -136,13 +136,24 @@ server {
 # cron:每天 03:10
 10 3 * * * cd /srv/zsb/zsb-qbank && ./scripts/backup.sh >> /var/log/zsb-backup.log 2>&1
 
-# 恢复演练(务必恢复到另一个库,别直接盖生产)
+# 恢复演练:一条命令走完 备份 → 恢复到临时空库 → 逐表比对 → 删掉临时库
+./scripts/verify-restore.sh
+
+# 手动恢复到指定库(务必是另一个库,别直接盖生产)
 createdb -h 127.0.0.1 -U zsb zsb_restore_test
 ./scripts/restore.sh backups/zsb-20260914-031000.dump postgres://zsb:<密码>@127.0.0.1:5432/zsb_restore_test
 ```
 
-`restore.sh` 结束会打印 papers / items / attempts / responses 四张表的行数,对得上就算恢复成功。
-**每季度做一次恢复演练**:没验证过的备份等于没有备份。
+**每季度(或每次改了 schema 之后)跑一次 `./scripts/verify-restore.sh`** ——
+没验证过的备份等于没有备份。它跑的是真正的 `backup.sh` / `restore.sh`,建一个
+`<库名>_restore_check` 临时库灌进去、**把所有表的行数逐张比对**、再把临时库删掉,
+全程不碰源库;有一张对不上就非零退出。需要该实例上的 CREATEDB 权限。
+源库要是空的(没迁移 / 没数据),它会**拒绝**跑 —— 空库比空库永远相等,那种「通过」什么也没证明。
+
+CI 每次也跑一遍(`zsb-ci.yml`),所以脚本本身不会悄悄烂掉;但那验的是 CI 的库,
+**生产上的备份仍要你亲手演练一次**。
+
+`restore.sh` 单独用时会打印 papers / items / attempts / responses 四张表的行数。
 
 ### 升级
 

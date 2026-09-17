@@ -70,3 +70,11 @@ jobs:
           pnpm start:standalone &
           for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
           pnpm test:e2e
+      # 恢复演练(SPEC §10 M7 验收「备份脚本可恢复到空库」)。
+      # 放在 e2e 之后:这时库里才有作答与判分结果,演练才盖得到 attempts / responses
+      # 这些真正要命的表 —— 只有种子数据的话,它们是空的,比对等于没比。
+      # 跑的是真正的 backup.sh / restore.sh,建临时库比对完再删,不碰 CI 的源库。
+      - name: 恢复演练(备份真能救回来)
+        run: |
+          pg_dump --version
+          ./scripts/verify-restore.sh
