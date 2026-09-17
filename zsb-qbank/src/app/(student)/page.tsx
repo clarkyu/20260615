@@ -57,7 +57,7 @@ export default async function HomePage() {
     <main className="flex flex-1 flex-col gap-4 px-4 py-6">
       <div>
         <h1 className="text-xl font-bold">专升本英语题库</h1>
-        <p className="mt-1 text-neutral-500">从微信群链接进来就能做题:作答、训练、模考。</p>
+        <p className="mt-1 text-neutral-500">从微信群链接进来就能做题：作答、训练、模考。</p>
       </div>
 
       {!user ? (
@@ -124,7 +124,7 @@ export default async function HomePage() {
             {rows.length === 0 ? (
               <div className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
                 <p className="font-medium">还没有试卷</p>
-                <p className="mt-1 text-sm text-neutral-500">等老师导入试卷后,这里会出现练习入口。</p>
+                <p className="mt-1 text-sm text-neutral-500">等老师导入试卷后，这里会出现练习入口。</p>
               </div>
             ) : (
               rows.map((p) => (

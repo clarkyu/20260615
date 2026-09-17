@@ -68,11 +68,11 @@ export default function ResultPage() {
         const res = await fetch(`/api/attempts/${attemptId}/result`)
         if (!alive) return
         if (res.status === 401) return setError('请先登录')
-        if (res.status === 409) return setError('这份还没交卷,交卷后再来看成绩')
-        if (!res.ok) return setError('没有找到成绩,回首页看看')
+        if (res.status === 409) return setError('这份还没交卷，交卷后再来看成绩')
+        if (!res.ok) return setError('没有找到成绩，回首页看看')
         setData((await res.json()) as ResultPayload)
       } catch {
-        if (alive) setError('加载失败,检查一下网络再试')
+        if (alive) setError('加载失败，检查一下网络再试')
       }
     })()
     return () => {

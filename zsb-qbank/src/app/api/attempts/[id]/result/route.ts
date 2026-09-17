@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     attempt = (await db.query.attempts.findFirst({ where: eq(attempts.id, id) })) ?? attempt
   }
   if (attempt.status === 'in_progress') {
-    return NextResponse.json({ error: { code: 'not_submitted', message: '还没交卷,交卷后再看成绩' } }, { status: 409 })
+    return NextResponse.json({ error: { code: 'not_submitted', message: '还没交卷，交卷后再看成绩' } }, { status: 409 })
   }
 
   // 任务子集组卷:成绩页只按任务里的小题算分与展示(满分随之缩小)。

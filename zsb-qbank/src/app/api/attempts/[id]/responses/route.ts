@@ -46,11 +46,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const attempt = me ? await db.query.attempts.findFirst({ where: and(eq(attempts.id, id), eq(attempts.userId, me.id)) }) : null
   if (!attempt) return NextResponse.json({ error: { code: 'not_found', message: '作答不存在' } }, { status: 404 })
   if (attempt.status !== 'in_progress') {
-    return NextResponse.json({ error: { code: 'conflict', message: '已交卷,不能再保存' } }, { status: 409 })
+    return NextResponse.json({ error: { code: 'conflict', message: '已交卷，不能再保存' } }, { status: 409 })
   }
   // 考试截止 + 60 秒宽限后拒绝保存(§9.5;宽限期内仍收,给弱网最后一批同步)。
   if (attempt.mode === 'exam' && attempt.deadlineAt && isSaveRejected(attempt.deadlineAt, new Date())) {
-    return NextResponse.json({ error: { code: 'deadline_passed', message: '考试已结束,答案以交卷时为准' } }, { status: 409 })
+    return NextResponse.json({ error: { code: 'deadline_passed', message: '考试已结束，答案以交卷时为准' } }, { status: 409 })
   }
 
   // 小题必须属于本 attempt 的试卷(防跨卷写入)。
