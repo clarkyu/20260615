@@ -34,7 +34,7 @@ export function ReorderItem({ item }: { item: PlayItem }) {
                 key={`${ci}-${pos}`}
                 type="button"
                 onClick={() => set(picked.filter((_, j) => j !== pos))}
-                className="min-h-11 rounded-lg border border-blue-300 bg-blue-50 px-2 text-[16px] dark:border-blue-800 dark:bg-blue-950"
+                className="min-h-11 min-w-11 rounded-lg border border-blue-300 bg-blue-50 px-2 text-[16px] dark:border-blue-800 dark:bg-blue-950"
               >
                 {chunks[ci]}
               </button>
@@ -49,7 +49,7 @@ export function ReorderItem({ item }: { item: PlayItem }) {
             key={ci}
             type="button"
             onClick={() => set([...picked, ci])}
-            className="min-h-11 rounded-lg border border-neutral-300 px-2 text-[16px] dark:border-neutral-700"
+            className="min-h-11 min-w-11 rounded-lg border border-neutral-300 px-2 text-[16px] dark:border-neutral-700"
           >
             {chunks[ci]}
           </button>

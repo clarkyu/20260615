@@ -30,9 +30,12 @@ export function WritingItem({ item }: { item: PlayItem }) {
             <p className="whitespace-pre-wrap">{c.prompt}</p>
             <ul className="mt-2 space-y-1">
               {c.requirements.map((r, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-1 h-4 w-4" aria-label="自查要点" />
-                  <span>{r}</span>
+                <li key={i}>
+                  {/* 复选框本身只有 16px,手指点不准:整行做成点击区(顺带点文字也能勾)。 */}
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input type="checkbox" className="h-4 w-4 shrink-0" aria-label="自查要点" />
+                    <span>{r}</span>
+                  </label>
                 </li>
               ))}
             </ul>
