@@ -18,7 +18,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # 与 backup.sh 同样的口径读 .env,免得演练用的连接串和它实际 dump 的库不是同一个。
-[ -f .env ] && set -a && . ./.env && set +a
+. ./scripts/_env.sh   # .env 只当默认值,调用方传的环境变量优先(D82)
 
 SRC_URL="${DATABASE_URL:?DATABASE_URL 未设置(.env 或环境变量)}"
 

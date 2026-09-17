@@ -168,11 +168,20 @@ docker compose exec -T app ./scripts/backup.sh
 # 恢复演练:一条命令走完 备份 → 恢复到临时空库 → 逐表比对 → 删掉临时库
 docker compose exec -T app ./scripts/verify-restore.sh
 
-# 手动恢复到指定库(务必是另一个库,别直接盖生产)
+# 手动恢复到指定库(目标库必须写出来;脚本不会默认用 DATABASE_URL)
 docker compose exec -T app psql "$DATABASE_URL" -c 'create database zsb_restore_test'
 docker compose exec -T app ./scripts/restore.sh backups/zsb-20260914-031000.dump \
   postgres://zsb:<密码>@db:5432/zsb_restore_test
+
+# 真·灾难恢复:确实要拿这份备份覆盖生产库(现有数据不可撤销地消失)
+docker compose exec -T app ./scripts/restore.sh backups/zsb-20260914-031000.dump "$DATABASE_URL" --force
 ```
+
+> **恢复会先把目标库现有的对象删光**(`pg_restore --clean`)。所以 `restore.sh` **不再**
+> 默认回落到 `DATABASE_URL`:少打一个参数就等于拿旧备份盖掉生产,备份之后产生的作答与
+> 成绩全部消失 —— 而恢复恰恰是救火时才跑的命令(2026-09-17 实测过,D81)。
+> 目标库必须显式写出;目标就是 `DATABASE_URL` 那个库时还要再加 `--force`,
+> 脚本会先把「它现在装着多少 attempts / responses」打出来给你看。
 
 **每季度(或每次改了 schema 之后)跑一次上面那条恢复演练** ——
 没验证过的备份等于没有备份。它跑的是真正的 `backup.sh` / `restore.sh`,建一个
