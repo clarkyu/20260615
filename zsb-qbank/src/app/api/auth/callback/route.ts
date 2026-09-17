@@ -1,7 +1,17 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getDb } from '@/lib/db/client'
 import { ensureUser } from '@/lib/db/queries'
-import { OidcError, decodeJwtPayload, exchangeCode, getOidcConfig, landingFor, toSessionUser, validateClaims, type LoginErrorCode } from '@/lib/auth/oidc'
+import {
+  OidcError,
+  decodeJwtPayload,
+  exchangeCode,
+  getOidcConfig,
+  idTokenForHint,
+  landingFor,
+  toSessionUser,
+  validateClaims,
+  type LoginErrorCode,
+} from '@/lib/auth/oidc'
 import { getSession } from '@/lib/auth/session'
 
 export const dynamic = 'force-dynamic'
@@ -56,6 +66,7 @@ export async function GET(req: NextRequest) {
     }
     const user = toSessionUser(claims, cfg)
     session.user = user
+    session.idToken = idTokenForHint(token.id_token) // 登出要拿它当 id_token_hint
     await session.save()
     // 建档(attempts / responses 的外键需要 users 行)
     await ensureUser(getDb(), user)

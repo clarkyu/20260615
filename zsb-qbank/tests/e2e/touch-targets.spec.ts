@@ -10,22 +10,18 @@ import { test, expect, type Page } from '@playwright/test'
 // 自动大写要是哪天在英文输入框上漏开,学生填的 biggest 会变成 Biggest,直接判错分。
 //
 // 量的是**触控区**而不是盒子:点击区可能来自父级 <label>,也可能来自 ::after 撑出来的
-// 不可见区域(行内空位芯片就是这么做的:盒子 34px、触控区 46px,版面一点不动)。
+// 不可见区域(行内空位芯片就是这么做的:盒子 34px、触控区 46px,行文里看不出变化)。
 // 两个坑写在这里,都是第一版栽过的:
 //   · elementFromPoint 只认可见视口 → 每个控件先 scrollIntoView 再探,否则视口外的一律误报;
-//   · 相邻两行的空位芯片会争夺中间那几个像素 → 见下方 INLINE_BLANK_MIN 的说明。
+//   · 相邻两行的空位芯片会争夺中间那几个像素 → 芯片靠 my-1.5 把行距垫开(D73)。
 test.skip(!process.env.E2E_BASE_URL, '设 E2E_BASE_URL 后运行')
 
 const PAPER = 'hubei-zsb-english-2025'
 const MIN = 44
-/**
- * 行内空位芯片的下限。它嵌在短文的行文里,视觉上不能长到 44px —— 那会把整段行距撑散;
- * 所以用不可见的 ::after 把触控区撑到 46px。但当两个空位正好落在紧挨的上下两行时,
- * 中间那几个像素只能归其中一个,另一个停在 40px。要让它们全都够 44px,只能把短文行距
- * 撑到 ≥46px(段落高约 +67%)—— 那是阅读体验的取舍,不在这条用例的职权范围内。
- * 这里守住 40px 的底,防的是「哪天 ::after 被删掉、悄悄退回 34px」。
- */
-const INLINE_BLANK_MIN = 40
+// 2026-09-17 曾给行内空位芯片单开过 40px 的下限:两个空位落在紧挨的上下两行时,
+// 两块触控区抢中间那几个像素,输的那个停在 40px。当时以为要补齐只能撑整段行距(+50%),
+// 就先守住 40px 的底。后来量出第三条路 —— 给芯片加 6px 上下外边距,只有含空位的行变高
+// (短文 +14%),20 个空位全部达标(D73)。特例下限因此撤掉:这里对所有控件一视同仁 44px。
 
 interface Problem {
   kind: string
@@ -34,7 +30,7 @@ interface Problem {
 
 async function auditViewport(page: Page): Promise<Problem[]> {
   return page.evaluate(
-    ({ MIN, INLINE_BLANK_MIN }) => {
+    ({ MIN }) => {
       const problems: { kind: string; detail: string }[] = []
       const root = document.scrollingElement ?? document.documentElement
       if (root.scrollWidth > root.clientWidth + 1) {
@@ -78,11 +74,10 @@ async function auditViewport(page: Page): Promise<Problem[]> {
         }
         const w = b.width + grow(-1, 0) + grow(1, 0)
         const h = b.height + grow(0, -1) + grow(0, 1)
-        const floor = n.hasAttribute('data-blank') ? INLINE_BLANK_MIN : MIN
-        if (w < floor || h < floor) {
+        if (w < MIN || h < MIN) {
           problems.push({
             kind: '触控目标过小',
-            detail: `<${tag}${type ? ' type=' + type : ''}>「${named(n)}」触控区 ${Math.round(w)}×${Math.round(h)}px(下限 ${floor}）`,
+            detail: `<${tag}${type ? ' type=' + type : ''}>「${named(n)}」触控区 ${Math.round(w)}×${Math.round(h)}px(下限 ${MIN}）`,
           })
         }
       }
@@ -106,7 +101,7 @@ async function auditViewport(page: Page): Promise<Problem[]> {
       }
       return problems
     },
-    { MIN, INLINE_BLANK_MIN },
+    { MIN },
   )
 }
 

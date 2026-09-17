@@ -19,6 +19,12 @@ export interface OidcPending {
 export interface SessionData {
   user?: SessionUser
   oidc?: OidcPending
+  /**
+   * 登出时当 id_token_hint 用的原始 id_token(§9.5 的例外:它带着 email / phone 这些声明)。
+   * 只进加密的 HttpOnly Cookie,不解码、不落库、不进日志,登出即随会话一起销毁;
+   * 过大的不存(见 oidc.ts 的 idTokenForHint)。
+   */
+  idToken?: string
 }
 
 function options(): SessionOptions {
