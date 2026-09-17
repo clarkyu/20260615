@@ -160,45 +160,47 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
           没有符合条件的小题。换个筛选条件试试，或者<Link href="/teacher/import" className="text-blue-600 underline">导入一份新试卷</Link>。
         </div>
       ) : (
-        <table className="mt-3 w-full border-collapse overflow-hidden rounded-2xl border border-neutral-200 bg-white text-sm dark:border-neutral-800 dark:bg-neutral-900">
-          <thead className="bg-neutral-100 text-left dark:bg-neutral-800">
-            <tr>
-              <th className="p-3 w-16">题号</th>
-              <th className="p-3 w-28">题型</th>
-              <th className="p-3">题面</th>
-              <th className="p-3 w-48">试卷 / 大题</th>
-              <th className="p-3 w-40">标签 / 状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.items.map((it) => (
-              <tr key={it.id} className="border-t border-neutral-200 align-top dark:border-neutral-800">
-                <td className="p-3 font-mono">{it.number}</td>
-                <td className="p-3">{ITEM_TYPE_LABEL[it.type] ?? it.type}</td>
-                <td className="p-3">
-                  <Link href={`/teacher/papers/${it.paperId}#item-${it.number}`} className="text-blue-600 hover:underline">
-                    {itemPreview(it.type, it.content)}
-                  </Link>
-                </td>
-                <td className="p-3 text-neutral-500">
-                  {it.paperTitle}
-                  {it.sectionTitle ? <span className="block text-xs">{it.sectionTitle}</span> : null}
-                </td>
-                <td className="p-3">
-                  <div className="flex flex-wrap gap-1">
-                    {it.knowledgeTags.map((t) => (
-                      <Link key={t} href={href(filter, { tag: t, offset: 0 })} className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300">
-                        {t}
-                      </Link>
-                    ))}
-                  </div>
-                  {it.status === 'draft' ? <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-200">待审核</span> : null}
-                  {it.origin === 'ai' ? <span className="mt-1 ml-1 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800 dark:bg-violet-900 dark:text-violet-200">AI 变式</span> : null}
-                </td>
+        <div className="mt-3 overflow-x-auto rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+          <table className="w-full border-collapse text-sm">
+            <thead className="bg-neutral-100 text-left dark:bg-neutral-800">
+              <tr>
+                <th className="p-3 w-16">题号</th>
+                <th className="p-3 w-28">题型</th>
+                <th className="p-3">题面</th>
+                <th className="p-3 w-48">试卷 / 大题</th>
+                <th className="p-3 w-40">标签 / 状态</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {result.items.map((it) => (
+                <tr key={it.id} className="border-t border-neutral-200 align-top dark:border-neutral-800">
+                  <td className="p-3 font-mono">{it.number}</td>
+                  <td className="p-3">{ITEM_TYPE_LABEL[it.type] ?? it.type}</td>
+                  <td className="p-3">
+                    <Link href={`/teacher/papers/${it.paperId}#item-${it.number}`} className="text-blue-600 hover:underline">
+                      {itemPreview(it.type, it.content)}
+                    </Link>
+                  </td>
+                  <td className="p-3 text-neutral-500">
+                    {it.paperTitle}
+                    {it.sectionTitle ? <span className="block text-xs">{it.sectionTitle}</span> : null}
+                  </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1">
+                      {it.knowledgeTags.map((t) => (
+                        <Link key={t} href={href(filter, { tag: t, offset: 0 })} className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300">
+                          {t}
+                        </Link>
+                      ))}
+                    </div>
+                    {it.status === 'draft' ? <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-200">待审核</span> : null}
+                    {it.origin === 'ai' ? <span className="mt-1 ml-1 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800 dark:bg-violet-900 dark:text-violet-200">AI 变式</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {result.total > PAGE ? (
