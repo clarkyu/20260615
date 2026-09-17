@@ -39,14 +39,14 @@ export function SplitPane({ top, bottom }: { top: React.ReactNode; bottom: React
         {top}
       </div>
       <div
-        className="flex min-h-8 touch-none items-center justify-center gap-3 border-y border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900"
+        className="flex min-h-11 touch-none items-center justify-center gap-3 border-y border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900"
         onPointerDown={(e) => {
           dragging.current = true
           ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
         }}
       >
         <span className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
-        <button type="button" onClick={() => setFull(true)} className="text-xs text-blue-600">
+        <button type="button" onClick={() => setFull(true)} className="min-h-11 px-3 text-xs text-blue-600">
           全屏原文
         </button>
       </div>
