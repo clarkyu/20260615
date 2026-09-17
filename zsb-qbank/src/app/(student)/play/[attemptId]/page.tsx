@@ -50,7 +50,7 @@ function toFeedbackRow(r: Record<string, unknown>, scoreById: Map<string, number
   }
 }
 
-const SYNC_LABEL = { synced: '已保存', pending: '保存中', offline: '离线,已存本机' } as const
+const SYNC_LABEL = { synced: '已保存', pending: '保存中', offline: '离线，已存本机' } as const
 const SYNC_DOT = { synced: 'bg-emerald-500', pending: 'bg-amber-500', offline: 'bg-red-500' } as const
 
 // 考试倒计时(硬约束 6):deadline 来自服务端,本地时钟用 offset 校正后只做显示;
@@ -149,7 +149,7 @@ export default function PlayPage() {
           return
         }
         if (!res.ok) {
-          setError('没有找到这份作答,回首页重新开始吧')
+          setError('没有找到这份作答，回首页重新开始吧')
           return
         }
         const data = (await res.json()) as AttemptPayload
@@ -163,7 +163,7 @@ export default function PlayPage() {
         setMeta({ mode: data.attempt.mode, deadlineAt: data.attempt.deadlineAt })
         setPaper(data.paper)
       } catch {
-        if (alive) setError('加载失败,检查一下网络再试')
+        if (alive) setError('加载失败，检查一下网络再试')
       }
     })()
     return () => {
@@ -327,7 +327,7 @@ export default function PlayPage() {
       // 先冲同步队列,保证服务端拿到最新作答再判(§7.6)。没冲干净就别判:
       // 判的会是服务端那份旧底稿,把刚写过的题报成「没答」,白挨一次打击。
       if (!(await flushNow())) {
-        setCheckError('刚写的还没传上去,等网络好一点再对答案。')
+        setCheckError('刚写的还没传上去，等网络好一点再对答案。')
         return
       }
       setCheckError(null)
@@ -530,7 +530,7 @@ export default function PlayPage() {
                   : '全部题目都已作答。完成后可以看成绩，也可以再练一次。'}
             </p>
             {submitState === 'failed' ? (
-              <p className="mt-1 text-sm text-red-600">交卷没成功,检查网络后再试。答案已存在手机上,不会丢。</p>
+              <p className="mt-1 text-sm text-red-600">交卷没成功，检查网络后再试。答案已存在手机上，不会丢。</p>
             ) : null}
             {submitState === 'unsynced' ? (
               <p className="mt-1 text-sm text-red-600">

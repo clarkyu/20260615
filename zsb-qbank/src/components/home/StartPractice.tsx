@@ -41,12 +41,12 @@ export function StartAttemptButton({
               }
               const json = (await res.json()) as { attemptId?: string }
               if (!res.ok || !json.attemptId) {
-                setErr('开始失败,再点一次试试')
+                setErr('开始失败，再点一次试试')
                 return
               }
               router.push(`/play/${json.attemptId}`)
             } catch {
-              setErr('网络不太好,再点一次试试')
+              setErr('网络不太好，再点一次试试')
             } finally {
               setBusy(false)
             }

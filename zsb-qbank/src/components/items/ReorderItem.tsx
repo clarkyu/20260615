@@ -26,7 +26,7 @@ export function ReorderItem({ item }: { item: PlayItem }) {
       <p className="mb-2 text-sm font-semibold">{item.number}. 连词成句</p>
       <div className="mb-2 min-h-12 rounded-xl bg-neutral-50 p-2 dark:bg-neutral-900">
         {picked.length === 0 ? (
-          <span className="text-sm text-neutral-400">点下面的词块,把句子拼出来</span>
+          <span className="text-sm text-neutral-400">点下面的词块，把句子拼出来</span>
         ) : (
           <div className="flex flex-wrap gap-2">
             {picked.map((ci, pos) => (

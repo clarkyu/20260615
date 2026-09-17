@@ -22,7 +22,7 @@ export function ShortAnswerGroup({ group }: { group: PlayGroup }) {
         return (
           <div key={it.id}>
             <p className="mb-1 text-[16px] font-medium">
-              {it.number}. {it.type === 'translate_e2c' ? '把下面的句子翻译成中文:' : c.question}
+              {it.number}. {it.type === 'translate_e2c' ? '把下面的句子翻译成中文：' : c.question}
             </p>
             {it.type === 'translate_e2c' ? (
               <blockquote className="mb-2 rounded-lg border-l-4 border-blue-400 bg-blue-50 p-2 text-[16px] dark:bg-blue-950">
