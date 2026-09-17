@@ -665,3 +665,39 @@ bug 原状:包了容器之后表格是 `w-full`,会缩在容器里换行,压根�
 严重度要说实话:job id 是不可猜的 UUID,又只发给入队的那个教师,够不上「能被利用」。
 这是一条纵深防御,不是在救火。但**一条接口只该回它被用来做的那件事** —— 何况这条已经
 和一条写明白的隔离决策(D20)对不上了。
+
+## D79 整卷重建的那道门放在删数据的那一层,不放在某个调用方(2026-09-17)
+`pnpm seed` 会把学生的卷子删掉。2026-09-17 实测:库里已有 5 条作答时跑一次种子,
+作答变 0 行、attempt 还在,脚本照常打印「导入完成」「断言通过」—— **静默、无提示、不可撤销**。
+
+成因:`upsertPaper` 是整树重建(删 sections → 级联 groups / items),而 `responses.item_id`
+对 `items.id` 是 `ON DELETE CASCADE`,一路级联到作答(还有错题本、常见错答、判分缓存)。
+「有作答就拒绝重建」这道门当时只写在 `PUT /api/teacher/papers/:id` 里(D24/D27),
+而种子脚本直连 `upsertPaper`,什么都继承不到。RUNBOOK 恰恰让运维跑 `pnpm seed`。
+
+门搬进 `upsertPaper`:默认拒绝(抛 `PaperHasResponsesError`),要毁得显式传
+`allowDestroyingResponses`。接口那道检查保留(它先触发,回的是更友好的 409),
+种子脚本把异常翻译成三条出路:改题走教师端小题编辑、真要重建先备份再 `--force`、
+或换个 id 另存。`--force` 会先打印「将删掉 N 条作答」。
+
+一般化的教训:**守卫要放在真正做那件危险事的函数里,而不是放在「大家都会走的那个入口」** ——
+因为总会有第二个入口。这条和 D74(登出)、D78(轮询接口)是同一个形状的第三次:
+每一块都对,合起来漏了。
+
+## D80 同一份真题的两处转写,客观题答案键进 CI 对齐(2026-09-17)
+2025 真题在这个仓库里有两份转写:宿主项目的 `src/lib/data/exam-hubei-2025.ts`(作业模板)
+与 zsb-qbank 的 `seed/paper-2025-hubei-english.json`(题库种子)。两份都用来给学生判分。
+
+逐条对过一遍(20 道客观题 + 6 道连词成句):**只有第 22 题分叉** —— 宿主接受
+`wrong` / `wrongly`,zsb-qbank 只接受 `wrong`。原卷摘要行是
+"we often guess other's feeling ___",passage 用的是 wrong;`guess wrong` 与 `guess wrongly`
+都成立,**学生写 wrongly 在 zsb-qbank 会被判错**。按从宽统一(练习产品不该把答对的判错),
+宿主那份的答案键此前经过双通道独立解答比对,以它为准。
+
+分叉是静默的:两边各自的用例都绿。所以加 `src/lib/__tests__/exam-key-parity.test.ts`
+把两份的客观题答案键钉在一起,改一处另一处不跟就当场红。
+只对客观题:主观题两边一个是 rubric 文本、一个是 reference + keyPoints,形态不同,
+逐字比没有意义。
+
+顺带记一笔:原卷第 20 题摘要用 "villagers"、正文用 "villages"(原卷笔误),两份转写都照原样
+保留、不代师改题 —— 这不是分叉。

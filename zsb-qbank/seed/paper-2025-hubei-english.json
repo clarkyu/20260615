@@ -303,8 +303,8 @@
               "type": "fill",
               "score": 2,
               "content": { "blank": 22, "maxWords": 1 },
-              "answer": { "accepted": ["wrong"] },
-              "explanation": "对应原文 we often guess other's feelings wrong。",
+              "answer": { "accepted": ["wrong", "wrongly"] },
+              "explanation": "对应原文 we often guess other's feelings wrong；guess wrong 与 guess wrongly 都成立，两种都算对。",
               "knowledgeTags": ["细节定位", "原词复现"],
               "difficulty": 1,
               "contextSnippet": "Finding: A survey of 1,912 people found that we often guess other's feeling {{22}}."
