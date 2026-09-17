@@ -1,15 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { eq, inArray, asc } from 'drizzle-orm'
 import { getDb, type Db } from '@/lib/db/client'
 import { assignments, attempts, classMembers, classes, items, papers, responses, users } from '@/lib/db/schema'
 import { ruleDraftToPaper } from '@/lib/import/draft'
-import { upsertPaper } from '@/lib/db/import-paper'
+import { PaperHasResponsesError, responseCountOf, upsertPaper } from '@/lib/db/import-paper'
 import { assemblePaper } from '@/lib/db/queries'
 import { createClassWithCode } from '@/lib/db/assignments'
 import { submitAttempt, sweepOverdueExams } from '@/lib/db/submit'
 import { SUBMIT_GRACE_MS } from '@/lib/grading/deadline'
 import { loadAssignmentStats } from '@/lib/db/stats'
 import type { RuleDraft } from '@/lib/import/rules'
+import { paperSchema } from '@/lib/schema/paper'
 
 // 上线预演里手动抓到的问题,固化成用例 —— 以后不用靠人跑一遍才发现。
 // 需要已迁移 + 已种子的 DATABASE_URL。
@@ -222,5 +225,58 @@ describe.skipIf(!url)('预演回归 · 逾期未交的考试会被清扫掉(硬�
 
     expect((await status(inGrace)).status, '还在 60 秒宽限内的不能提前收走').toBe('in_progress')
     expect((await status(running)).status, '还在考的更不能动').toBe('in_progress')
+  })
+})
+
+// 种子脚本能不能删掉学生的卷子(D79)。
+//
+// 2026-09-17 实测:库里已有 5 条作答时跑一次 `pnpm seed`,作答变 0 行,attempt 还在 ——
+// 脚本照常打印「导入完成」「断言通过」。`responses.item_id` 对 `items.id` 是
+// ON DELETE CASCADE,整树重建一路级联;而「有作答就拒绝重建」那道门当时只写在
+// `PUT /api/teacher/papers/:id` 里,种子脚本直连 upsertPaper,什么都继承不到。
+//
+// 这里守的是那道门搬到了删数据的那一层:默认拒绝,要毁得显式说。
+describe.skipIf(!url)('预演回归 · 整卷重建不许悄悄删掉学生作答(D79)', () => {
+  let db: Db
+  const PID = `rehearsal-guard-${Date.now()}`
+  let userId = ''
+
+  // 从种子卷裁一份最小卷:结构由 paperSchema 保证合法,不用手搓一堆非空列
+  const seedPaper = paperSchema.parse(JSON.parse(readFileSync(join(__dirname, '..', '..', 'seed', 'paper-2025-hubei-english.json'), 'utf-8')))
+  const paper = (title: string) => {
+    const sec = structuredClone(seedPaper.sections[0]!)
+    sec.groups = [sec.groups[0]!]
+    sec.groups[0]!.items = [sec.groups[0]!.items[0]!]
+    return { ...structuredClone(seedPaper), id: PID, title, status: 'draft' as const, totalScore: sec.groups[0]!.items[0]!.score, sections: [sec] }
+  }
+
+  beforeAll(async () => {
+    db = getDb()
+    const [u] = await db.insert(users).values({ casdoorSub: `guard-${PID}`, name: '回归学生', role: 'student' }).returning({ id: users.id })
+    userId = u!.id
+  })
+  afterAll(async () => {
+    // attempts 对 papers 没有级联,得先删(作答已被 --force 那步连带删掉)
+    await db.delete(attempts).where(eq(attempts.paperId, PID))
+    await db.delete(papers).where(eq(papers.id, PID))
+    if (userId) await db.delete(users).where(eq(users.id, userId))
+  })
+
+  it('有作答时默认拒绝重建,且一行都不动;--force 那条路才会真的删', async () => {
+    await upsertPaper(db, paper('第一版'))
+    const it1 = await db.query.items.findFirst({ where: eq(items.paperId, PID) })
+    const [a] = await db.insert(attempts).values({ userId, paperId: PID, mode: 'practice' }).returning({ id: attempts.id })
+    await db.insert(responses).values({ attemptId: a!.id, itemId: it1!.id, answer: { type: 'text', value: '学生写的' }, clientUpdatedAt: new Date(), score: 2 })
+
+    // 没作答之前能重建(CI 与全新库走的就是这条路);有作答之后拒绝
+    await expect(upsertPaper(db, paper('第二版'))).rejects.toBeInstanceOf(PaperHasResponsesError)
+    expect(await responseCountOf(db, PID)).toBe(1)
+    // 拒绝是无损的:题面也没被改掉一半
+    expect((await db.query.papers.findFirst({ where: eq(papers.id, PID) }))?.title).toBe('第一版')
+
+    // 显式说了才毁 —— 这条同时证明上面的「拒绝」不是因为 upsertPaper 根本跑不动
+    await upsertPaper(db, paper('第三版'), { allowDestroyingResponses: true })
+    expect(await responseCountOf(db, PID)).toBe(0)
+    expect((await db.query.papers.findFirst({ where: eq(papers.id, PID) }))?.title).toBe('第三版')
   })
 })

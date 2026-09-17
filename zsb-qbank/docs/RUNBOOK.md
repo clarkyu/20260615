@@ -50,6 +50,14 @@ docker compose run --rm tools pnpm seed           # 导入 2025 真题种子,幂
 `tools` 是一次性运维容器(带 devDependencies 的构建层镜像),不随 `up` 常驻;
 运行镜像是精简的 standalone 产物,里面没有 `tsx`,所以迁移与种子走 `tools`。
 
+> **`pnpm seed` 的「幂等」只对没人作答时成立。** 它是整卷重建:删掉这份试卷的
+> 大题 / 题组 / 小题再建一遍,而 `responses.item_id` 是 ON DELETE CASCADE ——
+> 学生作答会跟着一起没。所以库里一旦有这份试卷的作答,种子脚本**直接拒绝**并给出提示(D79)。
+>
+> 要改题干或答案,用教师端「题库 → 小题编辑」:小题 id 不变,作答、任务、错题本都不受影响。
+> 真要整卷重建(这份试卷的数据本身是废的),先 `pnpm backup`,再 `pnpm seed --force`,
+> **作答会被删除且不可撤销**。想两版并存,就把种子文件里的 `id` 换一个另存。
+
 种子会导入 2025 年真题(1 卷 / 6 大题 / 8 题组 / 43 小题 / 总分 100,状态为「已发布」)。
 以后导入新卷走教师端「导入 Word 试卷」,新卷默认是草稿,教师在试卷页点「发布」后学生才看得到。
 
@@ -273,7 +281,7 @@ AI 队列是进程内轮询线程(每 2 秒一轮),重启 app 即可重新消费
 # 另起一个库,别碰生产
 createdb -h 127.0.0.1 -U zsb zsb_rehearsal
 export DATABASE_URL=postgres://zsb:<密码>@127.0.0.1:5432/zsb_rehearsal
-pnpm db:migrate && pnpm seed && pnpm seed     # 第二遍验幂等
+pnpm db:migrate && pnpm seed && pnpm seed     # 第二遍验幂等(空库上才谈得上幂等,见上)
 pnpm build && AUTH_DEV_LOGIN=true pnpm start
 ```
 
