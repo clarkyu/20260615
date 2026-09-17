@@ -388,3 +388,22 @@ http 上回传,必须显式取出来手动带。
 硬约束 8 的原文是「中文**界面**文案」,所以 `tests/ui/cjk-copy.test.ts` 只扫
 `src/app/**` 与 `src/components/**`,并排除 `console.*` 的日志行与注释。
 收窄之后是 18 处真违规,全部改为全角。
+
+## D59 CI 的 e2e 改跑生产 standalone 产物(2026-09-17)
+`next.config.ts` 是 `output: 'standalone'`,Dockerfile 里线上跑的是
+`node .next/standalone/server.js`;而 CI 与历次预演跑的都是 `pnpm start`(`next start`)——
+**测的和发的不是同一个产物**。next 自己在 standalone 模式下启动 `next start` 时就一直在警告
+这一点,只是没人当回事。
+2026-09-17 第一次按 Dockerfile 的布局把产物拼出来实跑:启动正常、`prompts/` 确实被
+`outputFileTracingIncludes` 带进去了、`instrumentation` 的 AI 队列与逾期清扫也照常注册、
+32 条 e2e 全过 —— **没有缺陷**,但这个口子该堵上。
+新增 `pnpm start:standalone`(`scripts/serve-standalone.mjs`:照 Dockerfile 把
+`.next/standalone` + `.next/static` + `public` 拼好再起),CI 的 e2e 步骤改用它。
+
+## D60 `start:standalone` 要自己把根目录的 .env 喂给子进程(2026-09-17)
+Next 按 **cwd** 找 `.env*`,而 `server.js` 必须以 `.next/standalone` 为 cwd 跑 —— 那里没有
+`.env.local`,于是本地 `pnpm start:standalone` 起来后每个请求都报「SESSION_SECRET 未配置」。
+生产不受影响(Docker 里变量由 compose 注入,本来就不靠 .env 文件),但本地与 `pnpm start`
+行为不一致是个绊脚石。脚本因此读项目根的 `.env` / `.env.local` 合并进子进程环境,
+**真实环境变量优先**(与 Next 的口径一致)。
+**不**把 `.env.local` 拷进 `.next/standalone/` —— 密钥不该落进构建产物。

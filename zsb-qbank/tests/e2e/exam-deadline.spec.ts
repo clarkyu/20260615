@@ -78,10 +78,18 @@ test('手机时钟快 30 分钟,倒计时仍按服务端走', async ({ page }) =
 
 test('到点自动交卷', async ({ page }) => {
   const attemptId = await startExam(page)
-  await shortenDeadline(attemptId, 12) // 先改再进页面:倒计时只在进页面时读一次 deadline
+  // 先在**正常时长**下把作答做完、确认真的同步上去了,再把截止时间挪近并刷新
+  // (倒计时在进页面时读一次 deadline,刷新即按新的走)。
+  // 这样「开页面 + 填空 + 等同步」就不用和 12 秒的倒计时赛跑 —— 机器一忙就会输,
+  // 2026-09-17 整套跑时实际偶发过一次(单跑与重跑都过,原因就在这个窗口太窄)。
   await page.goto(`/play/${attemptId}`)
   await page.waitForSelector('input[placeholder="输入英文"]', { timeout: 20_000 })
   await page.getByPlaceholder('输入英文').fill('biggest')
+  await expect(page.getByText('已保存')).toBeVisible({ timeout: 20_000 })
+
+  await shortenDeadline(attemptId, 12)
+  await page.reload()
+  await page.waitForSelector('input[placeholder="输入英文"]', { timeout: 20_000 })
 
   await page.waitForURL(/\/result\//, { timeout: 40_000 })
   expect(await attemptStatus(attemptId)).not.toBe('in_progress')
@@ -96,11 +104,15 @@ test.describe('弱网下的到点自动交卷', () => {
 
   test('保存作答一直失败,到点也必须把卷交掉', async ({ page }) => {
     const attemptId = await startExam(page)
-    await shortenDeadline(attemptId, 14)
+    // 同上:准备阶段不跟倒计时抢时间,作答同步好之后再把截止时间挪近并刷新。
     await page.goto(`/play/${attemptId}`)
     await page.waitForSelector('input[placeholder="输入英文"]', { timeout: 20_000 })
     await page.getByPlaceholder('输入英文').fill('biggest')
-    await expect(page.getByText('已保存')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('已保存')).toBeVisible({ timeout: 20_000 })
+
+    await shortenDeadline(attemptId, 14)
+    await page.reload()
+    await page.waitForSelector('input[placeholder="输入英文"]', { timeout: 20_000 })
 
     // 信号变差:此后保存作答一律失败。手动交卷会被拦下(见 offline.spec.ts),
     // 但**到点自动交卷不能被拦** —— 那时服务端过了 60 秒宽限本就不再收保存,

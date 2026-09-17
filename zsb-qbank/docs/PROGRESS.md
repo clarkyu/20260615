@@ -910,3 +910,49 @@ JSX 文本那 4 处手工改。教训同前两轮:批量改动要先想清楚"�
 至此九条硬约束**全部有了系统验证**:1(答案不外泄)、3(输入法)、5(触控/横滚)、
 6(计时)、7(断网不丢)、8(中文排版)都进了 CI;2(判分纯函数)、4(schema 单一来源)、
 9(不提交密钥)本来就有用例或由 .gitignore 与 CI 保证。
+
+## 生产 standalone 产物启动验证(2026-09-17)
+
+一直没人注意的一条:`next.config.ts` 是 `output: 'standalone'`,Dockerfile 里跑的是
+`node .next/standalone/server.js`,而 CI 与我做过的每一轮预演跑的都是 `pnpm start`。
+**真正要部署的那个产物,从来没被启动过一次**。next 自己在启动时就一直在警告:
+
+```
+⚠ "next start" does not work with "output: standalone" configuration.
+  Use "node .next/standalone/server.js" instead.
+```
+
+按 Dockerfile 的运行层布局(standalone + `.next/static` + `public`)拼出来实跑,逐条验:
+
+| 检查 | 结果 |
+| --- | --- |
+| `node server.js` 能否启动 | ✅ 113ms |
+| `prompts/` 有没有被 `outputFileTracingIncludes` 带进去 | ✅ 8 个提示词都在(注释没撒谎) |
+| `instrumentation` 的 AI 队列 + 逾期清扫还跑不跑 | ✅ 跑(我一度怀疑不跑,见下) |
+| `/api/health`、首页、`/offline`、`/sw.js`、`/_next/static/*` | ✅ 全 200 |
+| 整套 e2e 指向它 | ✅ **32 passed** |
+
+**没有缺陷。** 但口子该堵上:新增 `pnpm start:standalone`,CI 的 e2e 改用它(D59)——
+以后测的就是要发的那个产物。
+
+### 两次自我纠错
+
+1. 第一次启动时日志里没有 `[ai]` 那行,我一度怀疑 **instrumentation 在 standalone 里不跑**
+   (那会导致生产上主观题永远待评、逾期考试永不自动交卷)。不配 AI 重启一次,`[ai] 未配置…`
+   照常打印 —— 之前没看到只是因为那轮**配了** AI,而那句是"未配置"时才打的。怀疑不成立。
+2. 写完 `start:standalone` 本地一跑,每个请求都报「SESSION_SECRET 未配置」。**这不是生产缺陷,
+   是我脚本的坑**:Next 按 cwd 找 `.env*`,而 server.js 的 cwd 是 `.next/standalone`,那里没有
+   `.env.local`(生产靠 compose 注入变量,不受影响)。修法见 D60。
+   —— 顺带一提,前一轮用显式命令行变量起的那次 32/32 是真的,和这个坑不冲突。
+
+### 顺带治了一条自己埋的偶发
+
+整套 e2e 对 standalone 跑的第一遍,`exam-deadline` 的两条到点用例红了一次(单跑与之后两次
+整套重跑都过,**没能复现**,当时机器正同时在跑单测 + tsc + budget)。原因没坐实,但那两条
+用例(#487 我写的)确实把「开页面 + 填空 + 等同步」和 12 秒倒计时**放在同一个窗口里赛跑**,
+机器一忙就可能输。改成:先在正常时长下把作答做完、确认真的同步上去,**再**把截止时间挪近
+并刷新(倒计时进页面时读一次 deadline)。准备阶段不再和时钟抢,等待时长不变。
+改完重做变异验证:去掉到点自动交卷,两条照样变红 —— 没把用例改软。
+
+门禁:lint / tsc 干净;`pnpm test` **489 passed**;首屏预算 `/play` **145.9 KB / 200 KB**;
+`pnpm test:e2e` **32 passed**(对 standalone 产物跑的)。

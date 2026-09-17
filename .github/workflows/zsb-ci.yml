@@ -54,14 +54,19 @@ jobs:
       - run: pnpm build
       # 性能预算(SPEC §7.7 / M7):学生端路由首屏 JS ≤ 200 KB(gzip)
       - run: pnpm budget
-      # 移动视口 e2e(M3 接入,docs/DECISIONS.md D11):对 next start 起的真服务跑
-      # 模考闭环冒烟。开发登录仅本 job 打开;数据库就是上面已种子的服务容器。
+      # 移动视口 e2e(M3 接入,docs/DECISIONS.md D11):开发登录仅本 job 打开;
+      # 数据库就是上面已种子的服务容器。
+      #
+      # 跑的是 **output: standalone 产物**(node .next/standalone/server.js),
+      # 也就是 Dockerfile 里线上真正在跑的那个东西 —— 不是 `next start`。
+      # 两者不是同一个产物,next 自己在 standalone 模式下也会警告这一点;
+      # 以前 CI 测 `next start`、线上发 standalone,等于测的和发的不是一回事(D59)。
       - run: pnpm exec playwright install --with-deps chromium
-      - name: e2e
+      - name: e2e(对生产 standalone 产物)
         env:
           AUTH_DEV_LOGIN: 'true'
           E2E_BASE_URL: http://localhost:3000
         run: |
-          pnpm start &
+          pnpm start:standalone &
           for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
           pnpm test:e2e
