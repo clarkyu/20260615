@@ -1077,3 +1077,75 @@ CSV 导出(M5 验收「Excel 直接打开且中文不乱码」)的**接线**也�
 - `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` **503 passed**
 - `bash -n scripts/verify-restore.sh` 通过;演练脚本本地实跑 ✓
 - 本轮不动 `src/`,构建与首屏预算不受影响
+
+## Docker 部署链路首次实测:发的那个镜像,以前构建不出来(2026-09-17)
+
+#492 把 CI 的 e2e 从 `next start` 改成了真正的 standalone 产物。但再往上一层还有个口子:
+**产物是被 `Dockerfile` 装进镜像发出去的,而这个 Dockerfile 从没被构建过一次** ——
+CI 不碰它,只在注释里提到过。
+
+第一次真构建,当场两条硬失败。
+
+### 缺陷一:基础镜像浮动,`postgresql16-client` 已经没了
+
+`node:22-alpine` 是浮动 tag,现在滚到了 **Alpine 3.24**,而 `postgresql16-client`
+在 3.24 里已经不存在(查 alpine 包索引:v3.24 只剩 17 / 18,v3.22 才有 16)。
+`apk add` 直接失败,**镜像根本构建不出来**。
+
+> 这里差点被自己环境骗了:第一次构建的日志里 `tini` 也报「no such package」,而 tini 在
+> alpine 里显然是有的。往上看两行是 `TLS: server certificate not trusted` ——
+> 是本环境的拦截代理让 apk **根本没下到索引**,于是所有包都「不存在」。
+> 真问题只有 `postgresql16-client` 一个,这是去查包索引查实的,不是照着日志下的结论。
+
+修法:`ARG NODE_IMAGE=node:22-alpine3.22` 钉住。顺带把 pg_dump 大版本和 `postgres:16`
+服务端对齐,升 Alpine 改一行就行(D67)。
+
+### 缺陷二:Docker 里装依赖用的根本不是 CI 验过的那个 pnpm
+
+`package.json` 没有 `packageManager` 字段,`corepack enable` 就去下当时最新的 pnpm ——
+今天是 **12.4.2**,它对 ignored build scripts 是硬报错(`ERR_PNPM_IGNORED_BUILDS`),
+构建当场挂掉。而 CI 用的是 `version: 10`、本地是 10.33.0、lockfile 是 v9:**三处不一致**。
+加上 `"packageManager": "pnpm@10.33.0"` 统一(D70)。
+
+### 修完之后:整条部署链路按 RUNBOOK 走通
+
+| 步骤 | 结果 |
+| --- | --- |
+| `docker build` | ✅ 通过(这个镜像第一次被构建出来) |
+| `docker compose run --rm tools pnpm db:migrate` | ✅ 迁移完成 |
+| `pnpm seed` ×2 | ✅ 幂等,断言 1 卷 / 6 大题 / 8 题组 / 43 小题 / 总分 100 |
+| `docker compose up -d app` | ✅ `health=healthy`(HEALTHCHECK 真的在工作) |
+| 容器用户 | ✅ `uid=1001(nextjs)`,非 root |
+| `/api/health`、首页、`/sw.js` | ✅ 全 200 |
+| `prompts/` | ✅ 8 个提示词都在镜像里 |
+
+### 顺手治的两条
+
+**运行镜像塞了跑不了的东西。** 运行层拷了 `drizzle/ seed/ src/lib/** tsconfig.json`,
+理由写的是「迁移与种子在容器里跑」——**那句话是错的**:运行镜像的 node_modules 是 standalone
+精简子集(只有 next / pg / react / typescript),没有 tsx 也没有 pnpm。迁移种子实际跑在
+compose 的 `tools` 服务里。那几行去掉了,源码也不再进生产镜像(D68)。
+
+**备份要求宿主机有 pg_dump,而 RUNBOOK 只要求宿主机有 Docker。** 这是个真矛盾:
+备份 cron 在宿主机上跑 `backup.sh`,可 `pg_dump` 从没被列为前提,更没要求 ≥ 16。
+改成在容器里跑 —— 镜像里那份正好是 16.15。为此补了 `bash`(alpine 默认没有,
+实测 `env: can't execute 'bash'`),compose 把 `./backups` 挂进去,文件照样落宿主机(D69)。
+
+实测确认(**先故意不 chown 验证坑是真的,再按修法验证解法有效**):
+- 目录由 docker 代建 → `root:root` → 容器 uid 1001 写入 `Permission denied` ✅ 复现
+- `mkdir -p backups && sudo chown 1001:1001 backups` 之后 → 备份成功,48K,宿主机可见,权限 0600 ✅
+- **`verify-restore.sh` 在生产容器里直接跑通**:16 张表、62 行逐表一致 ✅
+
+宿主机除了 Docker 什么都不用装 —— 这才和 RUNBOOK 开头那句话对得上。
+
+### 进 CI
+
+新增「构建并运行生产镜像」步骤:`docker build` → 跑起来 → 健康检查 → 数提示词 →
+**在容器里跑一次 `backup.sh`**(少了 bash 或 pg 工具当场红)。
+e2e 测的是 standalone 产物,这一步测的是装着它的那个镜像。
+
+### 门禁
+
+- `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` **503 passed**
+- `docker build` + compose 全链路本地实跑 ✓
+- 本轮不动 `src/`,首屏预算不受影响

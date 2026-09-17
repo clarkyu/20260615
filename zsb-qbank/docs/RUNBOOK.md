@@ -32,6 +32,7 @@ cp .env.example .env
 ### 2. 起服务
 
 ```bash
+mkdir -p backups && sudo chown 1001:1001 backups   # 备份目录,容器以 uid 1001 写它(见「备份与恢复」)
 docker compose up -d --build          # db + app
 docker compose ps                     # app 应为 healthy
 curl -s localhost:3000/api/health     # {"ok":true,...}
@@ -129,22 +130,34 @@ server {
 
 ### 备份与恢复
 
+备份**跑在 app 容器里**,不在宿主机上 —— 本机只要求装了 Docker(见开头),不保证有
+`pg_dump`,更不保证是 ≥ 16 的那版;而镜像里那份正好是 16,与 `postgres:16` 服务端对齐。
+`./backups` 由 compose 挂进容器的 `/app/backups`,所以文件照样落在宿主机上。
+
+**首次要先把目录交给容器用户**(容器以 uid 1001 运行;目录若由 docker 代建会是 root 所有,
+写不进去,报 `Permission denied`):
+
 ```bash
-# 手动备份(默认 ./backups,保留 14 天)
-./scripts/backup.sh
-
-# cron:每天 03:10
-10 3 * * * cd /srv/zsb/zsb-qbank && ./scripts/backup.sh >> /var/log/zsb-backup.log 2>&1
-
-# 恢复演练:一条命令走完 备份 → 恢复到临时空库 → 逐表比对 → 删掉临时库
-./scripts/verify-restore.sh
-
-# 手动恢复到指定库(务必是另一个库,别直接盖生产)
-createdb -h 127.0.0.1 -U zsb zsb_restore_test
-./scripts/restore.sh backups/zsb-20260914-031000.dump postgres://zsb:<密码>@127.0.0.1:5432/zsb_restore_test
+mkdir -p backups && sudo chown 1001:1001 backups
 ```
 
-**每季度(或每次改了 schema 之后)跑一次 `./scripts/verify-restore.sh`** ——
+```bash
+# 手动备份(落到 ./backups,保留 14 天)
+docker compose exec -T app ./scripts/backup.sh
+
+# cron:每天 03:10
+10 3 * * * cd /srv/zsb/zsb-qbank && docker compose exec -T app ./scripts/backup.sh >> /var/log/zsb-backup.log 2>&1
+
+# 恢复演练:一条命令走完 备份 → 恢复到临时空库 → 逐表比对 → 删掉临时库
+docker compose exec -T app ./scripts/verify-restore.sh
+
+# 手动恢复到指定库(务必是另一个库,别直接盖生产)
+docker compose exec -T app psql "$DATABASE_URL" -c 'create database zsb_restore_test'
+docker compose exec -T app ./scripts/restore.sh backups/zsb-20260914-031000.dump \
+  postgres://zsb:<密码>@db:5432/zsb_restore_test
+```
+
+**每季度(或每次改了 schema 之后)跑一次上面那条恢复演练** ——
 没验证过的备份等于没有备份。它跑的是真正的 `backup.sh` / `restore.sh`,建一个
 `<库名>_restore_check` 临时库灌进去、**把所有表的行数逐张比对**、再把临时库删掉,
 全程不碰源库;有一张对不上就非零退出。需要该实例上的 CREATEDB 权限。
