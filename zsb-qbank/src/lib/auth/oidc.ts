@@ -247,3 +247,94 @@ export function safeReturnTo(raw: string | null | undefined): string | undefined
 export function landingFor(role: SessionUser['role'], returnTo?: string | null): string {
   return safeReturnTo(returnTo) ?? (role === 'student' ? '/' : '/teacher')
 }
+
+// ── 登出(OIDC RP-Initiated Logout 1.0)────────────────────────────────────────
+// 只清本站会话是不够的:身份服务器那边的会话还在,学生点「退出」再点「登录」,
+// Casdoor 不会再问一次密码,直接把同一个人登回来 —— 在共用手机 / 机房电脑上等于没退出。
+//
+// 登出端点不写死。授权 / token / userinfo 三个端点是按 Casdoor 的约定拼的,但登出这个
+// 没有同等稳定的承诺,而发现文档是 OIDC 的标准:向 issuer 要一次,拿 end_session_endpoint。
+// 拿不到就退回「只清本地会话」—— 身份服务器不可达绝不能让人退不出来。
+
+export const discoveryEndpoint = (cfg: OidcConfig) => `${cfg.issuer}/.well-known/openid-configuration`
+
+/**
+ * id_token 要存进会话 Cookie,登出时才能当 id_token_hint 用。会话 Cookie 有 4KB 上限,
+ * 塞一个超大的 id_token 会让**登录**那一步就写不进 Cookie —— 为了登出方便把登录搞坏不划算。
+ * 超限就不存:登出照常,只是少带一个 hint。
+ */
+export const ID_TOKEN_HINT_MAX = 2048
+export function idTokenForHint(idToken: string | undefined | null): string | undefined {
+  const t = idToken?.trim()
+  return t && t.length <= ID_TOKEN_HINT_MAX ? t : undefined
+}
+
+/**
+ * 登出端点必须与 issuer 同源。发现文档确实来自 issuer 本身(TLS),但这个地址会被我们
+ * 原样 302 给学生的浏览器 —— 配错一个字就是一个挂在学校域名上的开放重定向。
+ * 常见 IdP(Casdoor / Keycloak / Auth0)的登出端点都与 issuer 同源,这道门不挡正常配置。
+ */
+function sameOriginAsIssuer(endpoint: string, cfg: OidcConfig): boolean {
+  try {
+    return new URL(endpoint).origin === new URL(cfg.issuer).origin
+  } catch {
+    return false
+  }
+}
+
+// 发现文档按 issuer 缓存在进程内。**只缓存取到的结果**:身份服务器临时抽风时不把
+// 「没有登出端点」钉死一整个进程的寿命,下次登出会再试一次。
+const endSessionCache = new Map<string, string>()
+
+/** 仅供测试:清掉发现文档缓存。 */
+export function resetDiscoveryCache(): void {
+  endSessionCache.clear()
+}
+
+/** 取 end_session_endpoint;任何一步不顺(不可达、超时、没公布、非同源)都回 null,由上层退回本地登出。 */
+export async function endSessionEndpoint(cfg: OidcConfig, fetchImpl: typeof fetch = fetch, timeoutMs = 3_000): Promise<string | null> {
+  const cached = endSessionCache.get(cfg.issuer)
+  if (cached) return cached
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  let doc: { end_session_endpoint?: unknown }
+  try {
+    const res = await fetchImpl(discoveryEndpoint(cfg), { headers: { accept: 'application/json' }, signal: ctrl.signal })
+    if (!res.ok) {
+      console.warn(`[auth] 取发现文档失败(HTTP ${res.status}),退回本地登出`)
+      return null
+    }
+    doc = (await res.json()) as { end_session_endpoint?: unknown }
+  } catch (e) {
+    console.warn(`[auth] 取发现文档失败(${e instanceof Error && e.name === 'AbortError' ? '超时' : '连不上'}),退回本地登出`)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const endpoint = typeof doc?.end_session_endpoint === 'string' ? doc.end_session_endpoint.trim() : ''
+  if (!endpoint) {
+    console.warn('[auth] 身份服务器没有公布 end_session_endpoint,退回本地登出')
+    return null
+  }
+  if (!sameOriginAsIssuer(endpoint, cfg)) {
+    console.warn('[auth] end_session_endpoint 与 issuer 不同源,不跳转,退回本地登出')
+    return null
+  }
+  endSessionCache.set(cfg.issuer, endpoint)
+  return endpoint
+}
+
+/**
+ * 拼登出跳转地址。`client_id` 与 `id_token_hint` 同时带:规范允许(OP 须校验两者一致),
+ * 而 `post_logout_redirect_uri` 要被采纳,OP 通常得靠其中之一认出是哪个应用。
+ * 端点自带查询串时只追加、不覆盖。
+ */
+export function buildEndSessionUrl(endpoint: string, cfg: OidcConfig, args: { idToken?: string; postLogoutRedirectUri: string }): string {
+  const url = new URL(endpoint)
+  url.searchParams.set('client_id', cfg.clientId)
+  url.searchParams.set('post_logout_redirect_uri', args.postLogoutRedirectUri)
+  if (args.idToken) url.searchParams.set('id_token_hint', args.idToken)
+  return url.toString()
+}

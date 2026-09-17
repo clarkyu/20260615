@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { oidcConfigured } from '@/lib/auth/oidc'
 import { LoginButton } from '@/components/auth/LoginButton'
+import { LogoutButton } from '@/components/auth/LogoutButton'
 import { StartAttemptButton, DevLoginButton } from '@/components/home/StartPractice'
 import { AssignmentItem, JoinClassForm, type AssignmentCard } from '@/components/home/Assignments'
 
@@ -55,10 +56,15 @@ export default async function HomePage() {
 
   return (
     <main className="flex flex-1 flex-col gap-4 px-4 py-6">
-      <div>
-        <h1 className="text-xl font-bold">专升本英语题库</h1>
-        <p className="mt-1 text-neutral-500">从微信群链接进来就能做题：作答、训练、模考。</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold">专升本英语题库</h1>
+          <p className="mt-1 text-neutral-500">从微信群链接进来就能做题：作答、训练、模考。</p>
+        </div>
+        {/* 登出入口只放首页:作答页上一个误触就是把人踢出考试。 */}
+        {user ? <LogoutButton /> : null}
       </div>
+      {user ? <p className="-mt-2 truncate text-sm text-neutral-500">当前账号：{user.name}</p> : null}
 
       {!user ? (
         <div className="rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">

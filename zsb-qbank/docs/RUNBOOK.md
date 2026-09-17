@@ -99,7 +99,9 @@ server {
 
 1. Casdoor → 应用 → 添加:
    - **Redirect URLs** 填 `https://zsb.example.com/api/auth/callback`(与 `CASDOOR_REDIRECT_URI` 或
-     `APP_ORIGIN` 推出的地址必须完全一致)
+     `APP_ORIGIN` 推出的地址必须完全一致);**再加一条 `https://zsb.example.com/`** ——
+     登出后由 Casdoor 回跳本站首页(`post_logout_redirect_uri`),这一条不加的话,学生点「退出登录」
+     会停在 Casdoor 的页面上下不来(**会话确实已经退掉了**,只是回不到本站)
    - **Grant types** 勾 `authorization_code`;**Token format** 选 JWT;scope 至少含 `openid profile`
 2. `.env` 填 `CASDOOR_ISSUER`(Casdoor 根地址)、`CASDOOR_CLIENT_ID`、`CASDOOR_CLIENT_SECRET`,
    并确认 `APP_ORIGIN` 是对外地址。
@@ -111,7 +113,14 @@ server {
 
 登录流程是授权码 + PKCE:`/api/auth/login` 生成 state / nonce / code_verifier 存进加密会话并跳转,
 `/api/auth/callback` 核对 state、用授权码换 token、校验 `id_token` 的 iss / aud / exp / nonce,
-再按组映射角色建会话。系统只存 sub、姓名、角色(§9.5 个人信息最小化),不存手机号与邮箱。
+再按组映射角色建会话。系统只存 sub、姓名、角色(§9.5 个人信息最小化),不存手机号与邮箱;
+另存一份原始 `id_token` 仅供登出时当 `id_token_hint`(加密 Cookie 内,登出即销毁,见 D74)。
+
+**登出**:学生端首页、教师端顶栏各有入口。先清本站会话,再向 `CASDOOR_ISSUER` 的
+`/.well-known/openid-configuration` 要 `end_session_endpoint` 并跳过去,把 Casdoor 那边的会话
+一并结束 —— 不这么做的话,共用手机上点「退出」再点「登录」会不问密码直接登回同一个人。
+Casdoor 不可达、没公布该端点、或端点与 issuer 不同源时,**自动退回只清本站会话**,人照样退得出来;
+排障看服务端日志里的 `[auth] 取发现文档失败`。
 
 排查:登录失败会回到 `/teacher/login` 并在页面上显示中文原因(如「audience 不匹配」= client id 填错、
 「nonce 不匹配」= 会话过期重新点一次);服务端日志只记 `[auth] casdoor 登录成功 role=…`,不记姓名与 sub。
