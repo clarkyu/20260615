@@ -70,7 +70,12 @@ export default async function TeacherPaperPage({ params }: { params: Promise<{ i
                         <td className="w-16 py-2 pr-2 text-neutral-500">{ITEM_TYPE_LABEL[it.type] ?? it.type}</td>
                         <td className="py-2 pr-2">
                           {itemPreview(it.type, it.content, it.contextSnippet)}
-                          <ItemTools itemId={it.id} type={it.type} distractors={Array.isArray((it.content as { distractors?: unknown }).distractors) ? ((it.content as { distractors: string[] }).distractors) : undefined} />
+                          <ItemTools
+                            itemId={it.id}
+                            type={it.type}
+                            distractors={Array.isArray((it.content as { distractors?: unknown }).distractors) ? ((it.content as { distractors: string[] }).distractors) : undefined}
+                            hasExplanation={!!it.explanation}
+                          />
                         </td>
                         <td className="w-1/3 py-2 pr-2 text-emerald-700 dark:text-emerald-300">{answerText(it.type, it.answer)}</td>
                         <td className="w-1/4 py-2 text-xs text-neutral-500">{it.explanation ?? ''}</td>
