@@ -439,3 +439,65 @@ middleware 跑在 edge 运行时,拿不到解密后的会话 —— 也不该为
 免得断言变成「这个接口对谁都 403」)、读请求不受影响、超过 120/分回 429、
 **一个人被限速不连累别人**(全站共用一个桶会让一个学生的死循环把全班锁在门外)。
 实测结论:两道门在产物上都是真的在把门,middleware 的模块级计数也确实跨请求留住了。
+
+## D64 恢复演练做成一条命令,并进 CI(2026-09-17)
+`backup.sh` / `restore.sh` 从 M7 写出来就摆在那儿,**到 2026-09-17 一次都没被跑过** ——
+没有测试、CI 不碰、历次预演也没走,而 M7 的验收标准白纸黑字写着「备份脚本可恢复到空库」。
+一个存着全班成绩的系统,备份恢复不了是最坏的那种静默失败:定时任务每天照常产出 `.dump`,
+谁也不知道它能不能用,直到真出事那天。
+实测结论:**能用**。备份 72K、恢复到空库 exit 0、16 张表逐表行数一致、drizzle 迁移账本也在,
+应用直接跑在恢复出来的库上,整套 40 条 e2e 全过。
+但口子要堵上,于是有了 `scripts/verify-restore.sh`:跑**真正的那两个脚本**,建一个
+`<库名>_restore_check` 临时库,**一条 SQL 数完所有表**逐张比对,再删掉临时库,全程不碰源库。
+用 `query_to_xml` 动态枚举表,是为了**以后新加的表自动纳入演练**,不用回来改这个脚本。
+CI 把它放在 e2e **之后**:那时库里才有 attempts / responses,比对才盖得到真正要命的表。
+
+## D65 演练脚本拒绝对空库跑(2026-09-17)
+空库比空库永远相等 —— 那种「通过」什么也没证明,正是 #489 踩过的空断言。
+所以 `verify-restore.sh` 先要求源库至少 5 张表、总行数 > 0,否则**拒绝跑并非零退出**,
+而不是打个勾。变异验证:备份漏掉 `responses`(学生作答那张)→ 红;恢复改成 `--schema-only`
+(只建表不灌数据)→ 逐表 0 行被 diff 揪出来 → 红;对着空库跑 → 拒跑。
+
+## D66 备份只备数据库就是完整的(2026-09-17)
+顺带确认过一件不该假设的事:应用**什么都不往磁盘写**。上传的 docx 在内存里转成 Markdown
+就进 `ai_jobs`,没有落盘目录、没有对象存储。所以 PostgreSQL 就是全部状态,
+`pg_dump` 一份就是完整备份 —— 不存在「库恢复了但文件没了」那种半残局面。
+
+## D67 基础镜像钉到具体 Alpine,且 CI 每次真构建镜像(2026-09-17)
+`Dockerfile` 只在 CI 的注释里被提到过,**从没被构建过一次**。2026-09-17 第一次真构建,
+当场两条都是硬失败:
+1. `node:22-alpine` 是浮动 tag,那时已滚到 **Alpine 3.24**,而 `postgresql16-client`
+   在 3.24 里已经没有了(只剩 17 / 18)——`apk add` 直接失败,**镜像根本构建不出来**。
+2. `corepack enable` 后没有 `packageManager` 可依,装的是**当时最新的 pnpm**(12.4.2),
+   它对 ignored build scripts 是硬报错(`ERR_PNPM_IGNORED_BUILDS`);
+   即便不报错,Docker 里装依赖用的也不是 CI 与 lockfile 验过的那个 pnpm(见 D70)。
+修法:`ARG NODE_IMAGE=node:22-alpine3.22` 钉住(3.22 里 `postgresql16-client` 还在,
+pg_dump 大版本还正好和 `postgres:16` 服务端对齐),升 Alpine 就改这一行。
+更要紧的是 **CI 每次真构建镜像并把它跑起来**(健康检查 + 提示词数量 + 容器内跑一次 backup.sh):
+e2e 测的是 standalone 产物,这一步测的是**装着它的那个镜像**。#492 堵的是「测的和发的不是一个产物」,
+这一步堵的是它上面那一层 —— 发的那个东西压根构建不出来。
+
+## D68 运行镜像不带那些 tsx 才用得上的东西(2026-09-17)
+运行层原本还拷了 `drizzle/ seed/ src/lib/db src/lib/schema tsconfig.json`,
+注释给的理由是「迁移与种子在容器里跑」。**那句话是错的**:运行镜像的 node_modules 是
+standalone 的精简子集(只有 next / pg / react / typescript),没有 tsx 也没有 pnpm,
+`scripts/*.ts` 在那儿一行都跑不了 —— 迁移与种子实际跑在 `docker-compose.yml` 的 `tools` 服务
+(target: builder,带完整 devDependencies)。所以那几行是死重,还把源码塞进了生产镜像,已去掉。
+`scripts/` 留着:`backup.sh` / `restore.sh` / `verify-restore.sh` 是纯 bash + pg 工具,
+在运行镜像里确实能跑(见 D69)。
+
+## D69 备份跑在容器里,不在宿主机上(2026-09-17)
+RUNBOOK 开头写的是「一台装了 Docker 与现成反向代理的机器即可」,可它的备份 cron 却在**宿主机**上
+跑 `backup.sh` —— 那要求宿主机有 `pg_dump` 且 ≥ 16,这个前提从没被写出来。
+改成在 app 容器里跑:镜像里那份 pg_dump 正好是 16.15,和 `postgres:16` 服务端对齐,宿主机除了
+Docker 什么都不用装。为此运行层补了 `bash`(alpine 默认没有,少了它脚本一跑就是
+`env: can't execute 'bash'` —— 实测确认过),compose 把 `./backups` 挂到 `/app/backups`,
+文件照样落在宿主机上。
+一个实测过的坑写进了 RUNBOOK:目录若由 docker 代建是 `root:root`,而容器以 uid 1001 运行,
+直接备份会 `Permission denied`;首次要 `mkdir -p backups && sudo chown 1001:1001 backups`。
+
+## D70 用 `packageManager` 字段钉 pnpm 版本(2026-09-17)
+`zsb-qbank/package.json` 没有 `packageManager`,于是 Docker 里的 `corepack enable` 会去下
+当时最新的 pnpm,而 CI 用的是 `pnpm/action-setup@v6` 的 `version: 10`、lockfile 是 v9 ——
+**三处用的不是同一个包管理器**。加上 `"packageManager": "pnpm@10.33.0"` 后三处一致。
+CI 的 action-setup 读的是**仓库根**的 `package.json`(不是子项目的),所以不会和 `version: 10` 打架。

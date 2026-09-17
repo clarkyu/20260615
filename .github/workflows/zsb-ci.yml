@@ -70,3 +70,31 @@ jobs:
           pnpm start:standalone &
           for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
           pnpm test:e2e
+      # 恢复演练(SPEC §10 M7 验收「备份脚本可恢复到空库」)。
+      # 放在 e2e 之后:这时库里才有作答与判分结果,演练才盖得到 attempts / responses
+      # 这些真正要命的表 —— 只有种子数据的话,它们是空的,比对等于没比。
+      # 跑的是真正的 backup.sh / restore.sh,建临时库比对完再删,不碰 CI 的源库。
+      - name: 恢复演练(备份真能救回来)
+        run: |
+          pg_dump --version
+          ./scripts/verify-restore.sh
+      # 真构建生产镜像并把它跑起来(SPEC §9.6)。
+      # 2026-09-17 之前 CI 从没构建过 Dockerfile,结果它**坏了都没人知道**:
+      # 浮动的 node:22-alpine 滚到 Alpine 3.24 后 postgresql16-client 已不存在,apk 直接失败;
+      # 而 corepack 没有 packageManager 可依,装的是当时最新的 pnpm(与 lockfile 对不上)。
+      # 上面的 e2e 测的是 standalone 产物,这一步测的是**装着它的那个镜像**(D67)。
+      # 端口用 3100,避开 e2e 那个还在后台跑的 3000。
+      - name: 构建并运行生产镜像
+        run: |
+          docker build -t zsb-qbank:ci .
+          docker run -d --name zsb-app --network host \
+            -e DATABASE_URL="$DATABASE_URL" -e SESSION_SECRET="$SESSION_SECRET" \
+            -e PORT=3100 zsb-qbank:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3100/api/health && break; sleep 2; done
+          curl -sf http://127.0.0.1:3100/api/health
+          # 提示词被 outputFileTracingIncludes 带进镜像了吗(少了主观题就没法评)
+          test "$(docker exec zsb-app sh -c 'ls prompts | wc -l')" -ge 8
+          # 运维脚本在镜像里真能跑吗(bash + pg 工具都得在,少 bash 就是 can't execute 'bash')
+          docker exec -e BACKUP_DIR=/tmp/bk zsb-app ./scripts/backup.sh
+          docker logs zsb-app | tail -5
+          docker rm -f zsb-app

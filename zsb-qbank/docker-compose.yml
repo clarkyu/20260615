@@ -53,6 +53,11 @@ services:
       TZ: Asia/Shanghai
     ports:
       - '127.0.0.1:3000:3000'
+    volumes:
+      # 备份落到宿主机的 ./backups(容器里 BACKUP_DIR 默认就是 /app/backups)。
+      # 首次要先建好并交给容器用户:mkdir -p backups && sudo chown 1001:1001 backups
+      # —— 目录若由 docker 代建会是 root 所有,容器以 uid 1001 运行,写不进去。
+      - ./backups:/app/backups
 
   # 迁移 / 种子跑在带 devDependencies(tsx)的构建层镜像里:运行镜像是精简的 standalone,没有 tsx。
   #   docker compose run --rm tools pnpm db:migrate

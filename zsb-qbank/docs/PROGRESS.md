@@ -1024,3 +1024,128 @@ SPEC §9.5 写的是「接口按用户限速(写接口每分钟 120 次)」,全�
 
 SPEC §9.5 这一段到此逐条对完了(答案不出服务端、计时以服务端为准、Cookie 三件套、
 来源校验、按用户限速、个人信息最小化、密钥只来自环境变量)。
+
+## 恢复演练:备份到底能不能救命(2026-09-17)
+
+M7 的验收标准里有一条「备份脚本可恢复到空库」。翻了一遍:`scripts/backup.sh` 与
+`scripts/restore.sh` 从写出来到今天,**一次都没被跑过** —— 没有测试、CI 不碰、
+历次预演也没走。对一个存着全班考试成绩的系统,这是最坏的那种静默失败:定时任务每天照常
+产出 `.dump`,谁也不知道它能不能用,直到真出事那天。
+
+### 实测:能用,没有缺陷
+
+跑的是真正的那两个脚本,不是等效命令:
+
+| 检查 | 结果 |
+| --- | --- |
+| `backup.sh` 对真数据(16 表 / 368 行) | ✅ 72K,`.part` 原子换名 |
+| `restore.sh` 恢复到**空库**(`--clean --if-exists --exit-on-error` 是最容易在空库上炸的组合) | ✅ exit 0 |
+| 16 张表逐表行数 | ✅ 全对 |
+| drizzle 迁移账本 / 扩展 / 序列 | ✅ 都在,`__drizzle_migrations` 4 条一致 |
+| 序列撞号风险 | 不存在 —— 业务表全用 UUID,唯一的序列是迁移账本的 |
+| **应用跑在恢复出来的库上** | ✅ 整套 **40 条 e2e 全过** |
+
+最后一行才是「可恢复」的真正含义:行数对只是必要条件,应用能不能用才是验收。
+
+还确认了一件不该假设的事:应用**什么都不往磁盘写**(上传的 docx 在内存里转成 Markdown 就进
+`ai_jobs`,没有落盘目录、没有对象存储)。所以 PostgreSQL 就是全部状态,`pg_dump` 一份就是
+完整备份 —— 不存在「库恢复了但文件没了」那种半残局面(D66)。
+
+### 堵口子:`scripts/verify-restore.sh`
+
+一条命令走完 备份 → 建临时空库 → 恢复 → **逐表比对** → 删临时库,全程不碰源库。
+用 `query_to_xml` 动态枚举所有表,**以后新加的表自动纳入演练**。
+CI 放在 e2e **之后**:那时库里才有 attempts / responses,比对才盖得到真正要命的表。
+RUNBOOK §二 也改了 —— clark 在服务器上每季度(或改完 schema)跑一次。
+
+变异验证:
+
+| 变异 | 结果 |
+| --- | --- |
+| 备份漏掉 `responses`(学生作答那张) | ✅ 红 |
+| 恢复改成 `--schema-only`(只建表不灌数据) | ✅ 逐表 0 行被 diff 揪出来 |
+| 对着**空库**演练 | ✅ **拒跑**,不给空对空的假绿灯(D65) |
+
+### 顺带查清、无需改动的一条
+
+CSV 导出(M5 验收「Excel 直接打开且中文不乱码」)的**接线**也查了,这是和 #493 同一类问题:
+两个导出路由都真的用了 `toCsvWithBom` + `contentDisposition` + `charset=utf-8`,
+`csv.ts` 的 BOM / CRLF / 引号转义 / 公式注入防护也都有单测。**没有缺口,不开单。**
+
+### 门禁
+
+- `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` **503 passed**
+- `bash -n scripts/verify-restore.sh` 通过;演练脚本本地实跑 ✓
+- 本轮不动 `src/`,构建与首屏预算不受影响
+
+## Docker 部署链路首次实测:发的那个镜像,以前构建不出来(2026-09-17)
+
+#492 把 CI 的 e2e 从 `next start` 改成了真正的 standalone 产物。但再往上一层还有个口子:
+**产物是被 `Dockerfile` 装进镜像发出去的,而这个 Dockerfile 从没被构建过一次** ——
+CI 不碰它,只在注释里提到过。
+
+第一次真构建,当场两条硬失败。
+
+### 缺陷一:基础镜像浮动,`postgresql16-client` 已经没了
+
+`node:22-alpine` 是浮动 tag,现在滚到了 **Alpine 3.24**,而 `postgresql16-client`
+在 3.24 里已经不存在(查 alpine 包索引:v3.24 只剩 17 / 18,v3.22 才有 16)。
+`apk add` 直接失败,**镜像根本构建不出来**。
+
+> 这里差点被自己环境骗了:第一次构建的日志里 `tini` 也报「no such package」,而 tini 在
+> alpine 里显然是有的。往上看两行是 `TLS: server certificate not trusted` ——
+> 是本环境的拦截代理让 apk **根本没下到索引**,于是所有包都「不存在」。
+> 真问题只有 `postgresql16-client` 一个,这是去查包索引查实的,不是照着日志下的结论。
+
+修法:`ARG NODE_IMAGE=node:22-alpine3.22` 钉住。顺带把 pg_dump 大版本和 `postgres:16`
+服务端对齐,升 Alpine 改一行就行(D67)。
+
+### 缺陷二:Docker 里装依赖用的根本不是 CI 验过的那个 pnpm
+
+`package.json` 没有 `packageManager` 字段,`corepack enable` 就去下当时最新的 pnpm ——
+今天是 **12.4.2**,它对 ignored build scripts 是硬报错(`ERR_PNPM_IGNORED_BUILDS`),
+构建当场挂掉。而 CI 用的是 `version: 10`、本地是 10.33.0、lockfile 是 v9:**三处不一致**。
+加上 `"packageManager": "pnpm@10.33.0"` 统一(D70)。
+
+### 修完之后:整条部署链路按 RUNBOOK 走通
+
+| 步骤 | 结果 |
+| --- | --- |
+| `docker build` | ✅ 通过(这个镜像第一次被构建出来) |
+| `docker compose run --rm tools pnpm db:migrate` | ✅ 迁移完成 |
+| `pnpm seed` ×2 | ✅ 幂等,断言 1 卷 / 6 大题 / 8 题组 / 43 小题 / 总分 100 |
+| `docker compose up -d app` | ✅ `health=healthy`(HEALTHCHECK 真的在工作) |
+| 容器用户 | ✅ `uid=1001(nextjs)`,非 root |
+| `/api/health`、首页、`/sw.js` | ✅ 全 200 |
+| `prompts/` | ✅ 8 个提示词都在镜像里 |
+
+### 顺手治的两条
+
+**运行镜像塞了跑不了的东西。** 运行层拷了 `drizzle/ seed/ src/lib/** tsconfig.json`,
+理由写的是「迁移与种子在容器里跑」——**那句话是错的**:运行镜像的 node_modules 是 standalone
+精简子集(只有 next / pg / react / typescript),没有 tsx 也没有 pnpm。迁移种子实际跑在
+compose 的 `tools` 服务里。那几行去掉了,源码也不再进生产镜像(D68)。
+
+**备份要求宿主机有 pg_dump,而 RUNBOOK 只要求宿主机有 Docker。** 这是个真矛盾:
+备份 cron 在宿主机上跑 `backup.sh`,可 `pg_dump` 从没被列为前提,更没要求 ≥ 16。
+改成在容器里跑 —— 镜像里那份正好是 16.15。为此补了 `bash`(alpine 默认没有,
+实测 `env: can't execute 'bash'`),compose 把 `./backups` 挂进去,文件照样落宿主机(D69)。
+
+实测确认(**先故意不 chown 验证坑是真的,再按修法验证解法有效**):
+- 目录由 docker 代建 → `root:root` → 容器 uid 1001 写入 `Permission denied` ✅ 复现
+- `mkdir -p backups && sudo chown 1001:1001 backups` 之后 → 备份成功,48K,宿主机可见,权限 0600 ✅
+- **`verify-restore.sh` 在生产容器里直接跑通**:16 张表、62 行逐表一致 ✅
+
+宿主机除了 Docker 什么都不用装 —— 这才和 RUNBOOK 开头那句话对得上。
+
+### 进 CI
+
+新增「构建并运行生产镜像」步骤:`docker build` → 跑起来 → 健康检查 → 数提示词 →
+**在容器里跑一次 `backup.sh`**(少了 bash 或 pg 工具当场红)。
+e2e 测的是 standalone 产物,这一步测的是装着它的那个镜像。
+
+### 门禁
+
+- `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` **503 passed**
+- `docker build` + compose 全链路本地实跑 ✓
+- 本轮不动 `src/`,首屏预算不受影响
