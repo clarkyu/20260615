@@ -2,7 +2,15 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { getDb, type Db } from '@/lib/db/client'
 import { aiGradeCache, aiJobs, attempts, items, responses, users, wrongAnswers } from '@/lib/db/schema'
-import { enqueueGradeJob, enqueueExplainJob, processAiJobs, type AiModels } from '@/lib/db/ai-jobs'
+import {
+  POLLABLE_JOB_KINDS,
+  enqueueExplainJob,
+  enqueueGradeJob,
+  enqueueParseJob,
+  jobForPolling,
+  processAiJobs,
+  type AiModels,
+} from '@/lib/db/ai-jobs'
 import { AiError, type AiCaller, type AiChatRequest } from '@/lib/ai/client'
 import { answerHash } from '@/lib/ai/hash'
 import { PROMPT_VERSION } from '@/lib/ai/prompts'
@@ -329,5 +337,32 @@ describe.skipIf(!url)('ai_jobs 队列(真库 + 假 AI)', () => {
     expect(j?.status).toBe('done')
     expect((j?.result as { explain: { knowledgeTags: string[] } }).explain.knowledgeTags).toEqual(['形容词最高级'])
     expect((await db.query.items.findFirst({ where: eq(items.id, it1.id) }))?.explanation).toBe(before?.explanation)
+  })
+
+  // 教师端轮询接口只该回它被用来做的那件事(D78)。评分任务的结果里是某个学生的判分与评语,
+  // 界面从不轮询它 —— 照回等于给「按 id 拿别人班的判分」开一条绕过班级隔离(D20)的路。
+  it('轮询接口拿不到评分任务:grade 按「不存在」处理,导入 / 生成的照常拿得到', async () => {
+    const attemptId = await newAttempt()
+    const rid = await answer(attemptId, 27, `Graded answer ${RUN}`)
+    const { jobId: gradeJob } = await enqueue(attemptId, rid, 27)
+    expect(gradeJob).toBeTruthy()
+
+    const explainJob = await enqueueExplainJob(db, itemByNumber.get(1)!.id)
+    jobIds.push(explainJob)
+    const parseJob = await enqueueParseJob(db, { filename: `x-${RUN}.docx`, markdown: '# 空', createdBy: userId })
+    jobIds.push(parseJob)
+
+    // 反面:评分任务读不出来(而它在库里确实存在 —— 下面这行证明扫描不是空的)
+    expect(await job(gradeJob!)).toBeTruthy()
+    expect(await jobForPolling(db, gradeJob!)).toBeNull()
+
+    // 正面:界面真会轮询的两类照常拿得到,否则导入向导与题库工具会当场坏掉
+    expect((await jobForPolling(db, explainJob))?.kind).toBe('explain')
+    expect((await jobForPolling(db, parseJob))?.kind).toBe('parse')
+
+    // 不存在的 id 与评分任务返回同一种结果:不确认「这个 id 是不是一条评分任务」
+    expect(await jobForPolling(db, '00000000-0000-4000-8000-000000000000')).toBeNull()
+
+    expect(POLLABLE_JOB_KINDS).not.toContain('grade')
   })
 })

@@ -244,6 +244,28 @@ export async function enqueueExplainJob(db: Db, itemId: string): Promise<string>
   return job.id
 }
 
+/**
+ * 教师端会轮询的任务类型 —— 导入向导轮询 `parse`,题库工具轮询 `explain` / `generate`。
+ *
+ * **`grade` 不在其中。** 它的结果里是某一个学生的判分与 AI 中文评语,由工作线程写回
+ * `responses`,界面从来不轮询它。`GET /api/teacher/jobs/:id` 原本对任何类型都照回,
+ * 于是拿到一个 job id 的**任何**教师都能读到别人班的判分 —— 绕过了 D20 那条
+ * 「教师只看得到自己班级任务下的作答」。批改队列老老实实按班级收窄(并有用例守着),
+ * 这条轮询接口却是个后门。id 是不可猜的 UUID,够不上「能被利用」,但一条接口
+ * 只该回它被用来做的那件事。
+ */
+export const POLLABLE_JOB_KINDS = ['parse', 'explain', 'generate'] as const
+
+/**
+ * 取一条可供教师端轮询的任务。不可轮询的类型按「不存在」处理而不是 403:
+ * 403 会确认「这个 id 确实是一条评分任务」,404 什么都不确认。
+ */
+export async function jobForPolling(db: Db, id: string) {
+  const job = await db.query.aiJobs.findFirst({ where: eq(aiJobs.id, id) })
+  if (!job) return null
+  return (POLLABLE_JOB_KINDS as readonly string[]).includes(job.kind) ? job : null
+}
+
 export async function enqueueParseJob(db: Db, payload: Omit<ParseJobPayload, 'kind'>): Promise<string> {
   const [job] = await db.insert(aiJobs).values({ kind: 'parse', payload: { kind: 'parse', ...payload } satisfies ParseJobPayload }).returning({ id: aiJobs.id })
   if (!job) throw new Error('入队失败')
