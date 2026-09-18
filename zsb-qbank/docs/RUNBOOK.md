@@ -20,7 +20,7 @@ cp .env.example .env
 | --- | --- |
 | `POSTGRES_PASSWORD` | 数据库密码,随机串 |
 | `DATABASE_URL` | 宿主机上跑迁移 / 备份用:`postgres://zsb:<密码>@127.0.0.1:5432/zsb_qbank`(容器内部由 compose 自动注入 `db:5432`) |
-| `SESSION_SECRET` | `openssl rand -base64 32`,≥32 字符;换掉它 = 所有人被登出 |
+| `SESSION_SECRET` | **必须自己生成**:`openssl rand -base64 32`。`.env.example` 里是空的,填占位值(含 change-me / example 等)会被**当场拒绝启动** —— 公开已知的密钥等于任何人都能伪造管理员会话(D84)。换掉它 = 所有人被登出 |
 | `APP_ORIGIN` | 对外地址,如 `https://zsb.example.com`。写接口按它校验 Origin(§9.5) |
 | `AUTH_DEV_LOGIN` | **出厂已是 `false`,别改**。设成 `true` 时任何人都能一键登录成教师(看全部参考答案、改成绩);`APP_ORIGIN` 是 https 时会被强制关闭并在启动日志里告警(D83) |
 | `CASDOOR_ISSUER` / `CASDOOR_CLIENT_ID` / `CASDOOR_CLIENT_SECRET` | 统一身份登录;三项齐全即启用,见下「统一身份登录」 |

@@ -12,6 +12,11 @@ export async function register() {
   const { processAiJobs } = await import('@/lib/db/ai-jobs')
   const { getAiConfig, getDefaultAiCaller } = await import('@/lib/ai/client')
 
+  // 会话密钥要是占位值,每个请求都会抛 —— 启动时先把原因说清楚,免得只看到一片 500(D84)。
+  const { sessionSecretProblem } = await import('@/lib/auth/session')
+  const secretProblem = sessionSecretProblem(process.env.SESSION_SECRET)
+  if (secretProblem) console.error(`[auth] ⛔ ${secretProblem}`)
+
   // 开发登录开着 = 任何人一键成教师。启动时大声说一次,别等谁翻到登录页才发现(D83)。
   const { devLoginVerdict } = await import('@/lib/auth/dev-login')
   const dev = devLoginVerdict()

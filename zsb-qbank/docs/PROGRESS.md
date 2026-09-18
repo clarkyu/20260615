@@ -1555,3 +1555,56 @@ POST /api/auth/dev-login（无任何凭证）→ 200 + role=teacher 的会话 Co
 
 - `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` **550 passed**(原 542 + 8)
 - `pnpm build` 通过;e2e 对 standalone 产物双视口 **52 passed**(开发登录那条路径照常)
+
+## 仓库里公开的会话密钥:任何人可伪造管理员(2026-09-17)
+
+接着 D83 的一般化往下问:**还有哪些安全属性只靠「人记得改一行」维持?**
+最可疑的一处就在同一个文件的上面四行。
+
+### 出厂密钥恰好通过唯一那道校验
+
+`.env.example`:`SESSION_SECRET=please-change-me-please-change-me-32`(35 字符)
+代码:`if (!secret || secret.length < 32) throw ...` —— **长度这关它过得去**。
+
+实测(生产 standalone 产物,只用仓库里公开的那行密钥,用 iron-session 自己封 Cookie):
+
+```
+/api/me                    → {"role":"admin","sub":"forged:attacker"}
+/api/teacher/grading/queue → 200（含参考答案与评分要点）
+/api/teacher/classes       → 200
+```
+
+没登录、没密码、没有任何按钮参与。比 D83 的开发登录更糟:没有按钮可藏,与
+`AUTH_DEV_LOGIN` 无关,密钥就写在仓库里。
+
+### 修完之后
+
+| 情形 | 首页 | 伪造 Cookie 打 `/api/me` | 启动日志 |
+| --- | --- | --- | --- |
+| 仍用出厂占位密钥 | **500** | **500** | ⛔ 指名占位值 + 给出生成命令 |
+| 换成真随机密钥 | 200 | **401** | — |
+
+伪造之所以曾经成立,就是因为那个密钥是公开的。
+
+### 变异验证
+
+| 变异 | 期望 | 实际 |
+| --- | --- | --- |
+| 去掉占位值拒绝名单(回到只看长度) | 红 | ✅ |
+| 名单收得过头:把 `secret` 也算占位(会毙掉 CI 自己的值) | 红 | ✅ |
+| 单独把 `.env.example` 改回占位值 | 红 | **❌ 仍然全绿** |
+| 两处一起退回(真正的 bug 原状) | 红 | ✅ |
+
+第三条值得记:**两道防线是有意冗余的,所以单点变异变成了空操作** —— 拒绝名单照样拦住
+改回去的 `.env.example`,漏洞并没有重开。这时候不能因为「绿了」就以为用例没用,
+要么承认冗余、要么两处一起变异。
+
+### 顺带
+
+`.env.example` 自身对不上:`DATABASE_URL` 写 `zsb:zsb`,`POSTGRES_PASSWORD` 写 `change-me`,
+照抄连不上库(这个会话里我手动补了六次)。已对齐。
+
+### 门禁
+
+- `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` 全绿;`pnpm build` 通过
+- 生产产物上前后对比实测(见上表)
