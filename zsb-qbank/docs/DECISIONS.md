@@ -764,3 +764,37 @@ http localhost → 照常可用(e2e 全绿 52 条)。
 
 这是同一个形状的第四次(D74 登出、D78 轮询、D79 种子、D81/D82 运维脚本):
 **关键的安全属性靠「人记得做对一件事」来维持,而不是靠默认值和代码里的门。**
+
+## D84 会话密钥:占位值直接拒绝启动,`.env.example` 不发能用的密钥(2026-09-17)
+`.env.example` 里原本是 `SESSION_SECRET=please-change-me-please-change-me-32` ——
+**35 个字符,正好通过代码里唯一那道 `length >= 32` 的校验**。RUNBOOK 第一步是
+`cp .env.example .env`,漏改这行,站点就用一个**公开写在仓库里的密钥**给会话 Cookie 加封。
+
+实测(生产 standalone 产物):抄那行密钥用 iron-session 自己封一个
+`{user:{role:'admin'}}`,不登录、不用密码、不碰任何按钮 ——
+
+```
+/api/me                    → {"role":"admin","sub":"forged:attacker"}
+/api/teacher/grading/queue → 200（含参考答案与评分要点）
+/api/teacher/classes       → 200
+```
+
+比 D83 那个开发登录更糟:没有按钮可藏,与 `AUTH_DEV_LOGIN` 无关,而且密钥就在仓库里。
+
+两道独立的防线(有意冗余):
+
+1. **`.env.example` 留空**,并写明必须 `openssl rand -base64 32` 自己生成。
+2. **代码拒绝占位值**:长度之外再查一串标记(`change-me` / `changeme` / `please-change` /
+   `your-secret` / `placeholder` / `example`),命中就抛,错误信息直接给出生成命令。
+   启动时也先打一行 `⛔`,免得只看到一片 500。
+
+名单刻意收得窄,不含 `secret` 本身 —— CI 用的 `ci-only-session-secret-…` 必须放行,
+**一道会毙掉自己验证链路的门,同样是缺陷**(变异里专门验了这条)。
+
+顺带修了 `.env.example` 自身的不一致:`DATABASE_URL` 写着 `zsb:zsb`,而 `POSTGRES_PASSWORD`
+写着 `change-me`,照抄根本连不上库(这个会话里我手动补了六次)。对齐成本地能直接跑,
+生产改成随机串时两处一起改。
+
+变异验证有一条值得记:单独把 `.env.example` 改回占位值 **没有变红** —— 因为拒绝名单
+照样拦住它,漏洞并没有重开。两处一起退回才红。**冗余防线让单点变异变成空操作,
+这时候要么承认它是冗余、要么把两处一起变异,不能因为「绿了」就以为用例没用。**
