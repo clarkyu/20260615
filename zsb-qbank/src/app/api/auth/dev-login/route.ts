@@ -1,10 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth/session'
+import { devLoginVerdict } from '@/lib/auth/dev-login'
 
 // 开发环境本地账号登录(SPEC §9.1):AUTH_DEV_LOGIN=true 时可用,生产必须关闭。
 // POST { role: 'student' | 'teacher' | 'admin', name? }
 export async function POST(req: NextRequest) {
-  if (process.env.AUTH_DEV_LOGIN !== 'true') {
+  const verdict = devLoginVerdict()
+  if (!verdict.enabled) {
+    // 被部署形态挡下的要留一行日志:那是配置事故,不是有人乱点(D83)
+    if (verdict.blocked) console.error(`[auth] 开发登录被拒:${verdict.reason}`)
     return NextResponse.json({ error: { code: 'forbidden', message: '开发登录未开启' } }, { status: 403 })
   }
   let body: { role?: unknown; name?: unknown }

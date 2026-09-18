@@ -6,6 +6,7 @@ import { studentAssignments } from '@/lib/db/assignments'
 import { dailyPlan } from '@/lib/db/training'
 import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
+import { devLoginEnabled } from '@/lib/auth/dev-login'
 import { oidcConfigured } from '@/lib/auth/oidc'
 import { LoginButton } from '@/components/auth/LoginButton'
 import { LogoutButton } from '@/components/auth/LogoutButton'
@@ -79,7 +80,7 @@ export default async function HomePage() {
           ) : (
             <p className="mt-1 text-sm text-neutral-500">统一身份登录还没配置；开发环境可用下面的快捷登录。</p>
           )}
-          {process.env.AUTH_DEV_LOGIN === 'true' ? (
+          {devLoginEnabled() ? (
             <div className="mt-3 flex gap-2">
               <DevLoginButton role="student" label="以学生身份登录" />
               <DevLoginButton role="teacher" label="以教师身份登录" />

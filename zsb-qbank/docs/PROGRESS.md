@@ -1507,3 +1507,51 @@ pg_restore --dbname="$TARGET" --clean --if-exists ... # --clean:先删光再灌
 
 - `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` 全绿;`pnpm build` 通过
 - 本机带 `.env` 实跑 `verify-restore.sh` 通过(修复前失败)
+
+## 出厂默认是危险的那一侧:任何人一键成教师(2026-09-17)
+
+接着 D82 掀开的那条缝往下查:**CI 的环境和生产的环境还有哪些不一样?** 先查了两处没问题的:
+
+- **训练的「今天」**:`startOfDayShanghai` 用 `Intl` + 显式时区,不吃进程 TZ ✅
+- **生产镜像的时区数据**:`node:22-alpine3.22` 里 `Asia/Shanghai` 格式化正确
+  (UTC 23:30 → 2026-09-18),full ICU 在 ✅
+
+第三处不是「环境差异」,是**出厂默认**:`.env.example` 里 `AUTH_DEV_LOGIN=true`,
+而 RUNBOOK 第一步就是 `cp .env.example .env`。
+
+### 实测(生产 standalone 产物,.env 照抄出厂默认)
+
+```
+教师登录页：公开挂着「以教师身份登录（开发）」
+POST /api/auth/dev-login（无任何凭证）→ 200 + role=teacher 的会话 Cookie
+```
+
+任何能访问站点的人**一键成为教师**:全部参考答案、全班成绩、改分权限。
+`docker-compose.yml` 那个 `${AUTH_DEV_LOGIN:-false}` 兜不住 —— 变量已被 `.env` 设成 true;
+代码也没有任何运行时告警。唯一的防线是运维照着表格改时别漏掉那一行。
+
+### 修完之后,三种形态都在生产产物上验过
+
+| 情形 | 教师快捷按钮 | `/api/auth/dev-login` | 启动日志 |
+| --- | --- | --- | --- |
+| 照抄出厂默认(`false`) | 0 个 | 403 | — |
+| https 真实部署上手动开 | 0 个 | 403 | ⚠️ 已被强制关闭 + 理由 |
+| http localhost(CI 的 e2e 靠它) | 1 个 | 200 | ⚠️ 大声警告但放行 |
+
+判据用 `APP_ORIGIN` 是不是 https,而不是 `NODE_ENV`:**CI 的 e2e 恰恰是在生产构建上用
+开发登录跑的**,按 NODE_ENV 判会把它一并挡掉。
+
+### 变异验证
+
+| 变异 | 期望 | 实际 |
+| --- | --- | --- |
+| 出厂默认改回 `true`(本轮 bug 原状) | 红 | ✅ |
+| 去掉「https 部署强制关闭」那道门 | 红 | ✅ |
+| 门收得过头:连 http 本地也挡(会打掉 CI 的 e2e) | 红 | ✅ |
+
+第三条是特意加的:一道**过严**的门同样是缺陷,只是代价换成了「把自己的验证链路堵死」。
+
+### 门禁
+
+- `pnpm lint` / `npx tsc --noEmit` 干净;`pnpm test` **550 passed**(原 542 + 8)
+- `pnpm build` 通过;e2e 对 standalone 产物双视口 **52 passed**(开发登录那条路径照常)

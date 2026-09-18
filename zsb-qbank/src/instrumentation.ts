@@ -12,6 +12,12 @@ export async function register() {
   const { processAiJobs } = await import('@/lib/db/ai-jobs')
   const { getAiConfig, getDefaultAiCaller } = await import('@/lib/ai/client')
 
+  // 开发登录开着 = 任何人一键成教师。启动时大声说一次,别等谁翻到登录页才发现(D83)。
+  const { devLoginVerdict } = await import('@/lib/auth/dev-login')
+  const dev = devLoginVerdict()
+  if (dev.blocked) console.error(`[auth] ⚠️ AUTH_DEV_LOGIN=true 已被强制关闭:${dev.reason}`)
+  else if (dev.enabled) console.warn('[auth] ⚠️ 开发登录已开启:任何人都能一键登录成教师(看全部参考答案、改成绩)。生产环境请设 AUTH_DEV_LOGIN=false。')
+
   const cfg = getAiConfig()
   if (!cfg) console.warn('[ai] 未配置 AI_BASE_URL / AI_API_KEY / AI_MODEL_GRADING:主观题将分流为待老师评')
   const models = { gradingModel: cfg?.gradingModel ?? '', authoringModel: cfg?.authoringModel ?? '' }

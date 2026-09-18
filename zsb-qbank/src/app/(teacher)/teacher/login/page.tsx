@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
+import { devLoginEnabled } from '@/lib/auth/dev-login'
 import { loginErrorMessage, oidcConfigured } from '@/lib/auth/oidc'
 import { DevLoginButton } from '@/components/home/StartPractice'
 import { LoginButton } from '@/components/auth/LoginButton'
@@ -13,7 +14,7 @@ export default async function TeacherLogin({ searchParams }: { searchParams: Pro
   const sp = await searchParams
   const errMsg = loginErrorMessage(sp.err)
   const oidc = oidcConfigured()
-  const devLogin = process.env.AUTH_DEV_LOGIN === 'true'
+  const devLogin = devLoginEnabled()
   return (
     <main className="mx-auto max-w-md py-10">
       <h1 className="text-2xl font-bold">教师登录</h1>
